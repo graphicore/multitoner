@@ -1,0 +1,11 @@
+Dependencies:
+
+Mom -- Mother of all our Python projects. Batteries for Python.
+http://pypi.python.org/pypi/mom/0.1.3
+https://github.com/gorakhargosh/mom
+https://readthedocs.org/projects/mom/
+
+uses for the ASCII85 codec,
+see https://mom.readthedocs.org/en/latest/api/codec.html#module-mom.codec
+
+$ sudo pip install mom
