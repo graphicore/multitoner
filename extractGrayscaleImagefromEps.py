@@ -35,7 +35,7 @@ def extractBinary(lines):
     return codec.base85_decode(data)
     
     
-def get_image_data(path):
+def getImageData(path):
     boundingBox = None
     binary = None
     with open(path, 'r') as eps:
@@ -71,7 +71,7 @@ def saveImage(name, size, data):
 
 if __name__ == '__main__':
     filename = sys.argv[1];
-    boundingBox, data  = get_image_data(filename);
+    boundingBox, data  = getImageData(filename);
     if(not boundingBox or not data):
         raise ValueError("Wasn't able to extract data.");
     saveImage(filename + '.tif', boundingBox[2:], data);
