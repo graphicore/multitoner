@@ -10,7 +10,7 @@ from ctypes import *
 
 def dummy(name, ret=None):
     def callback(*args):
-        print name, args[0], args[2:]
+        print name, args[0], args[1], args[2:]
         return ret if ret is not None else 0 
     return callback;
 
@@ -35,9 +35,12 @@ def getImage():
     print 'getImage!', length
     for y in xrange(0, sizeDict['height']):
         data = sizeDict['pimage'][y*raster:(y+1)*raster];
-        ffs = len([x for x in data if x == 255])
+        # at least this works! when using rgb all bytes are 255, white
+        # when using cmyk all bytes are 0, white!!! that means, that in the
+        # end, something is happening here!
+        ffs = len([x for x in data if x != 255 or x !=0])
         if ffs != raster:
-            print 'line', y, ffs, data;
+            print 'line', y, raster-ffs, data
 
 def sync(*args):
     print 'sync'
@@ -102,22 +105,29 @@ args = [
     "-dBATCH",
     "-dSAFER",
     #"-dEPSFitPage",
-    "-dEPSCrop",
-    "-sDEVICE=display",
-    "-sDisplayHandle=0",
-    "-dDisplayFormat=%d" % (DISPLAY_COLORS_RGB | DISPLAY_ALPHA_NONE | \
-        DISPLAY_DEPTH_8 | DISPLAY_LITTLEENDIAN | DISPLAY_BOTTOMFIRST),
+    #"-dEPSCrop",
+    #"-sDEVICE=display",
+    "-sDisplayHandle=cde",
+    "-dDisplayFormat=%d" % (DISPLAY_COLORS_RGB | \
+        DISPLAY_DEPTH_8 | DISPLAY_BIGENDIAN | DISPLAY_TOPFIRST | DISPLAY_ALPHA_NONE),
     # "-dDisplayFormat=16#%02x" % for formatting as hex in the string
     # "-dDisplayFormat=16#804", #yields in: 2052L
-    "../Recherche/ursprung.ps-duo.eps"
+    "../Recherche/colortransforms.pdf"
     ]
-print args;
+#print ' '.join(args);
 instance = new_instance()
 set_display_callback(instance, byref(display_callback))
 code = init_with_args(instance, args)
+
+if code == 0:
+    code = run_string(instance, "systemdict /start get exec", 0);
+
 code1 = exit(instance)
 if code == 0 or code == e_Quit:
     code = code1
+if code == e_Quit:
+    code = 0; # user executed 'quit'
+
 delete_instance(instance)
-if not (code == 0 or code == e_Quit):
+if not code == 0:
     sys.exit(1)
