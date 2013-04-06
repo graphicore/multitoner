@@ -3,6 +3,7 @@
 # c-bindings
 # 
 # this is a python port from dxmain.c by artifex
+# dxmain.c provides the "gs" command on linux shell
 #
 
 #include <stdio.h>
@@ -21,6 +22,7 @@ from __future__ import with_statement
 
 import ghostscript._gsprint as gsapi
 import ctypes as c
+import glib
 import gtk
 import sys
 
@@ -43,110 +45,102 @@ static int display_page(void *handle, void *device, int copies, int flush);
 static int display_update(void *handle, void *device, int x, int y,
         int w, int h);
 
-#ifndef min
-#define min(a,b) ((a) < (b) ? (a) : (b))
-#endif
+#####################################################################
+# stdio functions
 
-/*********************************************************************/
-/* stdio functions */
+# this looks like not needed in python. a simple dict would do it
+class Stdin_buf (c.Structure):
+    _fields_ = [
+        ('buf', c.POINTER(c.c_char)), # not shure if this is right, in c it was: char *buf;
+        # length of buffer
+        ('len', c.c_int),
+        # number of characters returned
+        ('count', c.c_int),
+    ]
 
-struct stdin_buf {
-   char *buf;
-   int len;	/* length of buffer */
-   int count;	/* number of characters returned */
-};
-
-/* handler for reading non-blocking stdin */
-static gboolean
-read_stdin_handler(GIOChannel *channel, GIOCondition condition, gpointer data)
-{
-    struct stdin_buf *input = (struct stdin_buf *)data;
-    GError *error = NULL;
-
-    if (condition & (G_IO_PRI)) {
-        g_print("input exception");
-        input->count = 0;	/* EOF */
-    }
-    else if (condition & (G_IO_IN)) {
-        g_io_channel_read_chars(channel, input->buf, input->len, (gsize *)&input->count, &error);
-        if (error) {
-            g_print("%s\n", error->message);
-            g_error_free(error);
-        }
-    }
-    else {
-        g_print("input condition unknown");
-        input->count = 0;	/* EOF */
-    }
-    return TRUE;
-}
-
-#callback for reading stdin
-def _gsdll_stdin(instance, buf_pointer, length):
-    struct stdin_buf input;
-    gint input_tag;
-    GIOChannel *channel;
-    GError *error = NULL;
-
-    input.len = len;
-    input.buf = buf;
-    input.count = -1;
-
-    channel = g_io_channel_unix_new(fileno(stdin));
-    g_io_channel_set_encoding(channel, NULL, &error);
-    g_io_channel_set_buffered(channel, FALSE);
-    if (error) {
-        g_print("%s\n", error->message);
-        g_error_free(error);
-    }
-    input_tag = g_io_add_watch(channel,
-        (G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP),
-        read_stdin_handler, &input);
-    while (input.count < 0)
-        gtk_main_iteration_do(TRUE);
-    g_source_remove(input_tag);
-    g_io_channel_unref(channel);
-
-    return input.count;
-}
-
-gsdll_stdin = gsapi.c_stdstream_call_t(_gsdll_stdin)
-def _wrap(instance, dest, count):
+# handler for reading non-blocking stdin
+def read_stdin_handler(channel, condition, inputBuffer):
+    """
+    where channel is fd, the file descriptor;
+    cb_condition is the condition that triggered the signal;
+    and, ... are the zero or more arguments that were passed to the
+    glib.io_add_watch() function.
+    
+    If the callback function returns False it will be automatically removed
+    from the list of event sources and will not be called again. If it
+    returns True it will be called again when the condition is matched.
+    
+    """
+    if condition & glib.G_IO_PRI:
+        print ('input exception')
+        inputBuffer.count = 0 #EOF
+    elif condition & glib.G_IO_IN:
         try:
-            data = infp.readline(count)
-        except:
-            count = -1
+            data = channel.readline(inputBuffer.len)
+        except Exception as exception:
+            print (exception) # dunno yet what exceptions occur here.
+            inputBuffer.count = -1 # this keeps the loop going
         else:
             if not data:
-                count = 0
+                inputBuffer.count = 0
             else:
-                count = len(data)
-                memmove(dest, c_char_p(data), count)
-        return count
+                inputBuffer.count = len(data)
+                # copy data to inputBuffer.buf
+                c.memmove(inputBuffer.buf, c.c_char_p(data), inputBuffer.count)
+    else
+        print ('input condition unknown')
+        inputBuffer.count = 0 #EOF
+    return True;
 
-    return c_stdstream_call_t(_wrap)
+# callback for reading stdin
+# static int gsdll_stdin(void *instance, char *buf, int len);
+def _gsdll_stdin(instance, buf, length):
+    inputBuffer = Stdin_buf(buf, length, -1) # buf, len, count
+    
+    #TODO: see, here is the stdin coming into play
+    # for python, the straight way would be sys.stdin I guess
+    channel = sys.stdin
+    # (fd, condition, callback, user_data=None) -> source id
+    # callable receives (fd, condition, user_data)
+    # Arranges for the fd to be monitored by the main loop for the
+    # specified condition.
+    # fd : a Python file object or an integer file descriptor ID
+    input_tag = glib.io_add_watch(
+        channel,
+        # condition is a combination of glib.IO_IN, glib.IO_OUT,
+        # glib.IO_PRI, gio.IO_ERR and gio.IO_HUB.
+        (glib.G_IO_IN | glib.G_IO_PRI | glib.G_IO_ERR | glib.G_IO_HUP),
+        read_stdin_handler,
+        inputBuffer
+    )
+    while (inputBuffer.count < 0)
+        # The gtk.main_iteration_do() function runs a single iteration of
+        # the main loop. If block is True block until an event occurs. 
+        gtk.main_iteration_do(True);
+    glib.source_remove(input_tag)
+    return inputBuffer.count
+
+gsdll_stdin = gsapi.c_stdstream_call_t(_gsdll_stdin)
 
 
-static int
-gsdll_stdout(void *instance, const char *str, int len)
-{
-    gtk_main_iteration_do(FALSE);
-    fwrite(str, 1, len, stdout);
-    fflush(stdout);
-    return len;
-}
+def _gsdll_stdout(instance, str, length):
+    sys.stdout.write(str[:length])
+    sys.stdout.flush()
+    return length
 
-static int
-gsdll_stderr(void *instance, const char *str, int len)
-{
-    gtk_main_iteration_do(FALSE);
-    fwrite(str, 1, len, stderr);
-    fflush(stderr);
-    return len;
-}
+gsdll_stdout = gsapi.c_stdstream_call_t(_gsdll_stdout)
 
-/*********************************************************************/
-/* dll display device */
+
+def _gsdll_stderr(instance, str, length):
+    sys.stderr.write(str[:length])
+    sys.stderr.flush()
+    return length
+
+_gsdll_stderr = gsapi.c_stdstream_call_t(_gsdll_stderr)
+
+
+#####################################################################
+# dll display device
 
 typedef struct IMAGE_DEVICEN_S IMAGE_DEVICEN;
 struct IMAGE_DEVICEN_S {
@@ -428,7 +422,10 @@ static void signal_show_as_gray(GtkWidget *w, gpointer data)
     display_sync(img->handle, img->device);
 }
 
-/* New device has been opened */
+def _display_open(void_p_handle, void_p_device):
+    """ New device has been opened """
+    
+
 static int display_open(void *handle, void *device)
 {
 
@@ -1125,11 +1122,23 @@ display_separation(void *handle, void *device,
     return 0;
 }
 
-/* callback structure for "display" device */
-display_callback display = {
-    sizeof(display_callback),
-    DISPLAY_VERSION_MAJOR,
-    DISPLAY_VERSION_MINOR,
+# callback structure for "display" device
+display_open       = gsapi.c_display_open(_display_open)
+display_preclose   = gsapi.c_display_preclose(_display_preclose)
+display_close      = gsapi.c_display_close(_display_close)
+display_presize    = gsapi.c_display_presize(_display_presize)
+display_size       = gsapi.c_display_size(_display_size)
+display_sync       = gsapi.c_display_sync(_display_sync)
+display_page       = gsapi.c_display_page(_display_page)
+display_update     = gsapi.c_display_update(_display_update)
+display_memalloc   = cast(None, gsapi.c_display_memalloc) # NULL,	/* memalloc */
+display_memfree    = cast(None, gsapi.c_display_memfree) # NULL,	/* memfree */
+display_separation = gsapi.c_display_separation(_display_separation)
+
+display_callback = gsapi.Display_callback_s(
+    c_int(sizeof(Display_callback_s)),
+    c_int(gsapi.DISPLAY_VERSION_MAJOR),
+    c_int(gsapi.DISPLAY_VERSION_MINOR),
     display_open,
     display_preclose,
     display_close,
@@ -1138,18 +1147,11 @@ display_callback display = {
     display_sync,
     display_page,
     display_update,
-    NULL,	/* memalloc */
-    NULL,	/* memfree */
+    display_memalloc,
+    display_memfree,
     display_separation
-};
+)
 
-#needed:
-
-functions:
-gsdll_stdin, gsdll_stdout, gsdll_stderr
-
-struct
-display_callback display
 def main(argv):
     # int exit_status;
     # int code = 1, code1;
