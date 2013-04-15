@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <locale.h>
-#include <gtk/gtk.h>
+#include <gtk/Gtk.h>
 #define __PROTOTYPES__
 #include "ierrors.h"
 #include "iapi.h"
@@ -20,10 +20,16 @@
 
 from __future__ import with_statement
 
-import ghostscript._gsprint as gsapi
+import ghostscript._gsprint as gs
 import ctypes as c
-import glib
-import gtk
+
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+
+#ubuntu installed package: python-gi-cairo, not shure now if its needed
+# fails when being used: from gi.repository import cairo
+# using regular bindings:
+# import cairo
+
 import sys
 
 start_string = "systemdict /start get exec\n"
@@ -64,17 +70,17 @@ def read_stdin_handler(channel, condition, inputBuffer):
     where channel is fd, the file descriptor;
     cb_condition is the condition that triggered the signal;
     and, ... are the zero or more arguments that were passed to the
-    glib.io_add_watch() function.
+    GLib.io_add_watch() function.
     
     If the callback function returns False it will be automatically removed
     from the list of event sources and will not be called again. If it
     returns True it will be called again when the condition is matched.
     
     """
-    if condition & glib.G_IO_PRI:
+    if condition & GLib.IOCondition.PRI:
         print ('input exception')
         inputBuffer.count = 0 #EOF
-    elif condition & glib.G_IO_IN:
+    elif condition & GLib.IOCondition.IN:
         try:
             data = channel.readline(inputBuffer.len)
         except Exception as exception:
@@ -105,22 +111,22 @@ def _gsdll_stdin(instance, buf, length):
     # Arranges for the fd to be monitored by the main loop for the
     # specified condition.
     # fd : a Python file object or an integer file descriptor ID
-    input_tag = glib.io_add_watch(
+    input_tag = GLib.io_add_watch(
         channel,
-        # condition is a combination of glib.IO_IN, glib.IO_OUT,
-        # glib.IO_PRI, gio.IO_ERR and gio.IO_HUB.
-        (glib.G_IO_IN | glib.G_IO_PRI | glib.G_IO_ERR | glib.G_IO_HUP),
+        # condition is a combination of GLib.IOCondition.IN, GLib.IOCondition.OUT,
+        # GLib.IOCondition.PRI, GLib.IOCondition.ERR and GLib.IOCondition.HUP.
+        (GLib.IOCondition.IN | GLib.IOCondition.PRI | GLib.IOCondition.ERR | GLib.IOCondition.HUP),
         read_stdin_handler,
         inputBuffer
     )
     while inputBuffer.count < 0:
-        # The gtk.main_iteration_do() function runs a single iteration of
+        # The Gtk.main_iteration_do() function runs a single iteration of
         # the main loop. If block is True block until an event occurs. 
-        gtk.main_iteration_do(True)
-    glib.source_remove(input_tag)
+        Gtk.main_iteration_do(True)
+    GLib.source_remove(input_tag)
     return inputBuffer.count
 
-gsdll_stdin = gsapi.c_stdstream_call_t(_gsdll_stdin)
+gsdll_stdin = gs.c_stdstream_call_t(_gsdll_stdin)
 
 
 def _gsdll_stdout(instance, str, length):
@@ -128,7 +134,7 @@ def _gsdll_stdout(instance, str, length):
     sys.stdout.flush()
     return length
 
-gsdll_stdout = gsapi.c_stdstream_call_t(_gsdll_stdout)
+gsdll_stdout = gs.c_stdstream_call_t(_gsdll_stdout)
 
 
 def _gsdll_stderr(instance, str, length):
@@ -136,61 +142,51 @@ def _gsdll_stderr(instance, str, length):
     sys.stderr.flush()
     return length
 
-_gsdll_stderr = gsapi.c_stdstream_call_t(_gsdll_stderr)
+_gsdll_stderr = gs.c_stdstream_call_t(_gsdll_stderr)
 
 
 #####################################################################
 # dll display device
 
-typedef struct IMAGE_DEVICEN_S IMAGE_DEVICEN;
-struct IMAGE_DEVICEN_S {
-    int used;		/* non-zero if in use */
-    int visible;	/* show on window */
-    char name[64];
-    int cyan;
-    int magenta;
-    int yellow;
-    int black;
-    int menu;		/* non-zero if menu item added to system menu */
-};
-#define IMAGE_DEVICEN_MAX 8
+class ImageDeviceN(object):
+    """
+        a dict would be sufficient here, but a class documents better
+        what propertires are going to be used
+    """
+    used = None # int, non-zero if in use
+    visible = None # int how on window
+    name = None # char name[64]
+    cyan = None # int
+    magenta = None # int
+    yellow = None # int
+    black = None # int
+    menu = None # int, non-zero if menu item added to system menu
 
-typedef struct IMAGE_S IMAGE;
-struct IMAGE_S {
-    void *handle;
-    void *device;
-    GtkWidget *window;
-    GtkWidget *vbox;
-    GtkWidget *cmyk_bar;
-    GtkWidget *separation[IMAGE_DEVICEN_MAX];
-    GtkWidget *show_as_gray;
-    GtkWidget *scroll;
-    GtkWidget *darea;
-    guchar *buf;
-    gint width;
-    gint height;
-    gint rowstride;
-    unsigned int format;
-    int devicen_gray;	/* true if a single separation should be shown gray */
-    IMAGE_DEVICEN devicen[IMAGE_DEVICEN_MAX];
-    guchar *rgbbuf;	/* used when we need to convert raster format */
-    IMAGE *next;
-};
+IMAGE_DEVICEN_MAX 8
 
-IMAGE *first_image;
-
-static IMAGE *image_find(void *handle, void *device);
-static void window_destroy(GtkWidget *w, gpointer data);
-static void window_create(IMAGE *img);
-static void window_resize(IMAGE *img);
-
-#if !GTK_CHECK_VERSION(3, 0, 0)
-static gboolean window_draw(GtkWidget *widget, GdkEventExpose *event, gpointer user_data);
-#else
-static gboolean window_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data);
-#endif
-
-
+class Image(object):
+    """
+        a dict would be sufficient here, but a class documents better
+        what propertires are going to be used
+    """
+    handle = None # void *handle
+    device = None # void *device
+    window = None # GtkWidget *window;
+    vbox = None # GtkWidget *vbox;
+    cmyk_bar = None # GtkWidget *cmyk_bar;
+    separation = None # GtkWidget *separation[IMAGE_DEVICEN_MAX];
+    show_as_gray = None # GtkWidget *show_as_gray;
+    scroll = None # GtkWidget *scroll;
+    darea = None # GtkWidget *darea;
+    buf = None # guchar *buf;
+    width = None # gint width;
+    height = None # gint height;
+    rowstride = None # gint rowstride;
+    format = None # unsigned int format;
+    devicen_gray = None # int devicen_gray; true if a single separation should be shown gray
+    devicen = [] # IMAGE_DEVICEN devicen[IMAGE_DEVICEN_MAX];
+    rgbbuf = None # guchar *rgbbuf; used when we need to convert raster format
+     # IMAGE *next; # no need for this as we use the images dict for lookup
 
 images = {};
 
@@ -200,152 +196,115 @@ def image_find(handle, device):
     except KeyError:
         return None
 
-static gboolean
-#if !GTK_CHECK_VERSION(3, 0, 0)
-window_draw(GtkWidget *widget, GdkEventExpose *event, gpointer user_data)
-#else
-window_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
-#endif
-{
-    IMAGE *img = (IMAGE *)user_data;
-    if (img && img->window && img->buf) {
-        GdkPixbuf *pixbuf = NULL;
-        int color = img->format & DISPLAY_COLORS_MASK;
-        int depth = img->format & DISPLAY_DEPTH_MASK;
-#if !GTK_CHECK_VERSION(3, 0, 0)
-        cairo_t *cr = gdk_cairo_create(gtk_widget_get_window(widget));
-        gdk_cairo_region(cr, event->region);
-        cairo_clip(cr);
-#endif
-        gdk_cairo_set_source_color(cr, &gtk_widget_get_style(widget)->bg[GTK_STATE_NORMAL]);
-        cairo_paint(cr);
-            switch (color) {
-                case DISPLAY_COLORS_NATIVE:
-                    if (depth == DISPLAY_DEPTH_8 && img->rgbbuf)
-                        pixbuf = gdk_pixbuf_new_from_data(img->rgbbuf,
-                            GDK_COLORSPACE_RGB, FALSE, 8,
-                            img->width, img->height, img->width*3,
-                            NULL, NULL);
-                    else if ((depth == DISPLAY_DEPTH_16) && img->rgbbuf)
-                        pixbuf = gdk_pixbuf_new_from_data(img->rgbbuf,
-                            GDK_COLORSPACE_RGB, FALSE, 8,
-                            img->width, img->height, img->width*3,
-                            NULL, NULL);
-                    break;
-                case DISPLAY_COLORS_GRAY:
-                    if (depth == DISPLAY_DEPTH_8 && img->rgbbuf)
-                        pixbuf = gdk_pixbuf_new_from_data(img->rgbbuf,
-                            GDK_COLORSPACE_RGB, FALSE, 8,
-                            img->width, img->height, img->width*3,
-                            NULL, NULL);
-                    break;
-                case DISPLAY_COLORS_RGB:
-                    if (depth == DISPLAY_DEPTH_8) {
-                        if (img->rgbbuf)
-                            pixbuf = gdk_pixbuf_new_from_data(img->rgbbuf,
-                                GDK_COLORSPACE_RGB, FALSE, 8,
-                                img->width, img->height, img->width*3,
-                                NULL, NULL);
-                        else
-                            pixbuf = gdk_pixbuf_new_from_data(img->buf,
-                                GDK_COLORSPACE_RGB, FALSE, 8,
-                                img->width, img->height, img->rowstride,
-                                NULL, NULL);
-                    }
-                    break;
-                case DISPLAY_COLORS_CMYK:
-                    if (((depth == DISPLAY_DEPTH_1) ||
-                        (depth == DISPLAY_DEPTH_8)) && img->rgbbuf)
-                        pixbuf = gdk_pixbuf_new_from_data(img->rgbbuf,
-                            GDK_COLORSPACE_RGB, FALSE, 8,
-                            img->width, img->height, img->width*3,
-                            NULL, NULL);
-                    break;
-                case DISPLAY_COLORS_SEPARATION:
-                    if ((depth == DISPLAY_DEPTH_8) && img->rgbbuf)
-                        pixbuf = gdk_pixbuf_new_from_data(img->rgbbuf,
-                            GDK_COLORSPACE_RGB, FALSE, 8,
-                            img->width, img->height, img->width*3,
-                            NULL, NULL);
-                    break;
-            }
-            if (pixbuf) gdk_cairo_set_source_pixbuf(cr, pixbuf, 0, 0);
-            cairo_paint(cr);
-#if !GTK_CHECK_VERSION(3, 0, 0)
-            cairo_destroy(cr);
-#endif
-            if (pixbuf) g_object_unref(pixbuf);
-    }
-    return TRUE;
-}
+def window_draw(widget, cr, img):
+    """
+    widget is a gtk_drawing_area_new and should be equal to img.darea
+    this callback is called via: img.darea.connect('draw', window_draw, img)
+    """
+    if img and img.window and img.buf:
+        color = img.format & gs.DISPLAY_COLORS_MASK;
+        depth = img.format & gs.DISPLAY_DEPTH_MASK;
+        
+        cr.set_source_color(widget.get_style_context()
+            .get_background_color(Gtk.StateFlags.NORMAL))
+        
+        cr.paint()
+        
+        pixbuf = None
+        # the declaration of pixbuf is mostly the same! dunno why it was made like this
+        if color == gs.DISPLAY_COLORS_NATIVE:
+            if depth == gs.DISPLAY_DEPTH_8 && img.rgbbuf:
+                # https://developer.gnome.org/gdk-pixbuf/stable/gdk-pixbuf-Image-Data-in-Memory.html#gdk-pixbuf-new-from-data
+                pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
+                    GdkPixbuf.Colorspace.RGB, False, 8,
+                    img.width, img.height, img.width*3,
+                    None, None)
+            elif depth == gs.DISPLAY_DEPTH_16 && img.rgbbuf:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
+                    GdkPixbuf.Colorspace.RGB, False, 8,
+                    img.width, img.height, img.width*3,
+                    None, None)
+        elif color == gs.DISPLAY_COLORS_GRAY:
+            if depth == gs.DISPLAY_DEPTH_8 && img.rgbbuf:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
+                    GdkPixbuf.Colorspace.RGB, False, 8,
+                    img.width, img.height, img.width*3,
+                    None, None)
+            break;
+        elif color == gs.DISPLAY_COLORS_RGB:
+            if depth == gs.DISPLAY_DEPTH_8:
+                if img.rgbbuf:
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
+                        GdkPixbuf.Colorspace.RGB, False, 8,
+                        img.width, img.height, img.width*3,
+                        None, None)
+                else:
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.buf,
+                        GdkPixbuf.Colorspace.RGB, False, 8,
+                        img.width, img.height, img.rowstride,
+                        None, None)
+        elif color == gs.DISPLAY_COLORS_CMYK:
+            if (depth == gs.DISPLAY_DEPTH_1 || depth == gs.DISPLAY_DEPTH_8) && img.rgbbuf:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
+                    GdkPixbuf.Colorspace.RGB, False, 8,
+                    img.width, img.height, img.width*3,
+                    None, None)
+        elif color == gs.DISPLAY_COLORS_SEPARATION:
+            if depth == gs.DISPLAY_DEPTH_8 && img.rgbbuf:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
+                     GdkPixbuf.Colorspace.RGB, False, 8,
+                    img.width, img.height, img.width*3,
+                    None, None)
+        if pixbuf:
+            cr.set_source_pixbuf(pixbuf, 0, 0)
+        cr.paint()
+    return True
 
-static void window_destroy(GtkWidget *w, gpointer data)
-{
-    IMAGE *img = (IMAGE *)data;
-    img->window = NULL;
-    img->scroll = NULL;
-    img->darea = NULL;
-}
+def window_destroy(widget, img):
+    del img.window
+    del img.scroll
+    del img.darea
 
-static void window_create(IMAGE *img)
-{
-    /* Create a gtk window */
-    img->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(img->window), "gs");
-#if !GTK_CHECK_VERSION(3, 0, 0)
-    img->vbox = gtk_vbox_new(FALSE, 0);
-#else
-    img->vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_set_homogeneous(img->vbox, FALSE);
-#endif
-    gtk_container_add(GTK_CONTAINER(img->window), img->vbox);
-    gtk_widget_show(img->vbox);
+def window_create(img):
+    """ Create a gtk window """
+    img.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
+    img.window.set_title("python gs");
+    
+    img.vbox = Gtk.Box(Gtk.Orientation.VERTICAL, 0)
+    img.vbox.set_homogeneous(False)
+    
+    img.window.add(img.vbox)
+    img.vbox.show()
 
-    img->darea = gtk_drawing_area_new();
-    gtk_widget_show(img->darea);
-    img->scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_widget_show(img->scroll);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(img->scroll),
-        GTK_POLICY_ALWAYS, GTK_POLICY_ALWAYS);
-    gtk_scrolled_window_add_with_viewport(GTK_SCROLLED_WINDOW(img->scroll),
-        img->darea);
-    gtk_box_pack_start(GTK_BOX(img->vbox), img->scroll, TRUE, TRUE, 0);
-#if !GTK_CHECK_VERSION(3, 0, 0)
-    g_signal_connect(G_OBJECT (img->darea), "expose-event",
-#else
-    g_signal_connect(G_OBJECT (img->darea), "draw",
-#endif
-                        G_CALLBACK (window_draw), img);
-    g_signal_connect(G_OBJECT (img->window), "destroy",
-                        G_CALLBACK (window_destroy), img);
-    g_signal_connect(G_OBJECT (img->window), "delete-event",
-                        G_CALLBACK (gtk_widget_hide_on_delete), NULL);
-    /* do not show img->window until we know the image size */
-}
+    img.darea = Gtk.DrawingArea()
+    img.darea.show()
+    
+    img.scroll = Gtk.ScrolledWindow(None, None)
+    img.scroll.show()
+    
+    img.scroll.set_policy(Gtk.PolicyType.ALWAYS, Gtk.PolicyType.ALWAYS)
+    img->scroll.add_with_viewport(img.darea)
+    img.vbox.pack_start(img.scroll, true, true, 0)
+    
+    img.darea.connect('draw', window_draw, img)
+    img.window.connect('destroy', window_destroy, img)
+    img.window.connect('delete-event', Gtk.Widget.hide_on_delete, None)
+    
+    # do not show img->window until we know the image size
 
-static void window_resize(IMAGE *img)
-{
-    gboolean visible;
-    gtk_widget_set_size_request(GTK_WIDGET (img->darea),
-        img->width, img->height);
-
-#if !GTK_CHECK_VERSION(3, 0, 0)
-    visible = (GTK_WIDGET_FLAGS(img->window) & GTK_VISIBLE);
-#else
-    visible = gtk_widget_get_visible(img->window);
-#endif
-
-    if (!visible) {
-        /* We haven't yet shown the window, so set a default size
-         * which is smaller than the desktop to allow room for
-         * desktop toolbars, and if possible a little larger than
-         * the image to allow room for the scroll bars.
-         * We don't know the width of the scroll bars, so just guess. */
-        gtk_window_set_default_size(GTK_WINDOW(img->window),
-            min(gdk_screen_width()-96, img->width+24),
-            min(gdk_screen_height()-96, img->height+24));
-    }
-}
+def window_resize(img):
+    img.darea.set_size_request(img.width, img.height)
+    visible = img.window.get_visible()
+    if not visible:
+        # We haven't yet shown the window, so set a default size
+        # which is smaller than the desktop to allow room for
+        # desktop toolbars, and if possible a little larger than
+        # the image to allow room for the scroll bars.
+        # We don't know the width of the scroll bars, so just guess.
+        img.window.set_default_size(
+            min(Gdk.Screen.width()-96, img.width+24),
+            min(Gdk.Screen.height()-96, img.height+24)
+        )
 
 static void window_separation(IMAGE *img, int sep)
 {
@@ -433,7 +392,7 @@ def _display_open(handle, device):
     img['device'] = device
     # create window
     window_create(img);
-    gtk.main_iteration_do(False)
+    Gtk.main_iteration_do(False)
     return 0;
 }
 
@@ -1110,22 +1069,22 @@ display_separation(void *handle, void *device,
 }
 
 # callback structure for "display" device
-display_open       = gsapi.c_display_open(_display_open)
-display_preclose   = gsapi.c_display_preclose(_display_preclose)
-display_close      = gsapi.c_display_close(_display_close)
-display_presize    = gsapi.c_display_presize(_display_presize)
-display_size       = gsapi.c_display_size(_display_size)
-display_sync       = gsapi.c_display_sync(_display_sync)
-display_page       = gsapi.c_display_page(_display_page)
-display_update     = gsapi.c_display_update(_display_update)
-display_memalloc   = cast(None, gsapi.c_display_memalloc) # NULL,	/* memalloc */
-display_memfree    = cast(None, gsapi.c_display_memfree) # NULL,	/* memfree */
-display_separation = gsapi.c_display_separation(_display_separation)
+display_open       = gs.c_display_open(_display_open)
+display_preclose   = gs.c_display_preclose(_display_preclose)
+display_close      = gs.c_display_close(_display_close)
+display_presize    = gs.c_display_presize(_display_presize)
+display_size       = gs.c_display_size(_display_size)
+display_sync       = gs.c_display_sync(_display_sync)
+display_page       = gs.c_display_page(_display_page)
+display_update     = gs.c_display_update(_display_update)
+display_memalloc   = cast(None, gs.c_display_memalloc) # NULL,	/* memalloc */
+display_memfree    = cast(None, gs.c_display_memfree) # NULL,	/* memfree */
+display_separation = gs.c_display_separation(_display_separation)
 
-display_callback = gsapi.Display_callback_s(
+display_callback = gs.Display_callback_s(
     c_int(sizeof(Display_callback_s)),
-    c_int(gsapi.DISPLAY_VERSION_MAJOR),
-    c_int(gsapi.DISPLAY_VERSION_MINOR),
+    c_int(gs.DISPLAY_VERSION_MAJOR),
+    c_int(gs.DISPLAY_VERSION_MINOR),
     display_open,
     display_preclose,
     display_close,
@@ -1151,7 +1110,7 @@ def main(argv):
     
     code = 1
     
-    # use_gui = gtk.init_check()
+    # use_gui = Gtk.init_check()
     # ??? used to be (in c)  use_gui = gtk_init_check(&argc, &argv);
     # but it takes no args in pygtk ... 
     # https://developer.gnome.org/pygtk/stable/gtk-functions.html#function-gtk--init-check
@@ -1166,28 +1125,28 @@ def main(argv):
     
     #run Ghostscript 
     try
-        instance = gsapi.new_instance()
-        gsapi.set_stdio(instance, gsdll_stdin, gsdll_stdout, gsdll_stderr)
+        instance = gs.new_instance()
+        gs.set_stdio(instance, gsdll_stdin, gsdll_stdout, gsdll_stderr)
         if (use_gui)
-            gsapi.set_display_callback(instance, display)
-        code = gsapi.init_with_args(instance, nargv)
+            gs.set_display_callback(instance, display)
+        code = gs.init_with_args(instance, nargv)
         if code == 0:
-            code = gsapi.run_string(instance, start_string)
-        code1 = gsapi_exit(instance)
-        if code == 0 or code == gsapi.e_Quit:
+            code = gs.run_string(instance, start_string)
+        code1 = gs_exit(instance)
+        if code == 0 or code == gs.e_Quit:
             code = code1
-        if code == gsapi.e_Quit:
+        if code == gs.e_Quit:
             code = 0 # user executed 'quit'
-        gsapi.delete_instance(instance)
+        gs.delete_instance(instance)
     except GhostscriptError as e:
         code = e.code
         sys.stderr.write(e)
         pass
     finally:
         exit_status = 0;
-        if code in [0, gsapi.e_Info, gsapi.e_Quit]:
+        if code in [0, gs.e_Info, gs.e_Quit]:
             pass
-        elif code == gsapi.e_Fatal
+        elif code == gs.e_Fatal
             exit_status = 1
         else
             exit_status = 255
