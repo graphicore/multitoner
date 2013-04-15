@@ -113,10 +113,10 @@ def _gsdll_stdin(instance, buf, length):
         read_stdin_handler,
         inputBuffer
     )
-    while (inputBuffer.count < 0)
+    while inputBuffer.count < 0:
         # The gtk.main_iteration_do() function runs a single iteration of
         # the main loop. If block is True block until an event occurs. 
-        gtk.main_iteration_do(True);
+        gtk.main_iteration_do(True)
     glib.source_remove(input_tag)
     return inputBuffer.count
 
@@ -178,26 +178,27 @@ struct IMAGE_S {
 };
 
 IMAGE *first_image;
+
 static IMAGE *image_find(void *handle, void *device);
 static void window_destroy(GtkWidget *w, gpointer data);
 static void window_create(IMAGE *img);
 static void window_resize(IMAGE *img);
+
 #if !GTK_CHECK_VERSION(3, 0, 0)
 static gboolean window_draw(GtkWidget *widget, GdkEventExpose *event, gpointer user_data);
 #else
 static gboolean window_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data);
 #endif
 
-static IMAGE *
-image_find(void *handle, void *device)
-{
-    IMAGE *img;
-    for (img = first_image; img!=0; img=img->next) {
-        if ((img->handle == handle) && (img->device == device))
-            return img;
-    }
-    return NULL;
-}
+
+
+images = {};
+
+def image_find(handle, device):
+    try:
+        return images[(handle, device)]
+    except KeyError:
+        return None
 
 static gboolean
 #if !GTK_CHECK_VERSION(3, 0, 0)
@@ -422,31 +423,17 @@ static void signal_show_as_gray(GtkWidget *w, gpointer data)
     display_sync(img->handle, img->device);
 }
 
-def _display_open(void_p_handle, void_p_device):
+def _display_open(handle, device):
     """ New device has been opened """
-    
-
-static int display_open(void *handle, void *device)
-{
-
-    IMAGE *img = (IMAGE *)malloc(sizeof(IMAGE));
-    if (img == NULL)
-        return -1;
-    memset(img, 0, sizeof(IMAGE));
-
-    /* add to list */
-    if (first_image)
-        img->next = first_image;
-    first_image = img;
-
-    /* remember device and handle */
-    img->handle = handle;
-    img->device = device;
-
-    /* create window */
+    img = {}
+    # add to list
+    images[(handle, device)] = img
+    # remember device and handle
+    img['handle'] = handle
+    img['device'] = device
+    # create window
     window_create(img);
-
-    gtk_main_iteration_do(FALSE);
+    gtk.main_iteration_do(False)
     return 0;
 }
 
