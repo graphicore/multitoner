@@ -19,7 +19,8 @@ from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 #ubuntu installed package: python-gi-cairo, not shure now if its needed
 # fails when being used: from gi.repository import cairo
 # using regular bindings:
-# import cairo
+import cairo
+import Image
 
 import sys
 from array import array
@@ -139,7 +140,7 @@ class ImageDeviceN(object):
 
 IMAGE_DEVICEN_MAX = 8
 
-class Image(object):
+class ImageData(object):
     """
         a dict would be sufficient here, but a class documents better
         what propertires are going to be used
@@ -180,12 +181,17 @@ def window_draw(widget, cr, img):
     widget is a gtk_drawing_area_new and should be equal to img.darea
     this callback is called via: img.darea.connect('draw', window_draw, img)
     """
+    print 'window_draw' #dbg
     if img and img.window and img.buf:
         color = img.format & gs.DISPLAY_COLORS_MASK;
         depth = img.format & gs.DISPLAY_DEPTH_MASK;
         
-        cr.set_source_color(widget.get_style_context()
-            .get_background_color(Gtk.StateFlags.NORMAL))
+        bgcol = widget.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
+        
+        cr.set_source_rgba(bgcol.red, bgcol.blue, bgcol.green, bgcol.alpha)
+        # there is no cr.set_source_color
+        # cr.set_source_color(widget.get_style_context()
+        #     .get_background_color(Gtk.StateFlags.NORMAL))
         
         cr.paint()
         
@@ -193,18 +199,21 @@ def window_draw(widget, cr, img):
         # the declaration of pixbuf is mostly the same! dunno why it was made like this
         if color == gs.DISPLAY_COLORS_NATIVE:
             if depth == gs.DISPLAY_DEPTH_8 and img.rgbbuf:
+                print 'a'
                 # https://developer.gnome.org/gdk-pixbuf/stable/gdk-pixbuf-Image-Data-in-Memory.html#gdk-pixbuf-new-from-data
                 pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
                     GdkPixbuf.Colorspace.RGB, False, 8,
                     img.width, img.height, img.width*3,
                     None, None)
             elif depth == gs.DISPLAY_DEPTH_16 and img.rgbbuf:
+                print 'b'
                 pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
                     GdkPixbuf.Colorspace.RGB, False, 8,
                     img.width, img.height, img.width*3,
                     None, None)
         elif color == gs.DISPLAY_COLORS_GRAY:
             if depth == gs.DISPLAY_DEPTH_8 and img.rgbbuf:
+                print 'c'
                 pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
                     GdkPixbuf.Colorspace.RGB, False, 8,
                     img.width, img.height, img.width*3,
@@ -212,29 +221,55 @@ def window_draw(widget, cr, img):
         elif color == gs.DISPLAY_COLORS_RGB:
             if depth == gs.DISPLAY_DEPTH_8:
                 if img.rgbbuf:
+                    print 'd'
                     pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
                         GdkPixbuf.Colorspace.RGB, False, 8,
                         img.width, img.height, img.width*3,
                         None, None)
                 else:
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.buf,
+                    print 'e'
+                    # img.buf has no 'length' thats a problem here
+                    # this usually wouldn't happen anymore, an img.rgbbuf
+                    # is created in _display_size and filled in _display_sync
+                    # now
+                    byte_array = array('B', img.buf[0: img.height * img.rowstride])
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_data(byte_array,
                         GdkPixbuf.Colorspace.RGB, False, 8,
                         img.width, img.height, img.rowstride,
                         None, None)
         elif color == gs.DISPLAY_COLORS_CMYK:
             if (depth == gs.DISPLAY_DEPTH_1 or depth == gs.DISPLAY_DEPTH_8) and img.rgbbuf:
+                print 'f'
                 pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
                     GdkPixbuf.Colorspace.RGB, False, 8,
                     img.width, img.height, img.width*3,
                     None, None)
         elif color == gs.DISPLAY_COLORS_SEPARATION:
             if depth == gs.DISPLAY_DEPTH_8 and img.rgbbuf:
+                print 'g'
                 pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-                     GdkPixbuf.Colorspace.RGB, False, 8,
+                    GdkPixbuf.Colorspace.RGB, False, 8,
                     img.width, img.height, img.width*3,
                     None, None)
+        
+        # help(cr)
+        # see, looks like there is help:
+        # http://stackoverflow.com/questions/10270795/drawing-in-pygobject-python3
+        # http://stackoverflow.com/questions/10270080/how-to-draw-a-gdkpixbuf-using-gtk3-and-pygobject
+        
         if pixbuf:
-            cr.set_source_pixbuf(pixbuf, 0, 0)
+            print 'width', img.width, 'height', img.height, 'rowstride', img.rowstride
+            pil_image = Image.fromstring('RGBX', (img.width, img.height), pixbuf.get_pixels(), "raw", "BGR", img.rowstride, 1)
+            
+            #data_array = array('B', img.buf[0: img.height * img.rowstride])
+            #pil_image = Image.frombuffer('RGB', (img.width, img.height),  data_array, "raw", "RGB", img.rowstride, 1)
+            
+            #pil_image.save("pfffffffffffffffffffffffffffffff", "png")
+            
+            byte_array = array('B', pil_image.tostring())
+            cairo_surface = cairo.ImageSurface.create_for_data(byte_array, cairo.FORMAT_RGB24, img.width, img.height, img.width * 4)
+            cr.set_source_surface(cairo_surface, 0, 0)
+            #cr.set_source_pixbuf(pixbuf, 0, 0)
         cr.paint()
     return True
 
@@ -242,9 +277,13 @@ def window_destroy(widget, img):
     del img.window
     del img.scroll
     del img.darea
+    
+def widget_delete(widget, *args):
+    widget.hide_on_delete()
 
 def window_create(img):
     """ Create a gtk window """
+    print 'window_create' #dbg
     img.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
     img.window.set_title("python gs");
     
@@ -262,11 +301,11 @@ def window_create(img):
     
     img.scroll.set_policy(Gtk.PolicyType.ALWAYS, Gtk.PolicyType.ALWAYS)
     img.scroll.add_with_viewport(img.darea)
-    img.vbox.pack_start(img.scroll, true, true, 0)
+    img.vbox.pack_start(img.scroll, True, True, 0)
     
     img.darea.connect('draw', window_draw, img)
     img.window.connect('destroy', window_destroy, img)
-    img.window.connect('delete-event', Gtk.Widget.hide_on_delete, None)
+    img.window.connect('delete-event', widget_delete)
     
     # do not show img->window until we know the image size
 
@@ -286,7 +325,7 @@ def window_resize(img):
 
 def window_separation(img, sep):
     img.devicen[sep].visible = not img.devicen[sep].visible
-    display_sync(img.handle, img.device)
+    _display_sync(img.handle, img.device)
 
 def get_signal_separation(sep):
     def signal_sep_i(widget, img):
@@ -303,11 +342,12 @@ def window_add_button(img, label, callback):
 
 def signal_show_as_gray(widget, img):
     img.devicen_gray = not img.devicen_gray
-    display_sync(img.handle, img.device)
+    _display_sync(img.handle, img.device)
 
 def _display_open(handle, device):
     """ New device has been opened """
-    img = {}
+    print '_display_open' #dbg
+    img = ImageData()
     # add to list
     images[(handle, device)] = img
     # remember device and handle
@@ -319,8 +359,9 @@ def _display_open(handle, device):
     return 0;
 
 def _display_preclose(handle, device):
+    print '_display_preclose' #dbg
     img = image_find(handle, device)
-    if image is None:
+    if img is None:
         return -1
 
     Gtk.main_iteration_do(False)
@@ -342,22 +383,25 @@ def _display_preclose(handle, device):
     return 0;
 
 def _display_close(handle, device):
+    print '_display_close' #dbg
     img = image_find(handle, device)
-    if image is None:
+    if img is None:
         return -1
     # remove from list
     del images[(handle, device)]
     return 0;
 
 def _display_presize(handle, device, width, height, raster, format):
+    print '_display_presize' #dbg
     # Assume everything is OK.
     # It would be better to return e_rangecheck if we can't
     # support the format.
     return 0;
 
 def _display_size(handle, device, width, height, raster, format, pimage):
+    print '_display_size' #dbg
     img = image_find(handle, device)
-    if image is None:
+    if img is None:
         return -1
 
     img.rgbbuf = None
@@ -399,8 +443,10 @@ def _display_size(handle, device, width, height, raster, format, pimage):
     elif color == gs.DISPLAY_COLORS_RGB:
         if depth == gs.DISPLAY_DEPTH_8:
             if (img.format & gs.DISPLAY_ALPHA_MASK) == gs.DISPLAY_ALPHA_NONE \
-                and (img.format & gs.DISPLAY_ENDIAN_MASK) == DISPLAY_BIGENDIAN:
-                pass
+                and (img.format & gs.DISPLAY_ENDIAN_MASK) == gs.DISPLAY_BIGENDIAN:
+                # will convert here, too. the c version did not need to!
+                # need to convert to 24RGB
+                img.rgbbuf = array('B', [0] * (width * height * 3) )
             else:
                 # need to convert to 24RGB
                 img.rgbbuf = array('B', [0] * (width * height * 3) )
@@ -464,8 +510,9 @@ def _display_size(handle, device, width, height, raster, format, pimage):
     return 0
 
 def _display_sync(handle, device):
+    print '_display_sync' #dbg
     img = image_find(handle, device)
-    if image is None:
+    if img is None:
         return -1
     
     color = img.format & gs.DISPLAY_COLORS_MASK
@@ -680,6 +727,22 @@ def _display_sync(handle, device):
                     rgbBufIdx += 1
                     
                     bufIdx += 3
+        elif depth == gs.DISPLAY_DEPTH_8 and alpha == gs.DISPLAY_ALPHA_NONE \
+            and endian == gs.DISPLAY_BIGENDIAN:
+            #just rgb, but we need the buffer anyways
+            rgbBufIdx = 0
+            bufIdx = 0
+            for idx in range(0, img.height * img.width):
+                assert rgbBufIdx == idx * 3
+                
+                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx    ] # r
+                rgbBufIdx += 1
+                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # g
+                rgbBufIdx += 1
+                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # b
+                rgbBufIdx += 1
+                
+                bufIdx += 3
     elif color == gs.DISPLAY_COLORS_CMYK:
         if depth == gs.DISPLAY_DEPTH_8:
             # Separations
@@ -822,10 +885,11 @@ def _display_sync(handle, device):
         img.window.show_all()
     
     img.darea.queue_draw()
-    Gtk.main_iteration_do(FALSE)
+    Gtk.main_iteration_do(False)
     return 0
 
 def _display_page(handle, device, copies, flush):
+    print '_display_page' #dbg
     _display_sync(handle, device)
     return 0;
 
@@ -834,6 +898,7 @@ def _display_update(handle, device, x, y, w, h):
     return 0
 
 def _display_separation(handle, device, comp_num, name, c, m, y, k):
+    print '_display_separation' #dbg
     img = image_find(handle, device)
     if img is None:
         return -1
@@ -903,11 +968,13 @@ def main(argv):
         instance = gs.new_instance()
         gs.set_stdio(instance, gsdll_stdin, gsdll_stdout, gsdll_stderr)
         if use_gui:
-            gs.set_display_callback(instance, display)
+            print('using gui: set_display_callback')
+            gs.set_display_callback(instance, c.byref(display))
+        print('init_with_args', instance, nargv)
         code = gs.init_with_args(instance, nargv)
         if code == 0:
             code = gs.run_string(instance, start_string)
-        code1 = gs_exit(instance)
+        code1 = gs.exit(instance)
         if code == 0 or code == gs.e_Quit:
             code = code1
         if code == gs.e_Quit:
