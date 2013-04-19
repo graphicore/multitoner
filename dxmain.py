@@ -181,7 +181,6 @@ def window_draw(widget, cr, img):
     widget is a gtk_drawing_area_new and should be equal to img.darea
     this callback is called via: img.darea.connect('draw', window_draw, img)
     """
-    print 'window_draw' #dbg
     if img and img.window and img.buf:
         color = img.format & gs.DISPLAY_COLORS_MASK;
         depth = img.format & gs.DISPLAY_DEPTH_MASK;
@@ -285,7 +284,7 @@ def window_create(img):
     img.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
     img.window.set_title("python gs");
     
-    img.vbox = Gtk.Box(Gtk.Orientation.VERTICAL, 0)
+    img.vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
     img.vbox.set_homogeneous(False)
     
     img.window.add(img.vbox)
@@ -484,7 +483,7 @@ def _display_size(handle, device, width, height, raster, format, pimage):
     if color == gs.DISPLAY_COLORS_CMYK or color == gs.DISPLAY_COLORS_SEPARATION:
         if not isinstance(img.cmyk_bar, Gtk.Widget):
             # add bar to select separation
-            img.cmyk_bar = Gtk.Box(Gtk.Orientation.HORIZONTAL, 0)
+            img.cmyk_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             img.cmyk_bar.set_homogeneous(False)
             img.vbox.pack_start(img.cmyk_bar, False, False, 0)
             for i in range(0, IMAGE_DEVICEN_MAX):
@@ -510,6 +509,7 @@ def _display_size(handle, device, width, height, raster, format, pimage):
     return 0
 
 def _display_sync(handle, device):
+    """ This should be in C or something like that, as it would be a hundred times faster"""
     print '_display_sync' #dbg
     img = image_find(handle, device)
     if img is None:
@@ -925,6 +925,8 @@ def _display_sync(handle, device):
                
                 bufIdx += 8
     
+    print '_display_sync heavy stuff ended' #dbg
+    
     if not isinstance(img.window, Gtk.Widget):
         window_create(img)
         window_resize(img)
@@ -935,6 +937,7 @@ def _display_sync(handle, device):
     
     img.darea.queue_draw()
     Gtk.main_iteration_do(False)
+    print '_display_sync done' #dbg
     return 0
 
 def _display_page(handle, device, copies, flush):
@@ -944,6 +947,7 @@ def _display_page(handle, device, copies, flush):
 
 def _display_update(handle, device, x, y, w, h):
     """ not implemented - eventually this will be used for progressive update """
+    print '_display_update'
     return 0
 
 def _display_separation(handle, device, comp_num, name, c, m, y, k):
