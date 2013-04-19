@@ -9,3 +9,25 @@ uses for the ASCII85 codec,
 see https://mom.readthedocs.org/en/latest/api/codec.html#module-mom.codec
 
 $ sudo pip install mom
+
+
+
+
+
+compiled dxmain.c after
+commander@zombie:~/sources/ghostpdl/gs/psi$ cp ../devices/gdevdsp.h ./
+with
+commander@zombie:~/sources/ghostpdl/gs/psi$ gcc `pkg-config gtk+-2.0 --cflags` -o meings dxmain.c -lgs `pkg-config gtk+-2.0 --libs`
+
+then linked it to here:
+ln -s ~/sources/ghostpdl/gs/psi/meings mgs
+
+
+this both does soemthing:
+(draws the image!)
+commander@zombie:~/Projekte/Bücher/friedhofsengel/Tools/Multitone/Code$ ./mgs -dBATCH -dSAFER -sDEVICE=display  ../Recherche/colortransforms.pdf 
+(does at least something)
+commander@zombie:~/Projekte/Bücher/friedhofsengel/Tools/Multitone/Code$ ./dxmain.py -dBATCH -dSAFER -sDEVICE=display  ../Recherche/colortransforms.pdf 
+
+"-dEPSFitPage" will blow up the eps to fit into the page
+"-dEPSCrop" will crop the page to have the size of the eps
