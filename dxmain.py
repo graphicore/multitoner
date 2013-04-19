@@ -421,40 +421,10 @@ def _display_size(handle, device, width, height, raster, format, pimage):
 
     color = img.format & gs.DISPLAY_COLORS_MASK
     depth = img.format & gs.DISPLAY_DEPTH_MASK
+    alpha = img.format & gs.DISPLAY_ALPHA_MASK
     
-    if color == gs.DISPLAY_COLORS_NATIVE:
-        if depth == gs.DISPLAY_DEPTH_8:
-            # 'B' is unsigned char
-            # filled with zeros
-            # need to convert to 24RGBX
-            img.rgbbuf = array('B', [0] * (width * height * 4) )
-        elif depth == gs.DISPLAY_DEPTH_16:
-             # need to convert to 24RGBX
-            img.rgbbuf = array('B', [0] * (width * height * 4) )
-        else:
-            return gs.e_rangecheck # not supported
-    elif color == gs.DISPLAY_COLORS_GRAY:
-        if depth == gs.DISPLAY_DEPTH_8:
-             # need to convert to 24RGBX
-            img.rgbbuf = array('B', [0] * (width * height * 4) )
-        else:
-            return gs.e_rangecheck # not supported
-    elif color == gs.DISPLAY_COLORS_RGB:
-        if depth == gs.DISPLAY_DEPTH_8:
-            if (img.format & gs.DISPLAY_ALPHA_MASK) == gs.DISPLAY_ALPHA_NONE \
-                and (img.format & gs.DISPLAY_ENDIAN_MASK) == gs.DISPLAY_BIGENDIAN:
-                # will convert here, too. the c version did not need to!
-                # need to convert to 24RGBX
-                img.rgbbuf = array('B', [0] * (width * height * 4) )
-            else:
-                # need to convert to 24RGBX
-                img.rgbbuf = array('B', [0] * (width * height * 4) )
-        else:
-            return gs.e_rangecheck # not supported
-    elif color == gs.DISPLAY_COLORS_CMYK:
-        if (depth == gs.DISPLAY_DEPTH_1) or (depth == gs.DISPLAY_DEPTH_8):
-            # need to convert to 24RGB
-            img.rgbbuf = array('B', [0] * (width * height * 4) )
+    if color == gs.DISPLAY_COLORS_CMYK:
+        if depth == gs.DISPLAY_DEPTH_1 or depth == gs.DISPLAY_DEPTH_8:
             # We already know about the CMYK components
             img.devicen[0].used = 1
             img.devicen[0].cyan = 65535
@@ -473,12 +443,15 @@ def _display_size(handle, device, width, height, raster, format, pimage):
             img.devicen[3].name = 'Black'
         else:
             return gs.e_rangecheck # not supported
-    elif color == gs.DISPLAY_COLORS_SEPARATION:
-        # we can't display this natively
-        # we will convert it just before displaying
-        if depth != gs.DISPLAY_DEPTH_8:
-            return gs.e_rangecheck # not supported
-        img.rgbbuf = array('B', [0] * (width * height * 4) )
+    elif color == gs.DISPLAY_COLORS_NATIVE \
+    and (depth != gs.DISPLAY_DEPTH_8 or depth != gs.DISPLAY_DEPTH_16):
+        return gs.e_rangecheck # not supported
+    elif color == gs.DISPLAY_COLORS_GRAY and depth != gs.DISPLAY_DEPTH_8:
+        return gs.e_rangecheck # not supported
+    elif color == gs.DISPLAY_COLORS_RGB and depth != gs.DISPLAY_DEPTH_8:
+        return gs.e_rangecheck # not supported
+    elif color == gs.DISPLAY_COLORS_SEPARATION and depth != gs.DISPLAY_DEPTH_8:
+        return gs.e_rangecheck # not supported
     
     if color == gs.DISPLAY_COLORS_CMYK or color == gs.DISPLAY_COLORS_SEPARATION:
         if not isinstance(img.cmyk_bar, Gtk.Widget):
@@ -496,9 +469,8 @@ def _display_size(handle, device, width, height, raster, format, pimage):
             img.show_as_gray.connect('clicked', signal_show_as_gray, img)
             img.show_as_gray.show()
         img.cmyk_bar.show()
-    else:
-        if isinstance(img.cmyk_bar, Gtk.Widget):
-            img.cmyk_bar.hide()
+    elif isinstance(img.cmyk_bar, Gtk.Widget):
+        img.cmyk_bar.hide()
     window_resize(img)
     
     visible = img.window.get_visible()
@@ -538,101 +510,90 @@ def _display_sync(handle, device):
             if endian == gs.DISPLAY_LITTLEENDIAN:
                 if native555 == gs.DISPLAY_NATIVE_555:
                     # BGR555
-                    
-                    rgbBufIdx = 0
+                    img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
                     for idx in range(0, img.height * img.width):
-                        assert rgbBufIdx == idx * 4
-                        if idx % img.width is 0 and idx is not 0:
+                        if idx % img.width == 0 and idx != 0:
                             bufIdx += stride
                         w = img.buf[bufIdx] + (img.buf[bufIdx+1] << 8)
                         
                         value = (w >> 10) & 0x1f #red
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 1
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = (w >> 5) & 0x1f #green
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 1
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = w & 0x1f #blue
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 2
+                        img.rgbbuf.append((value << 3) + (value >> 2))
+                        img.rgbbuf.append(0)
                         
                         bufIdx += 2
                 else:
                     # BGR565
-                    rgbBufIdx = 0
+                    img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
                     for idx in range(0, img.height * img.width):
-                        assert rgbBufIdx == idx * 4
-                        if idx % img.width is 0 and idx is not 0:
+                        if idx % img.width == 0 and idx != 0:
                             bufIdx += stride
                         w = img.buf[bufIdx] + (img.buf[bufIdx+1] << 8)
                         
                         value = (w >> 11) & 0x1f #red
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 1
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = (w >> 5) & 0x3f # green
-                        img.rgbbuf[rgbBufIdx] = (value << 2) + (value >> 4)
-                        rgbBufIdx += 1
+                        img.rgbbuf.append((value << 2) + (value >> 4))
                         
                         value = w & 0x1f # blue
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 2
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
+                        img.rgbbuf.append(0)
                         bufIdx += 2
             else:
                 if native555 == gs.DISPLAY_NATIVE_555:
                     # RGB555
-                    rgbBufIdx = 0
+                    img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
                     for idx in range(0, img.height * img.width):
-                        assert rgbBufIdx == idx * 4
-                        if idx % img.width is 0 and idx is not 0:
+                        if idx % img.width == 0 and idx != 0:
                             bufIdx += stride
                         w = img.buf[bufIdx+1] + (img.buf[bufIdx] << 8)
                         
                         value = (w >> 10) & 0x1f #red
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         rgbBufIdx += 1
                         
                         value = (w >> 5) & 0x1f # green
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         rgbBufIdx += 1
                         
                         value = w & 0x1f # blue
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 2
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
+                        img.rgbbuf.append(0)
                         bufIdx += 2
                 else:
                     # RGB565
-                    rgbBufIdx = 0
+                    img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
                     for idx in range(0, img.height * img.width):
-                        assert rgbBufIdx == idx * 4
-                        if idx % img.width is 0 and idx is not 0:
+                        if idx % img.width == 0 and idx != 0:
                             bufIdx += stride
                         w = img.buf[bufIdx+1] + (img.buf[bufIdx] << 8)
                         
                         value = (w >> 11) & 0x1f # red
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 1
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = (w >> 5) & 0x3f # green
-                        img.rgbbuf[rgbBufIdx] = (value << 2) + (value >> 4)
-                        rgbBufIdx += 1
+                        img.rgbbuf.append((value << 2) + (value >> 4))
                         
                         value = w & 0x1f # blue
-                        img.rgbbuf[rgbBufIdx] = (value << 3) + (value >> 2)
-                        rgbBufIdx += 2
+                        img.rgbbuf.append((value << 3) + (value >> 2))
                         
+                        img.rgbbuf.append(0)
                         bufIdx += 2
         if depth == gs.DISPLAY_DEPTH_8:
             # palette of 96 colors */
@@ -648,149 +609,128 @@ def _display_sync(handle, device):
                     value = i & 0x1f
                     value = (value << 3) + (value >> 2)
                     color[i][0] = color[i][1] = color[i][2] = value
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - img.width
             for idx in range(0, img.height * img.width):
-                assert rgbBufIdx == idx * 4
-                if idx % img.width is 0 and idx is not 0:
+                if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
                 w = img.buf[bufIdx]
-                img.rgbbuf[rgbBufIdx] = color[w][0] # r
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = color[w][1] # g
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = color[w][2] # b
-                rgbBufIdx += 2
-                
+                img.rgbbuf.extend([
+                    color[w][0], # r
+                    color[w][1], # g
+                    color[w][2], # b
+                    0            # x
+                ])
                 bufIdx += 1
     elif color == gs.DISPLAY_COLORS_GRAY:
         if depth == gs.DISPLAY_DEPTH_8:
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - img.width
             for idx in range(0, img.height * img.width):
-                assert rgbBufIdx == idx * 4
-                if idx % img.width is 0 and idx is not 0:
+                if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
                 w = img.buf[bufIdx]
-                
-                img.rgbbuf[rgbBufIdx] = w # r
-                rgbBufIdx += 1
-                
-                img.rgbbuf[rgbBufIdx] = w # g
-                rgbBufIdx += 1
-                
-                img.rgbbuf[rgbBufIdx] = w # b
-                rgbBufIdx += 2
-                
+                img.rgbbuf.extend([
+                    w, # r
+                    w, # g
+                    w, # b
+                    0 # x
+                ])
                 bufIdx += 1
     elif color == gs.DISPLAY_COLORS_RGB:
         if depth == gs.DISPLAY_DEPTH_8 and (
                 alpha == gs.DISPLAY_ALPHA_FIRST or alpha == gs.DISPLAY_UNUSED_FIRST
             ) and endian == gs.DISPLAY_BIGENDIAN:
             # Mac format
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 4)
             for idx in range(0, img.height * img.width):
-                assert rgbBufIdx == idx * 4
-                if idx % img.width is 0 and idx is not 0:
+                if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
-                # img.buf[idx] x = filler
-                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # r
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # g
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 3] # b
-                rgbBufIdx += 2
-                
+                # img.buf[bufIdx] x = filler
+                img.rgbbuf.extend([
+                    img.buf[bufIdx + 1], # r
+                    img.buf[bufIdx + 2], # g
+                    img.buf[bufIdx + 3], # b
+                    0                    # x
+                ])
                 bufIdx += 4
         elif depth == gs.DISPLAY_DEPTH_8 and endian == gs.DISPLAY_LITTLEENDIAN:
             if alpha == gs.DISPLAY_UNUSED_LAST or alpha == gs.DISPLAY_ALPHA_LAST:
-                #Windows format + alpha = BGRx
-                rgbBufIdx = 0
+                # cairo.FORMAT_RGB24 RGBx. no conversation is needed to display this with cairo
+                # in theory, and without a rowstride
+                print 'cairo.FORMAT_RGB24' #dbg
                 bufIdx = 0
-                stride = img.rowstride - (img.width * 4)
-                for idx in range(0, img.height * img.width):
-                    assert rgbBufIdx == idx * 4
-                    if idx % img.width is 0 and idx is not 0:
-                        bufIdx += stride
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # r
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # g
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx    ] # b
-                    rgbBufIdx += 2
+                hasStride = img.rowstride > img.width * 4
+                
+                if not hasStride:
+                    # fast
+                    buffer_size = img.height * img.width * 4
+                    img.rgbbuf = c.create_string_buffer(buffer_size) 
+                    c.memmove(img.rgbbuf, img.buf, buffer_size)
+                else:
+                    # slow
+                    print('this has a stride, what is a bad thing')
+                    img.rgbbuf = array('B')
+                    for y in range(0, img.height):
+                        bufIdx = y * img.rowstride
+                        img.rgbbuf.extend(img.buf[bufIdx:bufIdx+img.width * 4])
                     
-                    bufIdx += 4
             elif alpha == gs.DISPLAY_UNUSED_FIRST or alpha == gs.DISPLAY_ALPHA_FIRST:
                 # xBGR
-                rgbBufIdx = 0
+                img.rgbbuf = array('B')
                 bufIdx = 0
                 stride = img.rowstride - (img.width * 4)
                 for idx in range(0, img.height * img.width):
-                    assert rgbBufIdx == idx * 4
-                    if idx % img.width is 0 and idx is not 0:
+                    if idx % img.width == 0 and idx != 0:
                         bufIdx += stride
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 3] # r
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # g
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # b
-                    rgbBufIdx += 2
-                    
+                    img.rgbbuf.extend([
+                        img.buf[bufIdx + 3], # r
+                        img.buf[bufIdx + 2], # g
+                        img.buf[bufIdx + 1], # b
+                        0                    # x
+                    ])
                     bufIdx += 4
             else:
                 # Windows BGR24
-                rgbBufIdx = 0
+                img.rgbbuf = array('B')
                 bufIdx = 0
                 stride = img.rowstride - (img.width * 3)
                 for idx in range(0, img.height * img.width):
-                    assert rgbBufIdx == idx * 4
-                    if idx % img.width is 0 and idx is not 0:
+                    if idx % img.width == 0 and idx != 0:
                         bufIdx += stride
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # r
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # g
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = img.buf[bufIdx    ] # b
-                    rgbBufIdx += 2
+                    img.rgbbuf.extend([
+                        img.buf[bufIdx + 2], # r
+                        img.buf[bufIdx + 1], # g
+                        img.buf[bufIdx    ], # b
+                        0                    # x
+                    ])
                     
                     bufIdx += 3
         elif depth == gs.DISPLAY_DEPTH_8 and alpha == gs.DISPLAY_ALPHA_NONE \
             and endian == gs.DISPLAY_BIGENDIAN:
             #just bgr, but we need the buffer anyways
             print('standard conversion')
-            rgbBufIdx = 0
-            
-            #for y in range(0, img.height):
-            #    bufIdx = y * img.rowstride
-            #    for x in range(0, img.width):
-            #        img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # r
-            #        rgbBufIdx += 1
-            #        img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # g
-            #        rgbBufIdx += 1
-            #        img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 0] # b
-            #        rgbBufIdx += 2
-            #        bufIdx += 3
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 3)
             for idx in range(0, img.height * img.width):
-                assert rgbBufIdx == idx * 4
-                if idx % img.width is 0 and idx is not 0:
+                if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
-                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 2] # r
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 1] # g
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = img.buf[bufIdx + 0] # b
-                rgbBufIdx += 2
+                img.rgbbuf.extend([
+                    img.buf[bufIdx + 2], # r
+                    img.buf[bufIdx + 1], # g
+                    img.buf[bufIdx + 0], # b
+                    0                    # x
+                ])
                 bufIdx += 3
     elif color == gs.DISPLAY_COLORS_CMYK:
         if depth == gs.DISPLAY_DEPTH_8:
-            # Separations
+            # CMYK Separations
+            print('CMYK Separations 8 bit')
             vc = img.devicen[0].visible
             vm = img.devicen[1].visible
             vy = img.devicen[2].visible
@@ -798,12 +738,11 @@ def _display_sync(handle, device):
             vall = vc and vm and vy and vk
             show_gray = (vc + vm + vy + vk == 1) and img.devicen_gray
             
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 4)
             for idx in range(0, img.height * img.width):
-                assert rgbBufIdx == idx * 4
-                if idx % img.width is 0 and idx is not 0:
+                if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
                 cyan    = img.buf[bufIdx    ]
                 magenta = img.buf[bufIdx + 1]
@@ -822,12 +761,12 @@ def _display_sync(handle, device):
                         black += cyan + magenta + yellow
                         cyan = magenta = yellow = 0
                 
-                img.rgbbuf[rgbBufIdx] = (255-yellow)    * (255-black) // 255 # r
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = (255-magenta) * (255-black) // 255 # g
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = (255-cyan)  * (255-black) // 255 # b
-                rgbBufIdx += 2
+                img.rgbbuf.extend([
+                    (255-yellow)  * (255-black) // 255, # r
+                    (255-magenta) * (255-black) // 255, # g
+                    (255-cyan)    * (255-black) // 255, # b
+                    0                                            # x
+                ])
                 
                 bufIdx += 4
         elif depth == gs.DISPLAY_DEPTH_1:
@@ -839,11 +778,10 @@ def _display_sync(handle, device):
             vall = vc and vm and vy and vk
             show_gray = (vc + vm + vy + vk == 1) and img.devicen_gray
             
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             for y in range(0, img.height):
                 bufIdx = y * img.rowstride
                 for x in range(0, img.width):
-                    assert rgbBufIdx == idx * 4
                     value = img.buf[bufIdx + x//2]
                     # (x & 0) always evaluates to 0. What are you trying to do?
                     # If you're trying to test the bit, you want to do "!(x & 1)".
@@ -866,13 +804,12 @@ def _display_sync(handle, device):
                         if show_gray:
                             black += cyan + magenta + yellow
                             cyan = magenta = yellow = 0
-                    
-                    img.rgbbuf[rgbBufIdx] = (255-cyan)    * (255-black) // 255 # r
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = (255-magenta) * (255-black) // 255 # g
-                    rgbBufIdx += 1
-                    img.rgbbuf[rgbBufIdx] = (255-yellow)  * (255-black) // 255 # b
-                    rgbBufIdx += 2
+                    img.rgbbuf.extend([
+                        (255-yellow)  * (255-black) // 255, # r
+                        (255-magenta) * (255-black) // 255, # g
+                        (255-cyan)    * (255-black) // 255, # b
+                        0                                   # x
+                    ])
     elif color == gs.DISPLAY_COLORS_SEPARATION:
         if depth == gs.DISPLAY_DEPTH_8:
             num_comp = 0
@@ -888,12 +825,11 @@ def _display_sync(handle, device):
             if num_visible == 1 and img.devicen_gray:
                 show_gray = True
             
-            rgbBufIdx = 0
+            img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 8)
             for idx in range(0, img.height * img.width):
-                assert rgbBufIdx == idx * 4
-                if idx % img.width is 0 and idx is not 0:
+                if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
                 cyan = magenta = yellow = black = 0
                 if show_gray:
@@ -915,13 +851,12 @@ def _display_sync(handle, device):
                 magenta = min(255, magenta)
                 yellow  = min(255, yellow)
                 black   = min(255, black)
-                
-                img.rgbbuf[rgbBufIdx] = (255-yellow)    * (255-black) // 255 # r
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = (255-magenta) * (255-black) // 255 # g
-                rgbBufIdx += 1
-                img.rgbbuf[rgbBufIdx] = (255-cyan)  * (255-black) // 255 # b
-                rgbBufIdx += 2
+                img.rgbbuf.extend([
+                    (255-yellow)  * (255-black) // 255, # r
+                    (255-magenta) * (255-black) // 255, # g
+                    (255-cyan)    * (255-black) // 255, # b
+                    0                                   # x
+                ])
                
                 bufIdx += 8
     
@@ -974,7 +909,8 @@ display_presize    = gs.c_display_presize(_display_presize)
 display_size       = gs.c_display_size(_display_size)
 display_sync       = gs.c_display_sync(_display_sync)
 display_page       = gs.c_display_page(_display_page)
-display_update     = gs.c_display_update(_display_update)
+#display_update     = gs.c_display_update(_display_update)
+display_update     = c.cast(None, gs.c_display_update)
 display_memalloc   = c.cast(None, gs.c_display_memalloc) # NULL,	/* memalloc */
 display_memfree    = c.cast(None, gs.c_display_memfree) # NULL,	/* memfree */
 display_separation = gs.c_display_separation(_display_separation)
@@ -1010,9 +946,22 @@ def main(argv):
     use_gui, _ = Gtk.init_check(argv)
     
     # insert display device parameters as first arguments
+  #  dformat = "-dDisplayFormat=%d" % \
+  #          (gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_8 | \
+  #          gs.DISPLAY_BIGENDIAN | gs.DISPLAY_TOPFIRST)
+    
+    #fast
+    CAIRO_FORMAT_RGB24  = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_LITTLEENDIAN | \
+                          gs.DISPLAY_UNUSED_LAST | gs.DISPLAY_DEPTH_8
+    
+    SEPARATION_FORMAT = gs.DISPLAY_COLORS_SEPARATION | gs.DISPLAY_ALPHA_NONE | \
+                        gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
+    
+    CMYK_FORMAT = gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | \
+                        gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
+    
     dformat = "-dDisplayFormat=%d" % \
-            (gs.DISPLAY_COLORS_SEPARATION | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_8 | \
-            gs.DISPLAY_BIGENDIAN | gs.DISPLAY_TOPFIRST)
+            ( CAIRO_FORMAT_RGB24 | gs.DISPLAY_TOPFIRST )
     
     nargv = [argv[0], dformat] + argv[1:]
     
