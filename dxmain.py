@@ -1,15 +1,45 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-# Ghostscript frontend which provides a graphical window
-# using PyGtk.  Load time linking to libgs.so with python-ghostscript
-# c-bindings
+"""
+Ghostscript frontend which provides a graphical window
+using PyGtk and python-ghostscript
+"""
 # 
-# this is a python port from dxmain.c by artifex
-# dxmain.c provides the "gs" command on linux shell
+# this is a python port from dxmain.c by artifex http://www.artifex.com
+# dxmain.c is int the ghostscript repositoty at ghostpdl/gs/psi/dxmain.c
 #
+# Copyright 2013 by Lasse Fister <commander@graphicore.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+#
+#
+# you will need to use python 2.x because cairo.ImageSurface.create_for_data
+# is not yet available in python3:
+# http://cairographics.org/documentation/pycairo/3/reference/surfaces.html#cairo.ImageSurface.create_for_data
+#
+# and this was not tested in python3
+#
+# Run this like the gs command is used. However, using the "display"
+# device is required:
+# $ ./dxmain.py -dBATCH -sDEVICE=display -dEPSFitPage /path/to/eps_or_pdf
+# more options: http://www.ghostscript.com/doc/current/Use.htm#Output_device
+#
+# see the main function to change the setup of the display device
 
-from __future__ import with_statement, division
+
+from __future__ import division
 
 import ghostscript._gsprint as gs
 import ctypes as c
@@ -24,6 +54,8 @@ import cairo
 import sys
 from array import array
 
+
+
 start_string = "systemdict /start get exec\n"
 
 #####################################################################
@@ -32,7 +64,7 @@ start_string = "systemdict /start get exec\n"
 # this looks like not needed in python. a simple dict would do it
 class Stdin_buf (c.Structure):
     _fields_ = [
-        ('buf', c.POINTER(c.c_char)), # not shure if this is right, in c it was: char *buf;
+        ('buf', c.POINTER(c.c_char)),
         # length of buffer
         ('len', c.c_int),
         # number of characters returned
@@ -848,15 +880,6 @@ display = gs.Display_callback_s(
 )
 
 def main(argv):
-    # int exit_status;
-    # int code = 1, code1;
-    # void *instance;
-    # int nargc;
-    # char **nargv;
-    # char dformat[64];
-    # int exit_code;
-    # gboolean use_gui;
-    
     code = 1
     use_gui, _ = Gtk.init_check(argv)
     
@@ -864,13 +887,15 @@ def main(argv):
     # this controls the format of the pixbuf that ghostscript will deliver
     # see display_sync for details
     
-    #fast
+    # fast
     CAIRO_FORMAT_RGB24  = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | \
                           gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
     
+    # interesting
     SEPARATION_FORMAT = gs.DISPLAY_COLORS_SEPARATION | gs.DISPLAY_ALPHA_NONE | \
                         gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
     
+    # if there are spot colors they are mixed into the cmyk values
     CMYK_FORMAT = gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | \
                   gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
     
