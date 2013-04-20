@@ -38,6 +38,9 @@ using PyGtk and python-ghostscript
 #
 # see the main function to change the setup of the display device
 
+__author__ = "Lasse Fister <commander@graphicore.de>"
+__copyright__ = "Copyright 2013 by Lasse Fister <commander@graphicore.de>"
+__licence__ = "GNU General Public License version 3 (GPL v3)"
 
 from __future__ import division
 
