@@ -16,11 +16,10 @@ import ctypes as c
 
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
-#ubuntu installed package: python-gi-cairo, not shure now if its needed
-# fails when being used: from gi.repository import cairo
+# fails when being used:
+# from gi.repository import cairo
 # using regular bindings:
 import cairo
-import Image
 
 import sys
 from array import array
@@ -79,8 +78,6 @@ def read_stdin_handler(channel, condition, inputBuffer):
 def _gsdll_stdin(instance, buf, length):
     inputBuffer = Stdin_buf(buf, length, -1) # buf, len, count
     
-    #TODO: see, here is the stdin coming into play
-    # for python, the straight way would be sys.stdin I guess
     channel = sys.stdin
     # (fd, condition, callback, user_data=None) -> source id
     # callable receives (fd, condition, user_data)
@@ -125,10 +122,6 @@ gsdll_stderr = gs.c_stdstream_call_t(_gsdll_stderr)
 # dll display device
 
 class ImageDeviceN(object):
-    """
-        a dict would be sufficient here, but a class documents better
-        what propertires are going to be used
-    """
     used = 0 # int, non-zero if in use
     visible = True # bool
     name = None # char name[64]
@@ -141,10 +134,6 @@ class ImageDeviceN(object):
 IMAGE_DEVICEN_MAX = 8
 
 class ImageData(object):
-    """
-        a dict would be sufficient here, but a class documents better
-        what propertires are going to be used
-    """
     def __init__ (self):
         self.separation = [None] * IMAGE_DEVICEN_MAX
         self.devicen = [ImageDeviceN() for i in range(0, IMAGE_DEVICEN_MAX)]
@@ -182,91 +171,12 @@ def window_draw(widget, cr, img):
     this callback is called via: img.darea.connect('draw', window_draw, img)
     """
     if img and img.window and img.buf:
-        color = img.format & gs.DISPLAY_COLORS_MASK;
-        depth = img.format & gs.DISPLAY_DEPTH_MASK;
-        
         bgcol = widget.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
-        
         cr.set_source_rgba(bgcol.red, bgcol.blue, bgcol.green, bgcol.alpha)
-        # there is no cr.set_source_color
-        # cr.set_source_color(widget.get_style_context()
-        #     .get_background_color(Gtk.StateFlags.NORMAL))
-        
         cr.paint()
-        
-    #    pixbuf = None
-    #    # the declaration of pixbuf is mostly the same! dunno why it was made like this
-    #    if color == gs.DISPLAY_COLORS_NATIVE:
-    #        if depth == gs.DISPLAY_DEPTH_8 and img.rgbbuf:
-    #            print 'a'
-    #            # https://developer.gnome.org/gdk-pixbuf/stable/gdk-pixbuf-Image-Data-in-Memory.html#gdk-pixbuf-new-from-data
-    #            pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-    #                GdkPixbuf.Colorspace.RGB, False, 8,
-    #                img.width, img.height, img.width*3,
-    #                None, None)
-    #        elif depth == gs.DISPLAY_DEPTH_16 and img.rgbbuf:
-    #            print 'b'
-    #            pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-    #                GdkPixbuf.Colorspace.RGB, False, 8,
-    #                img.width, img.height, img.width*3,
-    #                None, None)
-    #    elif color == gs.DISPLAY_COLORS_GRAY:
-    #        if depth == gs.DISPLAY_DEPTH_8 and img.rgbbuf:
-    #            print 'c'
-    #            pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-    #                GdkPixbuf.Colorspace.RGB, False, 8,
-    #                img.width, img.height, img.width*3,
-    #                None, None)
-    #    elif color == gs.DISPLAY_COLORS_RGB:
-    #        if depth == gs.DISPLAY_DEPTH_8:
-    #            if img.rgbbuf:
-    #                print 'd'
-    #                pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-    #                    GdkPixbuf.Colorspace.RGB, False, 8,
-    #                    img.width, img.height, img.width*3,
-    #                    None, None)
-    #            else:
-    #                print 'e'
-    #                # img.buf has no 'length' thats a problem here
-    #                # this usually wouldn't happen anymore, an img.rgbbuf
-    #                # is created in _display_size and filled in _display_sync
-    #                # now
-    #                byte_array = array('B', img.buf[0: img.height * img.rowstride])
-    #                pixbuf = GdkPixbuf.Pixbuf.new_from_data(byte_array,
-    #                    GdkPixbuf.Colorspace.RGB, False, 8,
-    #                    img.width, img.height, img.rowstride,
-    #                    None, None)
-    #    elif color == gs.DISPLAY_COLORS_CMYK:
-    #        if (depth == gs.DISPLAY_DEPTH_1 or depth == gs.DISPLAY_DEPTH_8) and img.rgbbuf:
-    #            print 'f'
-    #            pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-    #                GdkPixbuf.Colorspace.RGB, False, 8,
-    #                img.width, img.height, img.width*3,
-    #                None, None)
-    #    elif color == gs.DISPLAY_COLORS_SEPARATION:
-    #        if depth == gs.DISPLAY_DEPTH_8 and img.rgbbuf:
-    #            print 'g'
-    #            pixbuf = GdkPixbuf.Pixbuf.new_from_data(img.rgbbuf,
-    #                GdkPixbuf.Colorspace.RGB, False, 8,
-    #                img.width, img.height, img.width*3,
-    #                None, None)
-        
-        # help(cr)
-        # see, looks like there is help:
-        # http://stackoverflow.com/questions/10270795/drawing-in-pygobject-python3
-        # http://stackoverflow.com/questions/10270080/how-to-draw-a-gdkpixbuf-using-gtk3-and-pygobject
-        
         if img.rgbbuf:
-            
-            #data_array = array('B', img.buf[0: img.height * img.rowstride])
-            #pil_image = Image.frombuffer('RGB', (img.width, img.height),  data_array, "raw", "RGB", img.rowstride, 1)
-            
-            #pil_image.save("pfffffffffffffffffffffffffffffff", "png")
-            
-
             cairo_surface = cairo.ImageSurface.create_for_data(img.rgbbuf, cairo.FORMAT_RGB24, img.width, img.height, img.width * 4)
             cr.set_source_surface(cairo_surface, 0, 0)
-            #cr.set_source_pixbuf(pixbuf, 0, 0)
         cr.paint()
     return True
 
@@ -280,7 +190,6 @@ def widget_delete(widget, *args):
 
 def window_create(img):
     """ Create a gtk window """
-    print 'window_create' #dbg
     img.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
     img.window.set_title("python gs");
     
@@ -322,7 +231,7 @@ def window_resize(img):
 
 def window_separation(img, sep):
     img.devicen[sep].visible = not img.devicen[sep].visible
-    _display_sync(img.handle, img.device)
+    display_sync(img.handle, img.device)
 
 def get_signal_separation(sep):
     def signal_sep_i(widget, img):
@@ -339,11 +248,10 @@ def window_add_button(img, label, callback):
 
 def signal_show_as_gray(widget, img):
     img.devicen_gray = not img.devicen_gray
-    _display_sync(img.handle, img.device)
+    display_sync(img.handle, img.device)
 
-def _display_open(handle, device):
+def display_open(handle, device):
     """ New device has been opened """
-    print '_display_open' #dbg
     img = ImageData()
     # add to list
     images[(handle, device)] = img
@@ -355,8 +263,7 @@ def _display_open(handle, device):
     Gtk.main_iteration_do(False)
     return 0;
 
-def _display_preclose(handle, device):
-    print '_display_preclose' #dbg
+def display_preclose(handle, device):
     img = image_find(handle, device)
     if img is None:
         return -1
@@ -379,8 +286,7 @@ def _display_preclose(handle, device):
 
     return 0;
 
-def _display_close(handle, device):
-    print '_display_close' #dbg
+def display_close(handle, device):
     img = image_find(handle, device)
     if img is None:
         return -1
@@ -388,15 +294,13 @@ def _display_close(handle, device):
     del images[(handle, device)]
     return 0;
 
-def _display_presize(handle, device, width, height, raster, format):
-    print '_display_presize' #dbg
+def display_presize(handle, device, width, height, raster, format):
     # Assume everything is OK.
     # It would be better to return e_rangecheck if we can't
     # support the format.
     return 0;
 
-def _display_size(handle, device, width, height, raster, format, pimage):
-    print '_display_size' #dbg
+def display_size(handle, device, width, height, raster, format, pimage):
     img = image_find(handle, device)
     if img is None:
         return -1
@@ -444,7 +348,7 @@ def _display_size(handle, device, width, height, raster, format, pimage):
         else:
             return gs.e_rangecheck # not supported
     elif color == gs.DISPLAY_COLORS_NATIVE \
-    and (depth != gs.DISPLAY_DEPTH_8 or depth != gs.DISPLAY_DEPTH_16):
+    and not (depth == gs.DISPLAY_DEPTH_8 or depth == gs.DISPLAY_DEPTH_16):
         return gs.e_rangecheck # not supported
     elif color == gs.DISPLAY_COLORS_GRAY and depth != gs.DISPLAY_DEPTH_8:
         return gs.e_rangecheck # not supported
@@ -461,8 +365,6 @@ def _display_size(handle, device, width, height, raster, format, pimage):
             img.vbox.pack_start(img.cmyk_bar, False, False, 0)
             for i in range(0, IMAGE_DEVICEN_MAX):
                 img.separation[i] = window_add_button(img, img.devicen[i].name, get_signal_separation(i))
-            
-            
             img.show_as_gray = Gtk.CheckButton.new_with_label('Show as Gray')
             img.cmyk_bar.pack_end(img.show_as_gray, False, False, 5)
             img.show_as_gray.set_active(False)
@@ -480,9 +382,19 @@ def _display_size(handle, device, width, height, raster, format, pimage):
     Gtk.main_iteration_do(False)
     return 0
 
-def _display_sync(handle, device):
-    """ This should be in C or something like that, as it would be a hundred times faster"""
-    print '_display_sync' #dbg
+def display_sync(handle, device):
+    """
+    This will set a pixel buffer to img.rgbbuf in the the cairo.FORMAT_RGB24
+    However the Format is documented as:
+    "each pixel is a 32-bit quantity, with the upper 8 bits unused.
+    Red, Green, and Blue are stored in the remaining 24 bits in that order."
+    But on my local machine its BGRx not RGBx
+    
+    Real Alpha values where not tested just DISPLAY_ALPHA_NONE DISPLAY_UNUSED_FIRST and DISPLAY_UNUSED_LAST 
+     
+    This should be in C or something like that, as most of it would be a hundred times faster
+    See the case for the native cairo.FORMAT_RGB24. Thats the only fast case.
+    """
     img = image_find(handle, device)
     if img is None:
         return -1
@@ -509,7 +421,9 @@ def _display_sync(handle, device):
         if depth == gs.DISPLAY_DEPTH_16:
             if endian == gs.DISPLAY_LITTLEENDIAN:
                 if native555 == gs.DISPLAY_NATIVE_555:
-                    # BGR555
+                    # RGB555
+                    # worked with
+                    # gs.DISPLAY_COLORS_NATIVE | gs.DISPLAY_DEPTH_16 | gs.DISPLAY_LITTLEENDIAN | gs.DISPLAY_NATIVE_555
                     img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
@@ -518,19 +432,22 @@ def _display_sync(handle, device):
                             bufIdx += stride
                         w = img.buf[bufIdx] + (img.buf[bufIdx+1] << 8)
                         
-                        value = (w >> 10) & 0x1f #red
+                        value = w & 0x1f #blue
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = (w >> 5) & 0x1f #green
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
-                        value = w & 0x1f #blue
-                        img.rgbbuf.append((value << 3) + (value >> 2))
-                        img.rgbbuf.append(0)
+                        value = (w >> 10) & 0x1f #red
+                        img.rgbbuf.append( (value << 3) + (value >> 2))
+                        
+                        img.rgbbuf.append(0) # x
                         
                         bufIdx += 2
                 else:
-                    # BGR565
+                    # RGB565
+                    # worked with
+                    # gs.DISPLAY_COLORS_NATIVE | gs.DISPLAY_DEPTH_16 | gs.DISPLAY_LITTLEENDIAN | gs.DISPLAY_NATIVE_565
                     img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
@@ -539,20 +456,22 @@ def _display_sync(handle, device):
                             bufIdx += stride
                         w = img.buf[bufIdx] + (img.buf[bufIdx+1] << 8)
                         
-                        value = (w >> 11) & 0x1f #red
+                        value = w & 0x1f # blue
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = (w >> 5) & 0x3f # green
                         img.rgbbuf.append((value << 2) + (value >> 4))
                         
-                        value = w & 0x1f # blue
+                        value = (w >> 11) & 0x1f #red
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
-                        img.rgbbuf.append(0)
+                        img.rgbbuf.append(0) # x
                         bufIdx += 2
             else:
                 if native555 == gs.DISPLAY_NATIVE_555:
                     # RGB555
+                    # worked with
+                    # gs.DISPLAY_COLORS_NATIVE | gs.DISPLAY_DEPTH_16 | gs.DISPLAY_NATIVE_555 | gs.DISPLAY_BIGENDIAN
                     img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
@@ -560,22 +479,22 @@ def _display_sync(handle, device):
                         if idx % img.width == 0 and idx != 0:
                             bufIdx += stride
                         w = img.buf[bufIdx+1] + (img.buf[bufIdx] << 8)
-                        
-                        value = (w >> 10) & 0x1f #red
-                        img.rgbbuf.append((value << 3) + (value >> 2))
-                        rgbBufIdx += 1
-                        
-                        value = (w >> 5) & 0x1f # green
-                        img.rgbbuf.append((value << 3) + (value >> 2))
-                        rgbBufIdx += 1
                         
                         value = w & 0x1f # blue
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
-                        img.rgbbuf.append(0)
+                        value = (w >> 5) & 0x1f # green
+                        img.rgbbuf.append((value << 3) + (value >> 2))
+                        
+                        value = (w >> 10) & 0x1f #red
+                        img.rgbbuf.append((value << 3) + (value >> 2))
+                        
+                        img.rgbbuf.append(0) # x
                         bufIdx += 2
                 else:
                     # RGB565
+                    # worked with
+                    # gs.DISPLAY_COLORS_NATIVE | gs.DISPLAY_DEPTH_16 | gs.DISPLAY_NATIVE_565 | gs.DISPLAY_BIGENDIAN
                     img.rgbbuf = array('B')
                     bufIdx = 0
                     stride = img.rowstride - (img.width * 2)
@@ -584,31 +503,35 @@ def _display_sync(handle, device):
                             bufIdx += stride
                         w = img.buf[bufIdx+1] + (img.buf[bufIdx] << 8)
                         
-                        value = (w >> 11) & 0x1f # red
+                        value = w & 0x1f # blue
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
                         value = (w >> 5) & 0x3f # green
                         img.rgbbuf.append((value << 2) + (value >> 4))
                         
-                        value = w & 0x1f # blue
+                        value = (w >> 11) & 0x1f # red
                         img.rgbbuf.append((value << 3) + (value >> 2))
                         
-                        img.rgbbuf.append(0)
+                        img.rgbbuf.append(0) # x
                         bufIdx += 2
         if depth == gs.DISPLAY_DEPTH_8:
-            # palette of 96 colors */
+            # palette of 96 colors
+            # worked with
+            # gs.DISPLAY_COLORS_NATIVE | gs.DISPLAY_DEPTH_8
             color = [[0,0,0]] * 96
             one = 255 // 3
             for i in range(0, 96):
                 # 0->63 = 00RRGGBB, 64->95 = 010YYYYY
                 if i < 64:
-                    color[i][0] = ((i & 0x30) >> 4) * one # r
-                    color[i][1] = ((i & 0x0c) >> 2) * one # g
-                    color[i][2] = (i & 0x03) * one        # b
+                    color[i] = (
+                        ((i & 0x30) >> 4) * one, # r
+                        ((i & 0x0c) >> 2) * one, # g
+                         (i & 0x03)       * one  # b
+                    )
                 else:
                     value = i & 0x1f
                     value = (value << 3) + (value >> 2)
-                    color[i][0] = color[i][1] = color[i][2] = value
+                    color[i] = (value, value, value)
             img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - img.width
@@ -617,14 +540,17 @@ def _display_sync(handle, device):
                     bufIdx += stride
                 w = img.buf[bufIdx]
                 img.rgbbuf.extend([
-                    color[w][0], # r
-                    color[w][1], # g
                     color[w][2], # b
+                    color[w][1], # g
+                    color[w][0], # r
                     0            # x
                 ])
                 bufIdx += 1
     elif color == gs.DISPLAY_COLORS_GRAY:
         if depth == gs.DISPLAY_DEPTH_8:
+            # gray 8 bit
+            # worked with
+            # gs.DISPLAY_COLORS_GRAY | gs.DISPLAY_DEPTH_8
             img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - img.width
@@ -633,17 +559,19 @@ def _display_sync(handle, device):
                     bufIdx += stride
                 w = img.buf[bufIdx]
                 img.rgbbuf.extend([
-                    w, # r
-                    w, # g
                     w, # b
-                    0 # x
+                    w, # g
+                    w, # r
+                    0  # x
                 ])
                 bufIdx += 1
     elif color == gs.DISPLAY_COLORS_RGB:
         if depth == gs.DISPLAY_DEPTH_8 and (
                 alpha == gs.DISPLAY_ALPHA_FIRST or alpha == gs.DISPLAY_UNUSED_FIRST
             ) and endian == gs.DISPLAY_BIGENDIAN:
-            # Mac format
+            # xRGB
+            # worked with
+            # gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_FIRST | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
             img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 4)
@@ -652,28 +580,27 @@ def _display_sync(handle, device):
                     bufIdx += stride
                 # img.buf[bufIdx] x = filler
                 img.rgbbuf.extend([
-                    img.buf[bufIdx + 1], # r
-                    img.buf[bufIdx + 2], # g
                     img.buf[bufIdx + 3], # b
+                    img.buf[bufIdx + 2], # g
+                    img.buf[bufIdx + 1], # r
                     0                    # x
                 ])
                 bufIdx += 4
         elif depth == gs.DISPLAY_DEPTH_8 and endian == gs.DISPLAY_LITTLEENDIAN:
             if alpha == gs.DISPLAY_UNUSED_LAST or alpha == gs.DISPLAY_ALPHA_LAST:
-                # cairo.FORMAT_RGB24 RGBx. no conversation is needed to display this with cairo
-                # in theory, and without a rowstride
-                print 'cairo.FORMAT_RGB24' #dbg
+                # cairo.FORMAT_RGB24 BGRx. no conversation is needed to display this with cairo
+                # worked with
+                # gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
                 bufIdx = 0
                 hasStride = img.rowstride > img.width * 4
-                
                 if not hasStride:
                     # fast
                     buffer_size = img.height * img.width * 4
                     img.rgbbuf = c.create_string_buffer(buffer_size) 
                     c.memmove(img.rgbbuf, img.buf, buffer_size)
                 else:
-                    # slow
-                    print('this has a stride, what is a bad thing')
+                    # slow. This has a stride between the rows, what is a bad thing
+                    # thus we can't copy the buffer directly, like above
                     img.rgbbuf = array('B')
                     for y in range(0, img.height):
                         bufIdx = y * img.rowstride
@@ -681,6 +608,8 @@ def _display_sync(handle, device):
                     
             elif alpha == gs.DISPLAY_UNUSED_FIRST or alpha == gs.DISPLAY_ALPHA_FIRST:
                 # xBGR
+                # worked with
+                # gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_FIRST | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
                 img.rgbbuf = array('B')
                 bufIdx = 0
                 stride = img.rowstride - (img.width * 4)
@@ -688,14 +617,16 @@ def _display_sync(handle, device):
                     if idx % img.width == 0 and idx != 0:
                         bufIdx += stride
                     img.rgbbuf.extend([
-                        img.buf[bufIdx + 3], # r
+                        img.buf[bufIdx + 1], # r
                         img.buf[bufIdx + 2], # g
-                        img.buf[bufIdx + 1], # b
+                        img.buf[bufIdx + 3], # b
                         0                    # x
                     ])
                     bufIdx += 4
             else:
-                # Windows BGR24
+                # BGR24
+                # worked with
+                # gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_FIRST | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_ALPHA_NONE
                 img.rgbbuf = array('B')
                 bufIdx = 0
                 stride = img.rowstride - (img.width * 3)
@@ -703,17 +634,17 @@ def _display_sync(handle, device):
                     if idx % img.width == 0 and idx != 0:
                         bufIdx += stride
                     img.rgbbuf.extend([
-                        img.buf[bufIdx + 2], # r
-                        img.buf[bufIdx + 1], # g
                         img.buf[bufIdx    ], # b
+                        img.buf[bufIdx + 1], # g
+                        img.buf[bufIdx + 2], # r
                         0                    # x
                     ])
-                    
                     bufIdx += 3
         elif depth == gs.DISPLAY_DEPTH_8 and alpha == gs.DISPLAY_ALPHA_NONE \
             and endian == gs.DISPLAY_BIGENDIAN:
-            #just bgr, but we need the buffer anyways
-            print('standard conversion')
+            # RGB24
+            # worked with:
+            # gs.DISPLAY_COLORS_RGB | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
             img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 3)
@@ -721,16 +652,16 @@ def _display_sync(handle, device):
                 if idx % img.width == 0 and idx != 0:
                     bufIdx += stride
                 img.rgbbuf.extend([
-                    img.buf[bufIdx + 2], # r
+                    img.buf[bufIdx + 2], # b
                     img.buf[bufIdx + 1], # g
-                    img.buf[bufIdx + 0], # b
+                    img.buf[bufIdx + 0], # r
                     0                    # x
                 ])
                 bufIdx += 3
     elif color == gs.DISPLAY_COLORS_CMYK:
         if depth == gs.DISPLAY_DEPTH_8:
-            # CMYK Separations
-            print('CMYK Separations 8 bit')
+            # worked with:
+            # gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
             vc = img.devicen[0].visible
             vm = img.devicen[1].visible
             vy = img.devicen[2].visible
@@ -762,15 +693,16 @@ def _display_sync(handle, device):
                         cyan = magenta = yellow = 0
                 
                 img.rgbbuf.extend([
-                    (255-yellow)  * (255-black) // 255, # r
+                    (255-yellow)  * (255-black) // 255, # b
                     (255-magenta) * (255-black) // 255, # g
-                    (255-cyan)    * (255-black) // 255, # b
-                    0                                            # x
+                    (255-cyan)    * (255-black) // 255, # r
+                    0                                   # x
                 ])
                 
                 bufIdx += 4
         elif depth == gs.DISPLAY_DEPTH_1:
-            # Separations
+            # worked with:
+            # gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_1 | gs.DISPLAY_BIGENDIAN
             vc = img.devicen[0].visible
             vm = img.devicen[1].visible
             vy = img.devicen[2].visible
@@ -805,13 +737,15 @@ def _display_sync(handle, device):
                             black += cyan + magenta + yellow
                             cyan = magenta = yellow = 0
                     img.rgbbuf.extend([
-                        (255-yellow)  * (255-black) // 255, # r
+                        (255-yellow)  * (255-black) // 255, # b
                         (255-magenta) * (255-black) // 255, # g
-                        (255-cyan)    * (255-black) // 255, # b
+                        (255-cyan)    * (255-black) // 255, # r
                         0                                   # x
                     ])
     elif color == gs.DISPLAY_COLORS_SEPARATION:
         if depth == gs.DISPLAY_DEPTH_8:
+            # worked with:
+            # gs.DISPLAY_COLORS_SEPARATION | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
             num_comp = 0
             num_visible = 0
             show_gray = False
@@ -824,7 +758,6 @@ def _display_sync(handle, device):
             
             if num_visible == 1 and img.devicen_gray:
                 show_gray = True
-            
             img.rgbbuf = array('B')
             bufIdx = 0
             stride = img.rowstride - (img.width * 8)
@@ -852,15 +785,12 @@ def _display_sync(handle, device):
                 yellow  = min(255, yellow)
                 black   = min(255, black)
                 img.rgbbuf.extend([
-                    (255-yellow)  * (255-black) // 255, # r
+                    (255-yellow)  * (255-black) // 255, # b
                     (255-magenta) * (255-black) // 255, # g
-                    (255-cyan)    * (255-black) // 255, # b
+                    (255-cyan)    * (255-black) // 255, # r
                     0                                   # x
                 ])
-               
                 bufIdx += 8
-    
-    print '_display_sync heavy stuff ended' #dbg
     
     if not isinstance(img.window, Gtk.Widget):
         window_create(img)
@@ -872,21 +802,18 @@ def _display_sync(handle, device):
     
     img.darea.queue_draw()
     Gtk.main_iteration_do(False)
-    print '_display_sync done' #dbg
     return 0
 
-def _display_page(handle, device, copies, flush):
-    print '_display_page' #dbg
-    _display_sync(handle, device)
+def display_page(handle, device, copies, flush):
+    display_sync(handle, device)
     return 0;
 
-def _display_update(handle, device, x, y, w, h):
+def display_update(handle, device, x, y, w, h):
     """ not implemented - eventually this will be used for progressive update """
-    print '_display_update'
     return 0
 
-def _display_separation(handle, device, comp_num, name, c, m, y, k):
-    print '_display_separation' , name, 'c', c, 'm', m, 'y', y, 'k', k, 'comp_num', comp_num #dbg
+def display_separation(handle, device, comp_num, name, c, m, y, k):
+    """ setup the colors for each used ink"""
     img = image_find(handle, device)
     if img is None:
         return -1
@@ -902,34 +829,22 @@ def _display_separation(handle, device, comp_num, name, c, m, y, k):
     return 0
 
 # callback structure for "display" device
-display_open       = gs.c_display_open(_display_open)
-display_preclose   = gs.c_display_preclose(_display_preclose)
-display_close      = gs.c_display_close(_display_close)
-display_presize    = gs.c_display_presize(_display_presize)
-display_size       = gs.c_display_size(_display_size)
-display_sync       = gs.c_display_sync(_display_sync)
-display_page       = gs.c_display_page(_display_page)
-#display_update     = gs.c_display_update(_display_update)
-display_update     = c.cast(None, gs.c_display_update)
-display_memalloc   = c.cast(None, gs.c_display_memalloc) # NULL,	/* memalloc */
-display_memfree    = c.cast(None, gs.c_display_memfree) # NULL,	/* memfree */
-display_separation = gs.c_display_separation(_display_separation)
-
 display = gs.Display_callback_s(
     c.c_int(c.sizeof(gs.Display_callback_s)),
     c.c_int(gs.DISPLAY_VERSION_MAJOR),
     c.c_int(gs.DISPLAY_VERSION_MINOR),
-    display_open,
-    display_preclose,
-    display_close,
-    display_presize,
-    display_size,
-    display_sync,
-    display_page,
-    display_update,
-    display_memalloc,
-    display_memfree,
-    display_separation
+    gs.c_display_open(display_open),
+    gs.c_display_preclose(display_preclose),
+    gs.c_display_close(display_close),
+    gs.c_display_presize(display_presize),
+    gs.c_display_size(display_size),
+    gs.c_display_sync(display_sync),
+    gs.c_display_page(display_page),
+    #gs.c_display_update(display_update),
+    c.cast(None, gs.c_display_update),
+    c.cast(None, gs.c_display_memalloc), # NULL,	/* memalloc */
+    c.cast(None, gs.c_display_memfree), # NULL,	/* memfree */
+    gs.c_display_separation(display_separation)
 )
 
 def main(argv):
@@ -946,19 +861,18 @@ def main(argv):
     use_gui, _ = Gtk.init_check(argv)
     
     # insert display device parameters as first arguments
-  #  dformat = "-dDisplayFormat=%d" % \
-  #          (gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | gs.DISPLAY_DEPTH_8 | \
-  #          gs.DISPLAY_BIGENDIAN | gs.DISPLAY_TOPFIRST)
+    # this controls the format of the pixbuf that ghostscript will deliver
+    # see display_sync for details
     
     #fast
-    CAIRO_FORMAT_RGB24  = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_LITTLEENDIAN | \
-                          gs.DISPLAY_UNUSED_LAST | gs.DISPLAY_DEPTH_8
+    CAIRO_FORMAT_RGB24  = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | \
+                          gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
     
     SEPARATION_FORMAT = gs.DISPLAY_COLORS_SEPARATION | gs.DISPLAY_ALPHA_NONE | \
                         gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
     
     CMYK_FORMAT = gs.DISPLAY_COLORS_CMYK | gs.DISPLAY_ALPHA_NONE | \
-                        gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
+                  gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
     
     dformat = "-dDisplayFormat=%d" % \
             ( CAIRO_FORMAT_RGB24 | gs.DISPLAY_TOPFIRST )
@@ -970,9 +884,7 @@ def main(argv):
         instance = gs.new_instance()
         gs.set_stdio(instance, gsdll_stdin, gsdll_stdout, gsdll_stderr)
         if use_gui:
-            print('using gui: set_display_callback')
             gs.set_display_callback(instance, c.byref(display))
-        print('init_with_args', instance, nargv)
         code = gs.init_with_args(instance, nargv)
         if code == 0:
             code = gs.run_string(instance, start_string)
@@ -996,5 +908,6 @@ def main(argv):
     return exit_status
 
 if __name__ == '__main__':
-    main(sys.argv)
-    #sys.exit(main(sys.argv))
+    code = main(sys.argv)
+    sys.stdout.write('\n') # or bash will get out of sync ...
+    sys.exit(code)
