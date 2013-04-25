@@ -172,12 +172,12 @@ class Curve(object):
         self.setPoints(points)
     
     def setPoints(self, points):
-        self._points = sorted(points)
+        self._points = points
         self.invalidate()
     
     def getCurve(self):
         if self._curve is None:
-            self._curve = InterpolatedCurve(self._points)
+            self._curve = InterpolatedCurve(sorted(self._points))
         return self._curve
     
     def getControls(self):
