@@ -123,6 +123,7 @@ class ControlPoint(Emitter):
     controlRadius = 6
     color = (1,0,0)
     cursorType = Gdk.CursorType.FLEUR
+    altCursorType = Gdk.CursorType.PIRATE
     # this is needed for the cairo context arc method, its enough to calculate this once
     endAngle = 2*math.pi
     def __init__(self, xy, scale, fixedX = None):
@@ -179,17 +180,18 @@ class ControlPoint(Emitter):
         #radius is in pixels
         return inCircle(x, y, self.controlRadius, x_in, y_in)
     
-    def onButtonPress(self, button, x_in, y_in):
+    def onButtonPress(self, button, x_in, y_in, alternate=False):
         print self, 'onButtonPress', button
         if button == 1:
             # when active this receives onMotionNotify
             self.active = True
     
-    def onButtonRelease(self, button, x_in, y_in):
+    def onButtonRelease(self, button, x_in, y_in, alternate=False):
         print self, 'onButtonRelease', button
+        
         if button == 1:
             self.active = False
-        if self.active and button == 3:
+        if button == 1 and alternate:
             self.triggerOnPointDelete()
             return True
     
@@ -225,14 +227,21 @@ class Curve(Emitter):
             self._addPoint(point)
         self.invalidate()
     
+    def triggerOnPointsChanged(self):
+        for item in self:
+            item.onPointsChanged(self)
+    
     def addPoint(self, point):
         self._addPoint(point)
         self.invalidate()
-        self.triggerOnPointAdd()
+        self.triggerOnPointsChanged()
     
-    def triggerOnPointAdd(self):
-        for item in self:
-            item.onPointAdd(self)
+    def onPointDelete(self, ctrl):
+        if len(self._controls) == 2:
+            return
+        self._controls.remove(ctrl)
+        self.invalidate()
+        self.triggerOnPointsChanged()
     
     def getCurve(self):
         if self._curve is None:
@@ -262,13 +271,7 @@ class Curve(Emitter):
     def onPointMove(self, ctrl):
         self.invalidate()
     
-    def onPointDelete(self, ctrl):
-        if len(self._controls) == 2:
-            return
-        self._controls.remove(ctrl)
-        self.invalidate()
-    
-    def onButtonPress(self, button, x_in, y_in):
+    def onButtonPress(self, button, x_in, y_in, alternate=False):
         if button == 1:
             point = self.getIntersection(x_in)
             x, y = self.scale.toScreen(point)
@@ -276,7 +279,7 @@ class Curve(Emitter):
                 self.addPoint(point)
                 return True
     
-    def onButtonRelease(self, button, x_in, y_in):
+    def onButtonRelease(self, button, x_in, y_in, alternate=False):
         pass
     
     def onScaleChange(self):
@@ -319,7 +322,6 @@ class Curve(Emitter):
         When 'level' we can first ask for all ControlPoints and then
         for all curves. So all ControllPoints are 'over' all Curves
         """
-        print 'level', level
         if level is None or level == 0:
             for ctrl in self._controls:
                 if ctrl.isControl(x, y):
@@ -380,11 +382,14 @@ class CurveEditor(Gtk.DrawingArea):
                     break
         return ctrl
     
-    def setCursor(self, ctrl=None):
+    def setCursor(self, ctrl=None, alternate=False):
         #default
         cursorType = Gdk.CursorType.ARROW
         if ctrl is not None:
             cursorType = ctrl.cursorType
+            if alternate:
+                cursorType = getattr(ctrl, 'altCursorType', cursorType)
+            
         if self.cursorType == cursorType:
             return
         self.cursorType = cursorType
@@ -393,17 +398,18 @@ class CurveEditor(Gtk.DrawingArea):
     
     def getPointer(self):
         (window, x, y, state) = self.get_parent_window().get_pointer()
+        alternate = self.stateIsAlternate(state)
         #the event needs a transformation
-        return self.scale.transformEvent((x, y))
+        return self.scale.transformEvent((x, y)), alternate
     
-    def onPointAdd(self, source):
-        x, y = self.getPointer()
+    def onPointsChanged(self, source):
+        (x, y), alternate = self.getPointer()
+        print x, y, alternate 
         ctrl = self.findControl(x, y)
-        self.setCursor(ctrl)
+        self.setCursor(ctrl, alternate=alternate)
     
     @staticmethod
     def onDraw(self, cr):
-        print('onDraw')
         # y = 0 is the bottom of the widget
         width, height = self.scale()
         cr.translate(0, height)
@@ -413,11 +419,13 @@ class CurveEditor(Gtk.DrawingArea):
             curve.draw(cr)
         for curve in self.curves:
             curve.drawControls(cr) 
+    
     @staticmethod
     def onButtonPress(self, event):
         #https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventButton
         old_ctrl = None
         x, y = self.scale.transformEvent((event.x, event.y))
+        alternate = self.stateIsAlternate(event.state)
         ctrl = self.getControl()
         while ctrl is not None:
             # Curve adds a ControlPoint and that changes control
@@ -426,7 +434,7 @@ class CurveEditor(Gtk.DrawingArea):
                 # control did not change
                 break;
             old_ctrl = ctrl
-            if ctrl.onButtonPress(event.button, x, y):
+            if ctrl.onButtonPress(event.button, x, y, alternate):
                 self.queue_draw()
             ctrl = self.getControl()
     
@@ -435,15 +443,17 @@ class CurveEditor(Gtk.DrawingArea):
         #https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventButton
         old_ctrl = None
         x, y = self.scale.transformEvent((event.x, event.y))
+        alternate = self.stateIsAlternate(event.state)
         ctrl = self.getControl()
         while ctrl is not None:
             if old_ctrl == ctrl:
                 # control did not change
                 break;
             old_ctrl = ctrl
-            if ctrl.onButtonRelease(event.button, x, y):
+            if ctrl.onButtonRelease(event.button, x, y, alternate):
                 self.queue_draw()
             ctrl = self.getControl()
+    
     @staticmethod
     def onMotionNotify(self, event):
         # https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventMotion
@@ -451,14 +461,32 @@ class CurveEditor(Gtk.DrawingArea):
         # this is good for the performance, otherwise we could get events
         # that are lagging behind the actual mouse movement
         # its required that Gdk.EventMask.POINTER_MOTION_HINT_MASK was specified
-        x,y = self.getPointer()
+        (x, y), alternate = self.getPointer()
         print 'onMotionNotify', x, y
         ctrl = self.findControl(x, y)
         if ctrl is not None and ctrl.active:
             if ctrl.onMotionNotify(x, y):
                 self.queue_draw()
-        self.setCursor(ctrl)
-
+        self.setCursor(ctrl, alternate=alternate)
+    
+    def keyIsAlternate(self, event):
+        return Gdk.keyval_name(event.keyval)  == 'Control_L'
+    def stateIsAlternate(self, state):
+        return not not (state & Gdk.ModifierType.CONTROL_MASK)
+    
+    def onKeyPress(self, widget, event):
+        print 'onKeyPress', Gdk.keyval_name(event.keyval)
+        if self.keyIsAlternate(event):
+            ctrl = self.getControl()
+            if ctrl is not None:
+                self.setCursor(ctrl, alternate=True)
+    
+    def onKeyRelease(self, widget, event):
+        print 'onKeyPress', Gdk.keyval_name(event.keyval)
+        if self.keyIsAlternate(event):
+            ctrl = self.getControl()
+            if ctrl is not None:
+                self.setCursor(ctrl, alternate=False)
 w = Gtk.Window()
 w.set_default_size(640, 480)
 a = CurveEditor()
@@ -471,13 +499,20 @@ a.add_events( 0
     | Gdk.EventMask.POINTER_MOTION_MASK
     | Gdk.EventMask.POINTER_MOTION_HINT_MASK
 )
+# To receive this signal, the GdkWindow associated to the widget
+# needs to enable the GDK_KEY_RELEASE_MASK mask
+# w.add_events( 0
+#     | Gdk.EventMask.KEY_PRESS_MASK
+#     | Gdk.EventMask.KEY_RELEASE_MASK
+# )
 
 a.connect('draw', a.onDraw)    
 a.connect('button-press-event', a.onButtonPress)
 a.connect('button-release-event', a.onButtonRelease)
 a.connect('motion-notify-event', a.onMotionNotify)
 a.connect('configure-event', a.onConfigure)
-
+w.connect('key-press-event', a.onKeyPress)
+w.connect('key-release-event', a.onKeyRelease)
 
 a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1,1)]))
 a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6)]))
