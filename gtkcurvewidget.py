@@ -213,14 +213,20 @@ class Curve(Emitter):
     def invalidate(self):
         self._curve = None
         self._curvePoints = None
-        self._controls = None
+    
+    def _addPoint(self, point):
+        ctrl = ControlPoint(point, self.scale)
+        ctrl.add(self) # subscribe
+        self._controls.append(ctrl)
     
     def setPoints(self, points):
-        self._points = points
+        self._controls = []
+        for point in points:
+            self._addPoint(point)
         self.invalidate()
     
     def addPoint(self, point):
-        self._points.append(point)
+        self._addPoint(point)
         self.invalidate()
         self.triggerOnPointAdd()
     
@@ -230,7 +236,7 @@ class Curve(Emitter):
     
     def getCurve(self):
         if self._curve is None:
-            self._curve = InterpolatedCurve(sorted(self._points))
+            self._curve = InterpolatedCurve(sorted([ctrl.xy for ctrl in self._controls]))
         return self._curve
     
     def getCurvePoints(self):
@@ -253,29 +259,14 @@ class Curve(Emitter):
             self._curvePoints = zip(xs,ys)
         return self._curvePoints
     
-    def getControls(self):
-        if self._controls is None:
-            self._controls = []
-            for point in self._points:
-                ctrl = ControlPoint(point, self.scale)
-                ctrl.add(self)
-                self._controls.append(ctrl)
-        return self._controls
-    
     def onPointMove(self, ctrl):
-        self._curve = None
-        self._curvePoints = None
-        idx = self._controls.index(ctrl)
-        self._points[idx] = ctrl.xy
+        self.invalidate()
     
     def onPointDelete(self, ctrl):
-        if len(self._points) == 2:
+        if len(self._controls) == 2:
             return
-        idx = self._controls.index(ctrl)
         self._controls.remove(ctrl)
-        self._points = self._points[0:idx] + self._points[idx+1:]
-        self._curve = None
-        self._curvePoints = None
+        self.invalidate()
     
     def onButtonPress(self, button, x_in, y_in):
         if button == 1:
@@ -308,12 +299,11 @@ class Curve(Emitter):
         cr.stroke()
     
     def drawControls(self, cr):
-        controls = self.getControls()
-        for ctrl in controls:
+        for ctrl in self._controls:
             ctrl.draw(cr)
     
     def getIntersection(self, x_in):
-        """ intersection point y of x """
+        """ intersection y of x """
         unit_x, _ = self.scale.toUnit((x_in, 0))
         unit_x = max(0, min(1, unit_x))
         unit_y = max(0, min(1, self.getCurve().getYs(unit_x)))
@@ -331,8 +321,7 @@ class Curve(Emitter):
         """
         print 'level', level
         if level is None or level == 0:
-            controls = self.getControls()
-            for ctrl in controls:
+            for ctrl in self._controls:
                 if ctrl.isControl(x, y):
                     return ctrl
         if level is None or level == 1:
@@ -392,12 +381,13 @@ class CurveEditor(Gtk.DrawingArea):
         return ctrl
     
     def setCursor(self, ctrl=None):
-        if ctrl is not None and self.cursorType != ctrl.cursorType:
-            self.cursorType = ctrl.cursorType
-        elif ctrl is None and self.cursorType != Gdk.CursorType.ARROW:
-            self.cursorType = Gdk.CursorType.ARROW
-        else:
+        #default
+        cursorType = Gdk.CursorType.ARROW
+        if ctrl is not None:
+            cursorType = ctrl.cursorType
+        if self.cursorType == cursorType:
             return
+        self.cursorType = cursorType
         cursor = Gdk.Cursor.new(self.cursorType)
         self.get_window().set_cursor(cursor)
     
