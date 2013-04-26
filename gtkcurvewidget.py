@@ -15,6 +15,33 @@ from weakref import ref as weakRef, WeakSet
 class CurveException(Exception):
     pass
 
+class Emitter(object):
+    """
+        simple event subscription
+        important:
+            1. this is uses a set, so there is no guaranteed order
+            2. the subscriber needs to implement all callbacks of the actual Emitter
+        
+        to subscribe use emitterObj.add
+        to unsubscribe use emitterObj.remove or emitterObj.discard or
+           delete all references to the subscriber
+    """
+    def __init__(self):
+        self._subscriptions = WeakSet()
+    
+    def __iter__(self):
+        for item in self._subscriptions:
+            yield item
+    
+    def add(self, thing):
+        self._subscriptions.add(thing)
+    
+    def discard(self, thing):
+        self._subscriptions.discard(thing)
+    
+    def remove(self, thing):
+        self._subscriptions.remove(thing)
+    
 class InterpolatedCurve(object):
     """
     This will take n points () where n>1 and provide an interpolated spline
@@ -37,7 +64,7 @@ class InterpolatedCurve(object):
         # Even order splines should be avoided especially with small s values.
         # note: splrep won't accept M <= k so this will make it work
         # since the advice is against even k and we will produce this here 
-        # with a 3 point spline, we'll have to see if this is a problem
+        # with a 3 point spline, we'll have to see if this will ever be a problem
         k = 3
         M = len(self._x)
         if k >= M:
@@ -58,17 +85,51 @@ class InterpolatedCurve(object):
         tck = self.getTCK()
         return interpolate.splev(xs,tck, der=0)
 
-class ControlPoint(object):
-    displayRadius = 2
-    controlRadius = 5
+class Scale(Emitter):
+    def __init__(self, wh = (1, 1)):
+        super(Scale, self).__init__()
+        self._wh = None
+        self(wh)
+    
+    def __call__(self,wh=None):
+        if wh is not None and self._wh != wh:
+            self._wh = wh
+            self.triggerOnChange()
+        return self._wh
+    
+    def triggerOnChange(self):
+        for item in self:
+            item.onScaleChange()
+    
+    def toScreen(self, point):
+        return (point[0] * self._wh[0], point[1] * self._wh[1])
+    
+    def transformCairo(self, cr):
+        cr.scale(self._wh[0], self._wh[1])
+    
+    def transformEvent(self, eventXY):
+        return (eventXY[0], self._wh[1] - eventXY[1])
+    
+    def toUnit(self, xy):
+        return (xy[0] / self._wh[0], xy[1] / self._wh[1])
+
+def inCircle(center_x, center_y, radius, x, y):
+    square_dist = (center_x - x) ** 2 + (center_y - y) ** 2
+    # if <= is used instead of < the test would include the points *on* the circle
+    return square_dist < radius ** 2
+
+class ControlPoint(Emitter):
+    displayRadius = 3
+    controlRadius = 6
     color = (1,0,0)
     cursorType = Gdk.CursorType.FLEUR
     # this is needed for the cairo context arc method, its enough to calculate this once
     endAngle = 2*math.pi
-    def __init__(self, xy, scale):
-        self._subscriptions = WeakSet()
+    def __init__(self, xy, scale, fixedX = None):
+        super(ControlPoint, self).__init__()
+        self.fixedX = fixedX
         self.scale = scale
-        scale.subscribe(self)
+        scale.add(self)
         self.setCoordinates(xy)
         self.active = False
     
@@ -76,11 +137,19 @@ class ControlPoint(object):
         self._subscriptions.add(item)
     
     def triggerOnPointMove(self):
-        for item in self._subscriptions:
+        for item in self:
             item.onPointMove(self)
     
+    def triggerOnPointDelete(self):
+        for item in self:
+            item.onPointDelete(self)
     def setCoordinates(self, xy):
-        self.xy = xy
+        if self.fixedX is not None:
+            xy = (self.fixedX, xy[1])
+        self.xy = (
+            max(0, min(1, xy[0])),
+            max(0, min(1, xy[1]))
+        )
         self.invalidate()
     
     def invalidate(self):
@@ -91,7 +160,7 @@ class ControlPoint(object):
     
     def getScreenCoordinates(self):
         if self._screenXY is None:
-            self._screenXY = self.scale.transform(self.xy)
+            self._screenXY = self.scale.toScreen(self.xy)
         return self._screenXY
     
     def __lt__(self, other):
@@ -105,103 +174,64 @@ class ControlPoint(object):
         cr.arc(x, y, self.displayRadius, 0, self.endAngle)
         cr.fill()
     
-    @staticmethod
-    def inCircle(center_x, center_y, radius, x, y):
-        square_dist = (center_x - x) ** 2 + (center_y - y) ** 2
-        # if <= is used instead of < the test would include the points *on* the circle
-        return square_dist < radius ** 2
-    
-    def isInside(self, x_in, y_in):
+    def isControl(self, x_in, y_in):
         x, y = self.getScreenCoordinates()
         #radius is in pixels
-        return self.inCircle(x, y, self.controlRadius, x_in, y_in)
+        return inCircle(x, y, self.controlRadius, x_in, y_in)
     
-    def onButtonPress(self, button):
+    def onButtonPress(self, button, x_in, y_in):
         print self, 'onButtonPress', button
         if button == 1:
             # when active this receives onMotionNotify
             self.active = True
     
-    def onButtonRelease(self, button):
+    def onButtonRelease(self, button, x_in, y_in):
         print self, 'onButtonRelease', button
         if button == 1:
             self.active = False
+        if self.active and button == 3:
+            self.triggerOnPointDelete()
+            return True
     
-    def onMotionNotify(self, x, y):
+    def onMotionNotify(self, x_in, y_in):
         # just a test
-        print self, 'onMotionNotify', self.active, self.scale.toUnit((x, y))
-        self.xy = self.scale.toUnit((x, y))
-        self._screenXY = (x, y)
+        print self, 'onMotionNotify', self.active, self.scale.toUnit((x_in, y_in))
+        self.setCoordinates(self.scale.toUnit((x_in, y_in)))
         self.triggerOnPointMove()
-    
-class Scale(object):
-    def __init__(self, wh = (1, 1)):
-        self._wh = None
-        self._subscriptions = WeakSet()
-        self(wh)
-    
-    def __call__(self,wh=None):
-        if wh is not None and self._wh != wh:
-            self._wh = wh
-            self.triggerOnChange()
-        return self._wh
-    
-    def subscribe(self, item):
-        self._subscriptions.add(item)
-    
-    def triggerOnChange(self):
-        for item in self._subscriptions:
-            item.onScaleChange()
-    
-    def transform(self, point):
-        return (point[0] * self._wh[0], point[1] * self._wh[1])
-    
-    def transformCairo(self, cr):
-        cr.scale(self._wh[0], self._wh[1])
-    
-    def transformEvent(self, eventXY):
-        return (eventXY[0], self._wh[1] - eventXY[1])
-    
-    def toUnit(self, xy):
-        return (xy[0] / self._wh[0], xy[1] / self._wh[1])
+        return True
 
-class Curve(object):
+class Curve(Emitter):
+    controlRadius = 5
+    cursorType = Gdk.CursorType.PLUS
     def __init__(self, scale, points=[(0,0), (1,1)]):
+        super(Curve, self).__init__()
+        self.active = False
         self.scale = scale
-        scale.subscribe(self)
+        scale.add(self)
         self.setPoints(points)
-    
-    def setPoints(self, points):
-        self._points = points
-        self.invalidate()
-    
-    def getCurve(self):
-        if self._curve is None:
-            self._curve = InterpolatedCurve(sorted(self._points))
-        return self._curve
-    
-    def getControls(self):
-        if self._controls is None:
-            self._controls = []
-            for point in self._points:
-                ctrl = ControlPoint(point, self.scale)
-                ctrl.subscribe(self)
-                self._controls.append(ctrl)
-        return self._controls
     
     def invalidate(self):
         self._curve = None
         self._curvePoints = None
         self._controls = None
     
-    def onPointMove(self, ctrl):
-        self._curve = None
-        self._curvePoints = None
-        idx = self._controls.index(ctrl)
-        self._points[idx] = ctrl.xy
+    def setPoints(self, points):
+        self._points = points
+        self.invalidate()
     
-    def onScaleChange(self):
-        self._curvePoints = None
+    def addPoint(self, point):
+        self._points.append(point)
+        self.invalidate()
+        self.triggerOnPointAdd()
+    
+    def triggerOnPointAdd(self):
+        for item in self:
+            item.onPointAdd(self)
+    
+    def getCurve(self):
+        if self._curve is None:
+            self._curve = InterpolatedCurve(sorted(self._points))
+        return self._curve
     
     def getCurvePoints(self):
         if self._curvePoints is None:
@@ -211,12 +241,56 @@ class Curve(object):
             xs = np.linspace(0, 1, amount)
             ys = self.getCurve().getYs(xs)
             
+            # Returns an array or scalar replacing Not a Number (NaN) with zero,
+            # (positive) infinity with a very large number and negative infinity
+            # with a very small (or negative) number
+            ys = np.nan_to_num(ys)
+            
             # no y will be smaller than 0 or bigger than 1
-            ys[ys < 0] = 0
-            ys[ys > 1] = 1
+            ys[ys < 0] = 0 # max(0, y)
+            ys[ys > 1] = 1 # min(1, y)
+            
             self._curvePoints = zip(xs,ys)
         return self._curvePoints
-        
+    
+    def getControls(self):
+        if self._controls is None:
+            self._controls = []
+            for point in self._points:
+                ctrl = ControlPoint(point, self.scale)
+                ctrl.add(self)
+                self._controls.append(ctrl)
+        return self._controls
+    
+    def onPointMove(self, ctrl):
+        self._curve = None
+        self._curvePoints = None
+        idx = self._controls.index(ctrl)
+        self._points[idx] = ctrl.xy
+    
+    def onPointDelete(self, ctrl):
+        if len(self._points) == 2:
+            return
+        idx = self._controls.index(ctrl)
+        self._controls.remove(ctrl)
+        self._points = self._points[0:idx] + self._points[idx+1:]
+        self._curve = None
+        self._curvePoints = None
+    
+    def onButtonPress(self, button, x_in, y_in):
+        if button == 1:
+            point = self.getIntersection(x_in)
+            x, y = self.scale.toScreen(point)
+            if inCircle(x, y, self.controlRadius, x_in, y_in):
+                self.addPoint(point)
+                return True
+    
+    def onButtonRelease(self, button, x_in, y_in):
+        pass
+    
+    def onScaleChange(self):
+        self._curvePoints = None
+    
     def draw(self, cr):
         ctm = cr.get_matrix()
         self.scale.transformCairo(cr)
@@ -237,11 +311,33 @@ class Curve(object):
         controls = self.getControls()
         for ctrl in controls:
             ctrl.draw(cr)
-    def getControl(self, x, y):
-        controls = self.getControls()
-        for ctrl in controls:
-            if ctrl.isInside(x, y):
-                return ctrl
+    
+    def getIntersection(self, x_in):
+        """ intersection point y of x """
+        unit_x, _ = self.scale.toUnit((x_in, 0))
+        unit_x = max(0, min(1, unit_x))
+        unit_y = max(0, min(1, self.getCurve().getYs(unit_x)))
+        return (unit_x, unit_y)
+    
+    def isControl(self, x_in, y_in):
+        point = self.getIntersection(x_in)
+        x, y = self.scale.toScreen(point)
+        return inCircle(x, y, self.controlRadius, x_in, y_in)
+    
+    def getControl(self, x, y, level=None):
+        """
+        When 'level' we can first ask for all ControlPoints and then
+        for all curves. So all ControllPoints are 'over' all Curves
+        """
+        print 'level', level
+        if level is None or level == 0:
+            controls = self.getControls()
+            for ctrl in controls:
+                if ctrl.isControl(x, y):
+                    return ctrl
+        if level is None or level == 1:
+            if self.isControl(x, y):
+                return self
         return None
 
 class CurveEditor(Gtk.DrawingArea):
@@ -254,6 +350,7 @@ class CurveEditor(Gtk.DrawingArea):
     
     def appendCurve(self, curve):
         self.curves.append(curve)
+        curve.add(self)
     
     # the events are called like onEvent(self, drawingArea[, event, ...])
     # but since drawingArea == self in this case the original self is
@@ -281,17 +378,17 @@ class CurveEditor(Gtk.DrawingArea):
             return ctrl
         width, height = self.scale()
         if x < 0 or x > width or y < 0 or y > height:
-            print 'not in window',  'w', width, 'h', height
-            # don't do the test that looks if the point is inside a circle
             # the mouse is not even in the widget
             pass
         else:
-            for curve in self.curves:
-                ctrl = curve.getControl(x, y)
+            for level in range(0,2):
+                for curve in self.curves:
+                    ctrl = curve.getControl(x, y, level)
+                    if ctrl is not None:
+                        self._ctrl = weakRef(ctrl)
+                        break
                 if ctrl is not None:
-                    self._ctrl = weakRef(ctrl)
                     break
-        print 'inside' if ctrl else 'not inside', 'controlpoint'
         return ctrl
     
     def setCursor(self, ctrl=None):
@@ -304,6 +401,16 @@ class CurveEditor(Gtk.DrawingArea):
         cursor = Gdk.Cursor.new(self.cursorType)
         self.get_window().set_cursor(cursor)
     
+    def getPointer(self):
+        (window, x, y, state) = self.get_parent_window().get_pointer()
+        #the event needs a transformation
+        return self.scale.transformEvent((x, y))
+    
+    def onPointAdd(self, source):
+        x, y = self.getPointer()
+        ctrl = self.findControl(x, y)
+        self.setCursor(ctrl)
+    
     @staticmethod
     def onDraw(self, cr):
         print('onDraw')
@@ -314,21 +421,39 @@ class CurveEditor(Gtk.DrawingArea):
         
         for curve in self.curves:
             curve.draw(cr)
+        for curve in self.curves:
             curve.drawControls(cr) 
     @staticmethod
     def onButtonPress(self, event):
         #https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventButton
+        old_ctrl = None
+        x, y = self.scale.transformEvent((event.x, event.y))
         ctrl = self.getControl()
-        if ctrl is not None:
-            ctrl.onButtonPress(event.button)
-            
-        
+        while ctrl is not None:
+            # Curve adds a ControlPoint and that changes control
+            # this is that the new ControlPoint can start dragging immediately
+            if old_ctrl == ctrl:
+                # control did not change
+                break;
+            old_ctrl = ctrl
+            if ctrl.onButtonPress(event.button, x, y):
+                self.queue_draw()
+            ctrl = self.getControl()
+    
     @staticmethod
     def onButtonRelease(self, event):
         #https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventButton
+        old_ctrl = None
+        x, y = self.scale.transformEvent((event.x, event.y))
         ctrl = self.getControl()
-        if ctrl is not None:
-            ctrl.onButtonRelease(event.button)
+        while ctrl is not None:
+            if old_ctrl == ctrl:
+                # control did not change
+                break;
+            old_ctrl = ctrl
+            if ctrl.onButtonRelease(event.button, x, y):
+                self.queue_draw()
+            ctrl = self.getControl()
     @staticmethod
     def onMotionNotify(self, event):
         # https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventMotion
@@ -336,15 +461,12 @@ class CurveEditor(Gtk.DrawingArea):
         # this is good for the performance, otherwise we could get events
         # that are lagging behind the actual mouse movement
         # its required that Gdk.EventMask.POINTER_MOTION_HINT_MASK was specified
-        (window, x, y, state) = event.window.get_pointer()
-        
-        #the event needs a transformation
-        x, y = self.scale.transformEvent((x, y))
+        x,y = self.getPointer()
         print 'onMotionNotify', x, y
         ctrl = self.findControl(x, y)
         if ctrl is not None and ctrl.active:
-            ctrl.onMotionNotify(x, y)
-            self.queue_draw()
+            if ctrl.onMotionNotify(x, y):
+                self.queue_draw()
         self.setCursor(ctrl)
 
 w = Gtk.Window()
@@ -368,6 +490,7 @@ a.connect('configure-event', a.onConfigure)
 
 
 a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1,1)]))
+a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6)]))
 
 
 w.show_all()
