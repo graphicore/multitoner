@@ -41,12 +41,8 @@ class Emitter(object):
     
     def remove(self, thing):
         self._subscriptions.remove(thing)
-    
-class InterpolatedCurve(object):
-    """
-    This will take n points () where n>1 and provide an interpolated spline
-    for the curve
-    """
+
+class Interpolation(object):
     def __init__(self, points):
         self.setPoints(points)
     
@@ -54,36 +50,51 @@ class InterpolatedCurve(object):
         if len(points) < 2:
             raise CurveException('Need at least two points');
         pts = zip(*points)
-        self._x = np.array(pts[0])
-        self._y = np.array(pts[1])
-        self._tck = None
+        self._x = np.array(pts[0], dtype=float)
+        self._y = np.array(pts[1], dtype=float)
+        
+    def _function(*args):
+        raise NotImplementedError('_function must be defined')
     
-    def _getTCK(self):
-        # from help(interpolate.splrep):
-        # k:The order of the spline fit. It is recommended to use cubic splines.
-        # Even order splines should be avoided especially with small s values.
-        # note: splrep won't accept M <= k so this will make it work
-        # since the advice is against even k and we will produce this here 
-        # with a 3 point spline, we'll have to see if this will ever be a problem
-        k = 3
+    def getYs(self, xs):
+        """
+        takes an np array of x values and returns an np array of the same
+        length as the input array representing the corresponding y values
+        """
+        return self._function(xs)
+
+class InterpolatedSpline(Interpolation):
+    """
+    Produces a smooth spline between the input points
+    """
+    def setPoints(self, points):
+        super(InterpolatedSpline, self).setPoints(points)
+        # The number of data points must be larger than the spline degree k
+        k = 5#3
         M = len(self._x)
         if k >= M:
             k = M-1
-        
-        # The normal output is a 3-tuple, (t,c,k)
-        # containing: knot-points t, coefficients c, order k of the spline
-        self._tck = interpolate.splrep(self._x,self._y,s=0,k=k)
-        
-        return self._tck;
+        self._function = interpolate.UnivariateSpline(self._x,self._y,s=0,k=k)
+
+class InterpolatedMonotoneCubic(Interpolation):
+    """
+    Produces a smoothend curve between the input points using a monotonic
+    cubic interpolation PCHIP: Piecewise Cubic Hermite Interpolating Polynomia
+    """
+    def setPoints(self, points):
+        super(InterpolatedMonotoneCubic, self).setPoints(points)
+        self._function = interpolate.pchip(self._x, self._y)
+
+class InterpolatedLinear(Interpolation):
+    """
+    Produces a lineaer interpolation between the input points
+    """
     
-    def getTCK(self):
-        if self._tck is None:
-            return self._getTCK()
-        return self._tck
+    def _function(self, xs):
+        return np.interp(xs, self._x, self._y)
     
     def getYs(self, xs):
-        tck = self.getTCK()
-        return interpolate.splev(xs,tck, der=0)
+        return self._function(xs)
 
 class Scale(Emitter):
     def __init__(self, wh = (1, 1)):
@@ -119,8 +130,8 @@ def inCircle(center_x, center_y, radius, x, y):
     return square_dist < radius ** 2
 
 class ControlPoint(Emitter):
-    displayRadius = 3
-    controlRadius = 6
+    displayRadius = 2
+    controlRadius = 5
     color = (1,0,0)
     cursorType = Gdk.CursorType.FLEUR
     altCursorType = Gdk.CursorType.PIRATE
@@ -204,6 +215,8 @@ class ControlPoint(Emitter):
 
 class Curve(Emitter):
     controlRadius = 5
+    color = (0,0,0)
+    lineWidth = 1
     cursorType = Gdk.CursorType.PLUS
     def __init__(self, scale, points=[(0,0), (1,1)]):
         super(Curve, self).__init__()
@@ -245,7 +258,7 @@ class Curve(Emitter):
     
     def getCurve(self):
         if self._curve is None:
-            self._curve = InterpolatedCurve(sorted([ctrl.xy for ctrl in self._controls]))
+            self._curve = InterpolatedMonotoneCubic(sorted([ctrl.xy for ctrl in self._controls]))
         return self._curve
     
     def getCurvePoints(self):
@@ -288,7 +301,7 @@ class Curve(Emitter):
     def draw(self, cr):
         ctm = cr.get_matrix()
         self.scale.transformCairo(cr)
-        cr.set_source_rgb(0, 0, 0)
+        cr.set_source_rgb(*self.color)
         
         # draw interpolated curve
         points = self.getCurvePoints()
@@ -298,7 +311,7 @@ class Curve(Emitter):
         # reset ctm to have proper controll over the line width
         # and also because everything else that is drawing expects it
         cr.set_matrix(ctm)
-        cr.set_line_width(1)
+        cr.set_line_width(self.lineWidth)
         cr.stroke()
     
     def drawControls(self, cr):
