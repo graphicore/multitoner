@@ -12,6 +12,10 @@ import math
 
 from weakref import ref as weakRef, WeakSet
 
+# just a preparation for i18n
+def _(string):
+    return string
+
 class CurveException(Exception):
     pass
 
@@ -43,18 +47,27 @@ class Emitter(object):
         self._subscriptions.remove(thing)
 
 class Interpolation(object):
+    
+    @property
+    def name(self):
+        raise NotImplementedError('Name must be defined by subclass')
+    
+    @property
+    def description(self):
+        raise NotImplementedError('Description must be defined by subclass')
+    
+    def _function(*args):
+        raise NotImplementedError('_function must be defined by subclass')
+    
+    
     def __init__(self, points):
         self.setPoints(points)
-    
     def setPoints(self, points):
         if len(points) < 2:
             raise CurveException('Need at least two points');
         pts = zip(*points)
         self._x = np.array(pts[0], dtype=float)
         self._y = np.array(pts[1], dtype=float)
-        
-    def _function(*args):
-        raise NotImplementedError('_function must be defined')
     
     def getYs(self, xs):
         """
@@ -67,6 +80,8 @@ class InterpolatedSpline(Interpolation):
     """
     Produces a smooth spline between the input points
     """
+    name = _('Spline')
+    description = _('Very smooth but very self-willed, too.')
     def setPoints(self, points):
         super(InterpolatedSpline, self).setPoints(points)
         # The number of data points must be larger than the spline degree k
@@ -81,6 +96,8 @@ class InterpolatedMonotoneCubic(Interpolation):
     Produces a smoothend curve between the input points using a monotonic
     cubic interpolation PCHIP: Piecewise Cubic Hermite Interpolating Polynomia
     """
+    name = _('Monotone Cubic')
+    description = _('Smooth and does what you say. Not as smooth as Spline.')
     def setPoints(self, points):
         super(InterpolatedMonotoneCubic, self).setPoints(points)
         self._function = interpolate.pchip(self._x, self._y)
@@ -89,12 +106,20 @@ class InterpolatedLinear(Interpolation):
     """
     Produces a lineaer interpolation between the input points
     """
-    
+    name = _('Linear')
+    description = _('Just straight lines between control points.')
     def _function(self, xs):
         return np.interp(xs, self._x, self._y)
     
     def getYs(self, xs):
         return self._function(xs)
+
+interpolationStrategies = (
+    ('monotoneCubic', InterpolatedMonotoneCubic),
+    ('spline'       , InterpolatedSpline),
+    ('linear'       , InterpolatedLinear)
+)
+
 
 class Scale(Emitter):
     def __init__(self, wh = (1, 1)):
@@ -192,14 +217,11 @@ class ControlPoint(Emitter):
         return inCircle(x, y, self.controlRadius, x_in, y_in)
     
     def onButtonPress(self, button, x_in, y_in, alternate=False):
-        print self, 'onButtonPress', button
         if button == 1:
             # when active this receives onMotionNotify
             self.active = True
     
     def onButtonRelease(self, button, x_in, y_in, alternate=False):
-        print self, 'onButtonRelease', button
-        
         if button == 1:
             self.active = False
         if button == 1 and alternate:
@@ -208,7 +230,6 @@ class ControlPoint(Emitter):
     
     def onMotionNotify(self, x_in, y_in):
         # just a test
-        print self, 'onMotionNotify', self.active, self.scale.toUnit((x_in, y_in))
         self.setCoordinates(self.scale.toUnit((x_in, y_in)))
         self.triggerOnPointMove()
         return True
@@ -218,11 +239,12 @@ class Curve(Emitter):
     color = (0,0,0)
     lineWidth = 1
     cursorType = Gdk.CursorType.PLUS
-    def __init__(self, scale, points=[(0,0), (1,1)]):
+    def __init__(self, scale, points=[(0,0), (1,1)], Interpolation=InterpolatedMonotoneCubic):
         super(Curve, self).__init__()
         self.active = False
         self.scale = scale
         scale.add(self)
+        self._Interpolation = Interpolation
         self.setPoints(points)
     
     def invalidate(self):
@@ -240,25 +262,30 @@ class Curve(Emitter):
             self._addPoint(point)
         self.invalidate()
     
-    def triggerOnPointsChanged(self):
+    def setInterpolation(self, Interpolation):
+        self._Interpolation = Interpolation
+        self.invalidate()
+        self.triggerOnControlChanged()
+    
+    def triggerOnControlChanged(self):
         for item in self:
-            item.onPointsChanged(self)
+            item.onControlChanged(self)
     
     def addPoint(self, point):
         self._addPoint(point)
         self.invalidate()
-        self.triggerOnPointsChanged()
+        self.triggerOnControlChanged()
     
     def onPointDelete(self, ctrl):
         if len(self._controls) == 2:
             return
         self._controls.remove(ctrl)
         self.invalidate()
-        self.triggerOnPointsChanged()
+        self.triggerOnControlChanged()
     
     def getCurve(self):
         if self._curve is None:
-            self._curve = InterpolatedMonotoneCubic(sorted([ctrl.xy for ctrl in self._controls]))
+            self._curve = self._Interpolation(sorted([ctrl.xy for ctrl in self._controls]))
         return self._curve
     
     def getCurvePoints(self):
@@ -351,6 +378,35 @@ class CurveEditor(Gtk.DrawingArea):
         self._ctrl = None
         self.scale = Scale()
         super(CurveEditor, self).__init__()
+    @classmethod
+    def new(Cls, window):
+        """
+        a factory to create a CurveEditor widget and connect all necessary events
+        """
+        widget = Cls()
+        
+        widget.add_events( 0
+            | Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+            | Gdk.EventMask.BUTTON1_MOTION_MASK
+            | Gdk.EventMask.POINTER_MOTION_MASK
+            | Gdk.EventMask.POINTER_MOTION_HINT_MASK
+        )
+        # To receive this signal, the GdkWindow associated to the widget
+        # needs to enable the GDK_KEY_RELEASE_MASK mask
+        # w.add_events( 0
+        #     | Gdk.EventMask.KEY_PRESS_MASK
+        #     | Gdk.EventMask.KEY_RELEASE_MASK
+        # )
+        
+        widget.connect('draw'                , widget.onDraw)
+        widget.connect('button-press-event'  , widget.onButtonPress)
+        widget.connect('button-release-event', widget.onButtonRelease)
+        widget.connect('motion-notify-event' , widget.onMotionNotify)
+        widget.connect('configure-event'     , widget.onConfigure)
+        window.connect('key-press-event'     , widget.onKeyPress)
+        window.connect('key-release-event'   , widget.onKeyRelease)
+        return widget
     
     def appendCurve(self, curve):
         self.curves.append(curve)
@@ -361,7 +417,7 @@ class CurveEditor(Gtk.DrawingArea):
     # discarded by using @staticmethod
     @staticmethod
     def onConfigure(self, event):
-        print 'on configure'
+        # print 'on configure'
         # set the scale to show the data in visible sizes
         newscale = (event.width, event.height)
         # if scale changed it will trigger the onScaleCange callbacks
@@ -415,9 +471,8 @@ class CurveEditor(Gtk.DrawingArea):
         #the event needs a transformation
         return self.scale.transformEvent((x, y)), alternate
     
-    def onPointsChanged(self, source):
+    def onControlChanged(self, source):
         (x, y), alternate = self.getPointer()
-        print x, y, alternate 
         ctrl = self.findControl(x, y)
         self.setCursor(ctrl, alternate=alternate)
     
@@ -475,7 +530,7 @@ class CurveEditor(Gtk.DrawingArea):
         # that are lagging behind the actual mouse movement
         # its required that Gdk.EventMask.POINTER_MOTION_HINT_MASK was specified
         (x, y), alternate = self.getPointer()
-        print 'onMotionNotify', x, y
+        # print 'onMotionNotify', x, y
         ctrl = self.findControl(x, y)
         if ctrl is not None and ctrl.active:
             if ctrl.onMotionNotify(x, y):
@@ -488,50 +543,31 @@ class CurveEditor(Gtk.DrawingArea):
         return not not (state & Gdk.ModifierType.CONTROL_MASK)
     
     def onKeyPress(self, widget, event):
-        print 'onKeyPress', Gdk.keyval_name(event.keyval)
+        # print 'onKeyPress', Gdk.keyval_name(event.keyval)
         if self.keyIsAlternate(event):
             ctrl = self.getControl()
             if ctrl is not None:
                 self.setCursor(ctrl, alternate=True)
     
     def onKeyRelease(self, widget, event):
-        print 'onKeyPress', Gdk.keyval_name(event.keyval)
+        # print 'onKeyPress', Gdk.keyval_name(event.keyval)
         if self.keyIsAlternate(event):
             ctrl = self.getControl()
             if ctrl is not None:
                 self.setCursor(ctrl, alternate=False)
-w = Gtk.Window()
-w.set_default_size(640, 480)
-a = CurveEditor()
-w.add(a)
-w.connect('destroy', Gtk.main_quit)
-a.add_events( 0
-    | Gdk.EventMask.BUTTON_PRESS_MASK
-    | Gdk.EventMask.BUTTON_RELEASE_MASK
-    | Gdk.EventMask.BUTTON1_MOTION_MASK
-    | Gdk.EventMask.POINTER_MOTION_MASK
-    | Gdk.EventMask.POINTER_MOTION_HINT_MASK
-)
-# To receive this signal, the GdkWindow associated to the widget
-# needs to enable the GDK_KEY_RELEASE_MASK mask
-# w.add_events( 0
-#     | Gdk.EventMask.KEY_PRESS_MASK
-#     | Gdk.EventMask.KEY_RELEASE_MASK
-# )
-
-a.connect('draw', a.onDraw)    
-a.connect('button-press-event', a.onButtonPress)
-a.connect('button-release-event', a.onButtonRelease)
-a.connect('motion-notify-event', a.onMotionNotify)
-a.connect('configure-event', a.onConfigure)
-w.connect('key-press-event', a.onKeyPress)
-w.connect('key-release-event', a.onKeyRelease)
-
-a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1,1)]))
-a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6)]))
-
-
-w.show_all()
 
 if __name__ == '__main__':
-	Gtk.main()
+    w = Gtk.Window()
+    w.set_default_size(640, 480)
+    w.connect('destroy', Gtk.main_quit)
+    
+    a = CurveEditor.new(w)
+    w.add(a)
+    
+    for label, item in interpolationStrategies:
+        a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1,1)], Interpolation = item))
+    
+    
+    
+    w.show_all()
+    Gtk.main()
