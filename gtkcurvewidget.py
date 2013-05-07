@@ -372,6 +372,7 @@ class Curve(Emitter):
         return None
 
 class CurveEditor(Gtk.DrawingArea):
+    background_color = (1,1,1)
     def __init__(self):
         self.curves = []
         self.cursorType = None
@@ -468,8 +469,9 @@ class CurveEditor(Gtk.DrawingArea):
     def getPointer(self):
         (window, x, y, state) = self.get_parent_window().get_pointer()
         alternate = self.stateIsAlternate(state)
+        allocation = self.get_allocation()
         #the event needs a transformation
-        return self.scale.transformEvent((x, y)), alternate
+        return self.scale.transformEvent((x - allocation.x, y - allocation.y)), alternate
     
     def onControlChanged(self, source):
         (x, y), alternate = self.getPointer()
@@ -480,6 +482,12 @@ class CurveEditor(Gtk.DrawingArea):
     def onDraw(self, cr):
         # y = 0 is the bottom of the widget
         width, height = self.scale()
+        
+    #    cr.set_source_rgb(*self.background_color)
+    #    cr.rectangle(0, 0, width, height)
+    #    cr.fill()
+        
+        
         cr.translate(0, height)
         cr.scale(1, -1)
         
