@@ -1,0 +1,11 @@
+GtkFrame {
+    padding: 5px
+}
+
+GtkFrame > GtkLabel{
+    font-weight: bold;
+}
+
+GtkGrid > GtkGrid{
+    border: 5px solid red
+}
