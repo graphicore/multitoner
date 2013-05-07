@@ -135,7 +135,7 @@ class Scale(Emitter):
     
     def triggerOnChange(self):
         for item in self:
-            item.onScaleChange()
+            item.onScaleChange(self)
     
     def toScreen(self, point):
         return (point[0] * self._wh[0], point[1] * self._wh[1])
@@ -192,7 +192,7 @@ class ControlPoint(Emitter):
     def invalidate(self):
         self._screenXY = None
     
-    def onScaleChange(self):
+    def onScaleChange(self, scale):
         self.invalidate()
     
     def getScreenCoordinates(self):
@@ -322,7 +322,7 @@ class Curve(Emitter):
     def onButtonRelease(self, button, x_in, y_in, alternate=False):
         pass
     
-    def onScaleChange(self):
+    def onScaleChange(self, scale):
         self._curvePoints = None
     
     def draw(self, cr):
