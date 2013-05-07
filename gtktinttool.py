@@ -42,12 +42,19 @@ from random import randint
 import cairo
 from array import array
 
-class CellRendererTint (Gtk.CellRenderer):
-    def __init__(self, width=0, height=0):
-        Gtk.CellRenderer.__init__(self)
+class CellRendererTint (Gtk.CellRendererText):
+    """
+    inheriting from CellRendererText had two advantages
+    1. the other GtkTreeWidget is rendered with CellRendererTexts, that
+       this widget uses the right height automatically
+    2. I couldn't figure out how to set a custom property, so i can reuse
+       the "text" property to get the tint id
+    for anything else, this could be a Gtk.GtkCellRenderer without objections
+    """
+    def __init__(self, width=-1, height=-1):
+        Gtk.CellRendererText.__init__(self)
         self.width = width
         self.height = height
-        self.rgbbuf = None
     
     def do_render(self, cr, widget, background_area, cell_area, flags):
         """
@@ -59,15 +66,27 @@ class CellRendererTint (Gtk.CellRenderer):
         flags : flags that affect rendering
         """
         # print 'cellRendererTint', cell_area.width, cell_area.height, cell_area.x, cell_area.y
-        
+        tid = int(self.get_property('text'))
         rgbbuf = array('B')
+        
         row = []
-        for _ in range(cell_area.width):
-            row += [randint(0, 255), randint(0, 255), randint(0, 255), 0]
+        for i in range(self.width):
+            val = 255 - int(i/self.width * 255)
+            row += [
+                val if tid != 0 else 255,
+                val if tid != 1 else 255,
+                val if tid != 2 else 255,
+                0
+                ]
         for _ in range(cell_area.height):
             rgbbuf.extend(row)
-        cairo_surface = cairo.ImageSurface.create_for_data(rgbbuf, cairo.FORMAT_RGB24, cell_area.width, cell_area.height, cell_area.width * 4)
-        cr.set_source_surface(cairo_surface, cell_area.x, cell_area.y)
+        cairo_surface = cairo.ImageSurface.create_for_data(rgbbuf, cairo.FORMAT_RGB24, self.width, cell_area.height, self.width * 4)
+        # x = cell_area.x # this used to be 1 but should have been 0 ??
+        # this workaround make this cell renderer useless for other
+        # positions than the first cell in a tree, i suppose
+        x = 0
+        y = cell_area.y
+        cr.set_source_surface(cairo_surface, x , y)
         cr.paint()
     
     def do_get_size(self, widget, cell_area):
@@ -75,9 +94,10 @@ class CellRendererTint (Gtk.CellRenderer):
 
 
 class TintColumn (Gtk.TreeViewColumn):
-    def __init__(self, name, renderer):
+    def __init__(self, name, renderer, text):
         self.renderer = renderer
-        Gtk.TreeViewColumn.__init__(self, name, self.renderer)
+        #self.add_attribute(renderer, 'text', text)
+        Gtk.TreeViewColumn.__init__(self, name, self.renderer, text=text)
     
     def onScaleChange(self, scale):
         """ be as wide as the curve widget """
@@ -88,9 +108,21 @@ class TintColumn (Gtk.TreeViewColumn):
     
 
 if __name__ == '__main__':
+    
     w = Gtk.Window()
+    
+    cssProvider = Gtk.CssProvider()
+    cssProvider.load_from_path('style.css')
+    screen = w.get_screen()
+    styleContext = Gtk.StyleContext()
+    styleContext.add_provider_for_screen(screen, cssProvider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
+    
+    w.set_name('win')
     w.set_default_size(640, 480)
+    w.set_has_resize_grip(True)
     # the theme should do so
+    w.set_border_width(5)
+    
     w.connect('destroy', Gtk.main_quit)
     
     curveEditor = CurveEditor.new(w)
@@ -101,23 +133,24 @@ if __name__ == '__main__':
     curveEditor.set_size_request(256, -1)
     
     tintGrid = Gtk.Grid()
+    tintGrid.set_column_spacing(5)
     # tintGrid.set_column_homogeneous(True)
     # tintGrid.set_row_homogeneous(True)
     w.add(tintGrid)
-    
-    
     
     # left : the column number to attach the left side of child to
     # top : the row number to attach the top side of child to
     # width : the number of columns that child will span
     # height : the number of rows that child will span
+    
+    
     tintGrid.attach(curveEditor, 0, 0, 1, 1)
     
     # Model for the tints
     # id, name, curve Type
     tintModel = Gtk.ListStore(int, str, str)
-    tintModel.append([0, 'Pantone 666', 'Monotone Cubic'])
-    tintModel.append([1, 'Black', 'Spline'])
+    tintModel.append([0, 'Blue', 'Monotone Cubic'])
+    tintModel.append([1, 'Green', 'Spline'])
     tintModel.append([2, 'Red', 'Linear'])
     
     
@@ -130,11 +163,10 @@ if __name__ == '__main__':
     
     
     #make a treeview …
-    treeview = Gtk.TreeView(model=tintModel)
-    treeview.set_reorderable(True)
-    treeview.set_rules_hint(True)
-    treeview.set_property('headers-visible', False)
-    treeSelection = treeview.get_selection()
+    controlView = Gtk.TreeView(model=tintModel)
+    controlView.set_reorderable(True)
+    controlView.set_property('headers-visible', True)
+    treeSelection = controlView.get_selection()
     def onChangedSelection(selection):
         model, paths = selection.get_selected_rows()
         if len(paths):
@@ -146,48 +178,56 @@ if __name__ == '__main__':
         print 'selected is', selected
     treeSelection.connect("changed", onChangedSelection)
     
-    renderer_tint = CellRendererTint(256, 15)
-    column_tint = TintColumn(_('Tint'), renderer_tint)
+    gradientView = Gtk.TreeView(model=tintModel)
+    gradientView.set_property('headers-visible', False)
+    
+    # the width value is just initial and will change when the scale of
+    # the curveEditor changes
+    renderer_tint = CellRendererTint(width=256)
+    column_tint = TintColumn(_('Tint'), renderer_tint, text=0)
     # hookup the renderer to the scale objects onScaleChange event of the curveEditor
     curveEditor.scale.add(column_tint)
-    treeview.append_column(column_tint)
+    gradientView.append_column(column_tint)
     
     renderer_id = Gtk.CellRendererText()
     column_id = Gtk.TreeViewColumn(_('ID'), renderer_id, text=0)
-    treeview.append_column(column_id)
+    controlView.append_column(column_id)
     
     renderer_name = Gtk.CellRendererText()
     column_name = Gtk.TreeViewColumn(_('Name'), renderer_name, text=1)
-    treeview.append_column(column_name)
+    controlView.append_column(column_name)
     
     renderer_curveType = Gtk.CellRendererText()
     column_curveType = Gtk.TreeViewColumn(_('Interpolation'), renderer_curveType, text=2)
-    treeview.append_column(column_curveType)
+    controlView.append_column(column_curveType)
     
-    treeview.set_hexpand(True)
-    # because curveWidget expands with the window size and because
-    # tint_column will grow to the size of curveWidget, it is important
-    # to decouple the treeview size from the window size. otherwise
-    # treeview would be able to make the resize happening in a loop by
-    # increasing window size and thus expanding curveWidget
-    # adding a scrollbar does this well.
-    scrolledContainer = Gtk.ScrolledWindow()
-    scrolledContainer.set_hexpand(True)
-    scrolledContainer.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-    scrolledContainer.add(treeview)
+    controlView.set_valign(Gtk.Align.END)
+    #controlView.set_vexpand(True) # so this pushes itself to the bottom
+    gradientView.set_valign(Gtk.Align.END)
     
-    
-    
-    tintGrid.attach(scrolledContainer, 0, 1, 2, 1)
+    tintGrid.attach(gradientView, 0, 1, 1, 1)
+    rightColumn = Gtk.Grid()
+    rightColumn.set_row_spacing(5)
+    rightColumn.attach(controlView, 0, 1, 1, 1)
+    tintGrid.attach(rightColumn, 1, 0, 1, 2)
     
     tints = [
-        [0, 'Pantone 666', 'monotoneCubic'],
-        [1, 'Black', 'spline'],
+        [0, 'Blue', 'monotoneCubic'],
+        [1, 'Green', 'spline'],
         [2, 'Red', 'linear']
     ]
     
     
+    
     tintOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
+    frame = Gtk.Frame()
+    frame.set_label(_('Tint Setup'))
+    frame.set_valign(Gtk.Align.FILL)
+    frame.add(tintOptionsBox)
+    frame.set_vexpand(True) # so this pushes itself to the bottom
+    
+    rightColumn.attach(frame, 0, 0, 1, 1)
+    
     
     def onWidgetCurveTypeChange(widget, tintId):
         print 'curve of ', tintId, ' changed to', widget.get_active_id()
@@ -197,7 +237,7 @@ if __name__ == '__main__':
         tintOptionsBox.foreach(lambda x, _: x.destroy(), None)
         
         if tintId is None:
-            info = Gtk.Label(_('Select a Tint from the Table above'))
+            info = Gtk.Label(_('- No tint selected -'))
             tintOptionsBox.add(info)
         else:
             tint = tints[int(tintId)]
@@ -227,14 +267,14 @@ if __name__ == '__main__':
             for i, w in enumerate(ws):
                 hi = i % 2
                 tintOptionsBox.attach(w, hi, i-hi, 1, 1)
-                w.set_halign(Gtk.Align.FILL if hi else Gtk.Align.END)
+                w.set_halign(Gtk.Align.FILL if hi else Gtk.Align.START)
             
             
             
         tintOptionsBox.show_all()
     show_tint_options()
     
-    tintGrid.attach(tintOptionsBox, 1, 0, 1, 1)
+    
     
     ###
     curveEditor.appendCurve(Curve(curveEditor.scale, [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]))
