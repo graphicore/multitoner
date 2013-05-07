@@ -483,10 +483,9 @@ class CurveEditor(Gtk.DrawingArea):
         # y = 0 is the bottom of the widget
         width, height = self.scale()
         
-    #    cr.set_source_rgb(*self.background_color)
-    #    cr.rectangle(0, 0, width, height)
-    #    cr.fill()
-        
+        cr.set_source_rgb(*self.background_color)
+        cr.rectangle(0, 0, width, height)
+        cr.fill()
         
         cr.translate(0, height)
         cr.scale(1, -1)
