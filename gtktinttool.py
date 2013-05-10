@@ -4,7 +4,7 @@
 from __future__ import division
 from gi.repository import Gtk, Gdk
 import cairo
-from gtkcurvewidget import CurveEditor, Curve, CurveException, interpolationStrategies
+from gtkcurvewidget import CurveEditor, Curve, CurveException, interpolationStrategies, ModelCurve
 
 # just a preparation for i18n
 def _(string):
@@ -96,7 +96,6 @@ class CellRendererTint (Gtk.CellRendererText):
 class TintColumn (Gtk.TreeViewColumn):
     def __init__(self, name, renderer, text):
         self.renderer = renderer
-        #self.add_attribute(renderer, 'text', text)
         Gtk.TreeViewColumn.__init__(self, name, self.renderer, text=text)
     
     def onScaleChange(self, scale):
@@ -108,7 +107,6 @@ class TintColumn (Gtk.TreeViewColumn):
     
 
 if __name__ == '__main__':
-    
     w = Gtk.Window()
     
     cssProvider = Gtk.CssProvider()
@@ -142,8 +140,6 @@ if __name__ == '__main__':
     # top : the row number to attach the top side of child to
     # width : the number of columns that child will span
     # height : the number of rows that child will span
-    
-    
     tintGrid.attach(curveEditor, 0, 0, 1, 1)
     
     # Model for the tints
@@ -277,8 +273,12 @@ if __name__ == '__main__':
     
     
     ###
-    curveEditor.appendCurve(Curve(curveEditor.scale, [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]))
-    curveEditor.appendCurve(Curve(curveEditor.scale, [(0.0,0.0), (0.1, 0.4), (0.2, 0.6)]))
+    points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
+    model = ModelCurve(points)
+    curveEditor.appendCurve(Curve(model, curveEditor.scale))
+    points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6)]
+    model = ModelCurve(points)
+    curveEditor.appendCurve(Curve(model, curveEditor.scale))
     
     w.show_all()
     Gtk.main()
