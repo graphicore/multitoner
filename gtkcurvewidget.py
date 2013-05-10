@@ -12,6 +12,8 @@ import math
 
 from weakref import ref as weakRef, WeakSet
 
+import warnings
+
 # just a preparation for i18n
 def _(string):
     return string
@@ -31,22 +33,22 @@ class Emitter(object):
            delete all references to the subscriber
     """
     def __init__(self):
-        self._subscriptions = WeakSet()
+        self.__subscriptions = WeakSet()
     
     def __iter__(self):
-        for item in self._subscriptions:
+        for item in self.__subscriptions:
             yield item
     
     def add(self, thing):
-        self._subscriptions.add(thing)
+        self.__subscriptions.add(thing)
     
     def discard(self, thing):
-        self._subscriptions.discard(thing)
+        self.__subscriptions.discard(thing)
     
     def remove(self, thing):
-        self._subscriptions.remove(thing)
+        self.__subscriptions.remove(thing)
 
-class Interpolation(object):
+class InterpolationStrategy(object):
     
     @property
     def name(self):
@@ -62,6 +64,7 @@ class Interpolation(object):
     
     def __init__(self, points):
         self.setPoints(points)
+    
     def setPoints(self, points):
         if len(points) < 2:
             raise CurveException('Need at least two points');
@@ -69,14 +72,14 @@ class Interpolation(object):
         self._x = np.array(pts[0], dtype=float)
         self._y = np.array(pts[1], dtype=float)
     
-    def getYs(self, xs):
+    def __call__(self, xs):
         """
         takes an np array of x values and returns an np array of the same
         length as the input array representing the corresponding y values
         """
         return self._function(xs)
 
-class InterpolatedSpline(Interpolation):
+class InterpolatedSpline(InterpolationStrategy):
     """
     Produces a smooth spline between the input points
     """
@@ -91,8 +94,8 @@ class InterpolatedSpline(Interpolation):
             k = M-1
         self._function = interpolate.UnivariateSpline(self._x,self._y,s=0,k=k)
 
-class InterpolatedMonotoneCubic(Interpolation):
-    """
+class InterpolatedMonotoneCubic(InterpolationStrategy):
+    """warnings
     Produces a smoothend curve between the input points using a monotonic
     cubic interpolation PCHIP: Piecewise Cubic Hermite Interpolating Polynomia
     """
@@ -102,7 +105,7 @@ class InterpolatedMonotoneCubic(Interpolation):
         super(InterpolatedMonotoneCubic, self).setPoints(points)
         self._function = interpolate.pchip(self._x, self._y)
 
-class InterpolatedLinear(Interpolation):
+class InterpolatedLinear(InterpolationStrategy):
     """
     Produces a lineaer interpolation between the input points
     """
@@ -110,16 +113,15 @@ class InterpolatedLinear(Interpolation):
     description = _('Just straight lines between control points.')
     def _function(self, xs):
         return np.interp(xs, self._x, self._y)
-    
-    def getYs(self, xs):
-        return self._function(xs)
 
+# this is to keep the list ordered
 interpolationStrategies = (
     ('monotoneCubic', InterpolatedMonotoneCubic),
     ('spline'       , InterpolatedSpline),
     ('linear'       , InterpolatedLinear)
 )
-
+# this is for faster lookup
+interpolationStrategiesDict = dict(interpolationStrategies)
 
 class Scale(Emitter):
     def __init__(self, wh = (1, 1)):
@@ -154,6 +156,28 @@ def inCircle(center_x, center_y, radius, x, y):
     # if <= is used instead of < the test would include the points *on* the circle
     return square_dist < radius ** 2
 
+class Model(Emitter):
+    def triggerOnModelUpdated(self, *args):
+        for item in self:
+            item.onModelUpdated(self, *args)
+
+class ModelControlPoint(Model):
+    def __init__(self, xy):
+        super(ModelControlPoint, self).__init__()
+        self.xy = xy
+    
+    @property
+    def xy(self):
+        return self._xy
+    
+    @xy.setter
+    def xy(self, xy):
+        self._xy = (
+            max(0, min(1, xy[0])),
+            max(0, min(1, xy[1]))
+        )
+        self.triggerOnModelUpdated()
+
 class ControlPoint(Emitter):
     displayRadius = 2
     controlRadius = 5
@@ -162,16 +186,21 @@ class ControlPoint(Emitter):
     altCursorType = Gdk.CursorType.PIRATE
     # this is needed for the cairo context arc method, its enough to calculate this once
     endAngle = 2*math.pi
-    def __init__(self, xy, scale, fixedX = None):
+    def __init__(self, model, scale):
         super(ControlPoint, self).__init__()
-        self.fixedX = fixedX
+        self._screenXY = None
         self.scale = scale
         scale.add(self)
-        self.setCoordinates(xy)
+        self.model = model
+        model.add(self)
         self.active = False
     
-    def subscribe(self, item):
-        self._subscriptions.add(item)
+    @property
+    def xy(self):
+        return self.model.xy
+    
+    def __lt__(self, other):
+        return self.xy < other.xy
     
     def triggerOnPointMove(self):
         for item in self:
@@ -180,14 +209,14 @@ class ControlPoint(Emitter):
     def triggerOnPointDelete(self):
         for item in self:
             item.onPointDelete(self)
-    def setCoordinates(self, xy):
-        if self.fixedX is not None:
-            xy = (self.fixedX, xy[1])
-        self.xy = (
-            max(0, min(1, xy[0])),
-            max(0, min(1, xy[1]))
-        )
+    
+    def onModelUpdated(self, model):
         self.invalidate()
+        self.triggerOnPointMove()
+        # I should rather request a redraw here.
+    
+    def setCoordinates(self, xy):
+        self.model.xy = xy
     
     def invalidate(self):
         self._screenXY = None
@@ -200,20 +229,17 @@ class ControlPoint(Emitter):
             self._screenXY = self.scale.toScreen(self.xy)
         return self._screenXY
     
-    def __lt__(self, other):
-        return self.xy < other.xy
-    
     def draw(self, cr):
         """ draw the control point to the cairo context """
         cr.set_source_rgb(*self.color)
         x, y = self.getScreenCoordinates()
-        #radius is in pixels
+        # radius is in pixels
         cr.arc(x, y, self.displayRadius, 0, self.endAngle)
         cr.fill()
     
     def isControl(self, x_in, y_in):
         x, y = self.getScreenCoordinates()
-        #radius is in pixels
+        # radius is in pixels
         return inCircle(x, y, self.controlRadius, x_in, y_in)
     
     def onButtonPress(self, button, x_in, y_in, alternate=False):
@@ -226,67 +252,115 @@ class ControlPoint(Emitter):
             self.active = False
         if button == 1 and alternate:
             self.triggerOnPointDelete()
-            return True
     
     def onMotionNotify(self, x_in, y_in):
-        # just a test
         self.setCoordinates(self.scale.toUnit((x_in, y_in)))
-        self.triggerOnPointMove()
-        return True
+
+class ModelCurve(Model):
+    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic'):
+        super(ModelCurve, self).__init__()
+        self._points = []
+        self.interpolation = interpolation
+        self.points = points
+    
+    def onModelUpdated(self, cp_model):
+        self._interpolationStrategy = None
+    
+    def _addPoint(self, point):
+        model = ModelControlPoint(point)
+        model.add(self) # subscribe
+        self._points.append(model)
+        return model
+    
+    def addPoint(self, point):
+        model = self._addPoint(point)
+        self._interpolationStrategy = None
+        self.triggerOnModelUpdated('addPoint', model)
+        # as a 'setter' this doesn't return
+        # return model
+    
+    def removePoint(self, model):
+        if len(self._points) == 2:
+            return
+        self._points.remove(model)
+        self._interpolationStrategy = None
+        self.triggerOnModelUpdated('removePoint', model)
+    
+    @property
+    def points(self):
+        # this returns an unordered tuple of the point models
+        # the _points list is not returned because changing the _points
+        # list would change the model value and that's an intendet as part
+        # of the interface
+        return tuple(self._points)
+        
+    @points.setter
+    def points(self, points):
+        self._points = []
+        for point in points:
+            self._addPoint(point)
+        self._interpolationStrategy = None
+        self.triggerOnModelUpdated('setPoints')
+    
+    @property
+    def interpolation(self):
+        return self._interpolation
+    
+    @interpolation.setter
+    def interpolation(self, interpolation):
+        self._interpolation = interpolation
+        self._interpolationStrategy = None
+        self.triggerOnModelUpdated('interpolationChanged')
+    
+    @property
+    def value(self):
+        return sorted(point.xy for point in self._points)
+    
+    def getInterpolationStrategy(self):
+        """
+        Factory for the Interpolation strategy specified by self.interpolation
+        """
+        if self._interpolationStrategy is None:
+            I = interpolationStrategiesDict[self.interpolation]
+            self._interpolationStrategy = I(self.value)
+        return self._interpolationStrategy
 
 class Curve(Emitter):
     controlRadius = 5
     color = (0,0,0)
     lineWidth = 1
     cursorType = Gdk.CursorType.PLUS
-    def __init__(self, scale, points=[(0,0), (1,1)], Interpolation=InterpolatedMonotoneCubic):
+    def __init__(self, model, scale):
         super(Curve, self).__init__()
+        # active is used by CurveEditor
         self.active = False
         self.scale = scale
         scale.add(self)
-        self._Interpolation = Interpolation
-        self.setPoints(points)
+        self.model = model
+        model.add(self)
+        self.invalidate()
+        self._setPoints()
     
     def invalidate(self):
-        self._curve = None
+        # the actual points that will be drawn
         self._curvePoints = None
     
-    def _addPoint(self, point):
-        ctrl = ControlPoint(point, self.scale)
-        ctrl.add(self) # subscribe
-        self._controls.append(ctrl)
-    
-    def setPoints(self, points):
+    def _setPoints(self):
         self._controls = []
-        for point in points:
-            self._addPoint(point)
-        self.invalidate()
+        for cp_model in self.model.points:
+            self._addControlPoint(cp_model)
     
-    def setInterpolation(self, Interpolation):
-        self._Interpolation = Interpolation
-        self.invalidate()
-        self.triggerOnControlChanged()
-    
-    def triggerOnControlChanged(self):
-        for item in self:
-            item.onControlChanged(self)
-    
-    def addPoint(self, point):
-        self._addPoint(point)
-        self.invalidate()
-        self.triggerOnControlChanged()
-    
-    def onPointDelete(self, ctrl):
-        if len(self._controls) == 2:
-            return
-        self._controls.remove(ctrl)
-        self.invalidate()
-        self.triggerOnControlChanged()
-    
-    def getCurve(self):
-        if self._curve is None:
-            self._curve = self._Interpolation(sorted([ctrl.xy for ctrl in self._controls]))
-        return self._curve
+    @property
+    def getYs(self):
+        """
+            this return an InterpolationStrategy which itself is a callable
+            that takes as argument either one x or ab array of xs and returns
+            the according y value(s)
+            
+            use like:
+                ys = curve.getYs(xs)
+        """
+        return self.model.getInterpolationStrategy()
     
     def getCurvePoints(self):
         if self._curvePoints is None:
@@ -294,7 +368,7 @@ class Curve(Emitter):
             # this should look smooth enough
             amount = max(width, height)
             xs = np.linspace(0, 1, amount)
-            ys = self.getCurve().getYs(xs)
+            ys = self.getYs(xs)
             
             # Returns an array or scalar replacing Not a Number (NaN) with zero,
             # (positive) infinity with a very large number and negative infinity
@@ -305,25 +379,79 @@ class Curve(Emitter):
             ys[ys < 0] = 0 # max(0, y)
             ys[ys > 1] = 1 # min(1, y)
             
-            self._curvePoints = zip(xs,ys)
+            self._curvePoints = zip(xs, ys)
         return self._curvePoints
+
+    def onScaleChange(self, scale):
+        pass
+    
+    def _addControlPoint(self, cp_model):
+        ctrl = ControlPoint(cp_model, self.scale)
+        ctrl.add(self) # subscribe
+        self._controls.append(ctrl)
+    
+    def _removeControlPoint(self, cp_model):
+        for ctrl in self._controls:
+            if ctrl.model is cp_model:
+                self._controls.remove(ctrl)
+                break
+    
+    def triggerOnControlChanged(self):
+        for item in self:
+            item.onControlChanged(self)
+    
+    def onModelUpdated(self, model, event=None, *args):
+        """
+        there are several occasions for a model update:
+            addPoint
+            removePoint
+            setPoints
+            interpolation changed
+            
+            all require that _curvePoints are reset
+            but addPoint, removePoint, setPoints need actions regarding the controlPoints
+        """
+        self.invalidate()
+        
+        if event == 'addPoint':
+            # add a new CP
+            cp_model = args[0]
+            self._addControlPoint(cp_model)
+        elif event == 'removePoint':
+            # remove the CP
+            cp_model = args[0]
+            self._removeControlPoint(cp_model)
+        elif event == 'setPoints':
+            # remove all CPs and build all CPs again
+            self._setPoints()
+        
+        self.triggerOnControlChanged()
+    
+    def onPointDelete(self, ctrl):
+        self.model.removePoint(ctrl.model)
     
     def onPointMove(self, ctrl):
         self.invalidate()
+        # make the redraw onModelUpdated directly in the parent propably
+        warnings.warn('FIXME: this is not necessarily a controlchanhge')
+        self.triggerOnControlChanged()
+    
+    def getIntersection(self, x_in):
+        """ intersection y of x """
+        unit_x, _ = self.scale.toUnit((x_in, 0))
+        unit_x = max(0, min(1, unit_x))
+        unit_y = max(0, min(1, self.getYs(unit_x)))
+        return (unit_x, unit_y)
     
     def onButtonPress(self, button, x_in, y_in, alternate=False):
         if button == 1:
-            point = self.getIntersection(x_in)
-            x, y = self.scale.toScreen(point)
+            intersection = self.getIntersection(x_in)
+            x, y = self.scale.toScreen(intersection)
             if inCircle(x, y, self.controlRadius, x_in, y_in):
-                self.addPoint(point)
-                return True
+                self.model.addPoint(intersection)
     
     def onButtonRelease(self, button, x_in, y_in, alternate=False):
         pass
-    
-    def onScaleChange(self, scale):
-        self._curvePoints = None
     
     def draw(self, cr):
         ctm = cr.get_matrix()
@@ -345,16 +473,9 @@ class Curve(Emitter):
         for ctrl in self._controls:
             ctrl.draw(cr)
     
-    def getIntersection(self, x_in):
-        """ intersection y of x """
-        unit_x, _ = self.scale.toUnit((x_in, 0))
-        unit_x = max(0, min(1, unit_x))
-        unit_y = max(0, min(1, self.getCurve().getYs(unit_x)))
-        return (unit_x, unit_y)
-    
     def isControl(self, x_in, y_in):
-        point = self.getIntersection(x_in)
-        x, y = self.scale.toScreen(point)
+        intersection = self.getIntersection(x_in)
+        x, y = self.scale.toScreen(intersection)
         return inCircle(x, y, self.controlRadius, x_in, y_in)
     
     def getControl(self, x, y, level=None):
@@ -477,6 +598,7 @@ class CurveEditor(Gtk.DrawingArea):
         (x, y), alternate = self.getPointer()
         ctrl = self.findControl(x, y)
         self.setCursor(ctrl, alternate=alternate)
+        self.queue_draw()
     
     @staticmethod
     def onDraw(self, cr):
@@ -509,8 +631,7 @@ class CurveEditor(Gtk.DrawingArea):
                 # control did not change
                 break;
             old_ctrl = ctrl
-            if ctrl.onButtonPress(event.button, x, y, alternate):
-                self.queue_draw()
+            ctrl.onButtonPress(event.button, x, y, alternate)
             ctrl = self.getControl()
     
     @staticmethod
@@ -525,8 +646,7 @@ class CurveEditor(Gtk.DrawingArea):
                 # control did not change
                 break;
             old_ctrl = ctrl
-            if ctrl.onButtonRelease(event.button, x, y, alternate):
-                self.queue_draw()
+            ctrl.onButtonRelease(event.button, x, y, alternate)
             ctrl = self.getControl()
     
     @staticmethod
@@ -540,8 +660,7 @@ class CurveEditor(Gtk.DrawingArea):
         # print 'onMotionNotify', x, y
         ctrl = self.findControl(x, y)
         if ctrl is not None and ctrl.active:
-            if ctrl.onMotionNotify(x, y):
-                self.queue_draw()
+            ctrl.onMotionNotify(x, y)
         self.setCursor(ctrl, alternate=alternate)
     
     def keyIsAlternate(self, event):
@@ -572,9 +691,9 @@ if __name__ == '__main__':
     w.add(a)
     
     for label, item in interpolationStrategies:
-        a.appendCurve(Curve(a.scale, [(0,0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1,1)], Interpolation = item))
-    
-    
+        points = [(0,0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1,1)]
+        m = ModelCurve(points=points, interpolation=label)
+        a.appendCurve(Curve(m, a.scale))
     
     w.show_all()
     Gtk.main()
