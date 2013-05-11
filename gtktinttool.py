@@ -4,7 +4,7 @@
 from __future__ import division
 from gi.repository import Gtk, Gdk
 import cairo
-from gtkcurvewidget import CurveEditor, Curve, CurveException, interpolationStrategies, ModelCurve
+from gtkcurvewidget import CurveEditor, CurveException, interpolationStrategies, ModelCurves
 
 # just a preparation for i18n
 def _(string):
@@ -123,7 +123,8 @@ if __name__ == '__main__':
     
     w.connect('destroy', Gtk.main_quit)
     
-    curveEditor = CurveEditor.new(w)
+    curvesModel = ModelCurves()
+    curveEditor = CurveEditor.new(w, curvesModel)
     # will take all the space it can get
     curveEditor.set_hexpand(True)
     curveEditor.set_vexpand(True)
@@ -273,12 +274,8 @@ if __name__ == '__main__':
     
     
     ###
-    points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
-    model = ModelCurve(points)
-    curveEditor.appendCurve(Curve(model, curveEditor.scale))
-    points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6)]
-    model = ModelCurve(points)
-    curveEditor.appendCurve(Curve(model, curveEditor.scale))
-    
+    curvesModel.appendCurve([(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)])
+    curvesModel.appendCurve([(0.0,0.0), (0.1, 0.4), (0.2, 0.6)], 'spline')
     w.show_all()
+    
     Gtk.main()
