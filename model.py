@@ -8,6 +8,9 @@ from emitter import Emitter
 def _(string):
     return string
 
+class ModelException(Exception):
+    pass
+
 class Model(Emitter):
     def triggerOnModelUpdated(self, *args):
         for item in self:
@@ -113,6 +116,31 @@ class ModelCurves(Model):
         for curve in curves:
             self._appendCurve(**curve)
         self.triggerOnModelUpdated('setCurves')
+    
+    def reorderByIdList(self, ids):
+        currentOrder = map(id, self._curves)
+        if ids == currentOrder:
+            # the same order was supplied
+            return;
+        idSet = set(ids)
+        if len(idSet) != len(self._curves):
+            raise ModelException(
+                'Reorder: list of ids is not long enough. Len is {0} but should be {1}'
+                .format(len(ids), len(self._curves))
+            )
+        seen = set()
+        newOrder = []
+        for mid in ids:
+            if mid in seen:
+                raise ModelException('Having a duplicate id in ordering {0}'.format(mid))
+            seen.add(mid)
+            try:
+                currentPos = currentOrder.index(mid)
+            except ValueError, e:
+                raise ModelException('Model not found by id {0}'.format(mid))
+            newOrder.append(self._curves[currentPos])
+        self._curves = newOrder
+        self.triggerOnModelUpdated('reorderedCurves')
     
     def onModelUpdated(self, curveModel, *args):
         self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
