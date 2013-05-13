@@ -129,7 +129,6 @@ class ControlPoint(Emitter):
 
 class Curve(Emitter):
     controlRadius = 5
-    color = (0,0,0)
     lineWidth = 1
     cursorType = Gdk.CursorType.PLUS
     def __init__(self, model, scale):
@@ -165,7 +164,7 @@ class Curve(Emitter):
         """
         if self._interpolationStrategy is None:
             I = interpolationStrategiesDict[self.model.interpolation]
-            self._interpolationStrategy = I(self.model.value)
+            self._interpolationStrategy = I(self.model.pointsValue)
         return self._interpolationStrategy
     
     def getCurvePoints(self):
@@ -208,13 +207,14 @@ class Curve(Emitter):
             removePoint
             setPoints
             interpolation changed
-            
+            displayColorChanged
             pointUpdate (this is triggered by a child model of this, this model is just a relay)
             
-            all require that _curvePoints are reset
+            all but displayColorChanged require that _curvePoints are reset
             but addPoint, removePoint, setPoints need actions regarding the controlPoints
         """
-        self.invalidate()
+        if event != 'displayColorChanged':
+            self.invalidate()
         
         if event == 'addPoint':
             # add a new CP
@@ -251,7 +251,7 @@ class Curve(Emitter):
     def draw(self, cr):
         ctm = cr.get_matrix()
         self.scale.transformCairo(cr)
-        cr.set_source_rgb(*self.color)
+        cr.set_source_rgb(*self.model.displayColor)
         
         # draw interpolated curve
         points = self.getCurvePoints()
@@ -516,7 +516,7 @@ if __name__ == '__main__':
     m = ModelCurves()
     points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
     for interpolation, _ in interpolationStrategies:
-        m.appendCurve(points, interpolation)
+        m.appendCurve(points=points, interpolation=interpolation)
     
     a = CurveEditor.new(w, m)
     w.add(a)
