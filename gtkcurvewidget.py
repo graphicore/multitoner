@@ -420,6 +420,8 @@ class CurveEditor(Gtk.DrawingArea):
         elif event == 'setCurves':
             # remove all curves and build all curves again
             self._setCurves()
+        elif event == 'reorderedCurves':
+            self._setCurves()
         
         self.queue_draw()
     
