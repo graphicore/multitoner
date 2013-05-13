@@ -4,7 +4,9 @@
 from __future__ import division
 from gi.repository import Gtk, Gdk
 import cairo
-from gtkcurvewidget import CurveEditor, CurveException, interpolationStrategies, ModelCurves
+from gtkcurvewidget import CurveEditor, CurveException
+from interpolation import interpolationStrategies
+from model import ModelCurves
 
 # just a preparation for i18n
 def _(string):

@@ -2,17 +2,17 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import division
+from weakref import ref as weakRef
+import warnings
+from math import pi
 from gi.repository import Gtk, Gdk
 import cairo
-
 import numpy as np
-# http://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
-from scipy import interpolate 
-import math
+from interpolation import *
+from emitter import Emitter
+from model import ModelCurves
 
-from weakref import ref as weakRef, WeakSet
 
-import warnings
 
 # just a preparation for i18n
 def _(string):
@@ -21,106 +21,6 @@ def _(string):
 class CurveException(Exception):
     pass
 
-class Emitter(object):
-    """
-        simple event subscription
-        important:
-            1. this is uses a set, so there is no guaranteed order
-            2. the subscriber needs to implement all callbacks of the actual Emitter
-        
-        to subscribe use emitterObj.add
-        to unsubscribe use emitterObj.remove or emitterObj.discard or
-           delete all references to the subscriber
-    """
-    def __init__(self):
-        self.__subscriptions = WeakSet()
-    
-    def __iter__(self):
-        for item in self.__subscriptions:
-            yield item
-    
-    def add(self, thing):
-        self.__subscriptions.add(thing)
-    
-    def discard(self, thing):
-        self.__subscriptions.discard(thing)
-    
-    def remove(self, thing):
-        self.__subscriptions.remove(thing)
-
-class InterpolationStrategy(object):
-    
-    @property
-    def name(self):
-        raise NotImplementedError('Name must be defined by subclass')
-    
-    @property
-    def description(self):
-        raise NotImplementedError('Description must be defined by subclass')
-    
-    def _function(*args):
-        raise NotImplementedError('_function must be defined by subclass')
-    
-    def __init__(self, points):
-        self.setPoints(points)
-    
-    def setPoints(self, points):
-        if len(points) < 2:
-            raise CurveException('Need at least two points');
-        pts = zip(*points)
-        self._x = np.array(pts[0], dtype=float)
-        self._y = np.array(pts[1], dtype=float)
-    
-    def __call__(self, xs):
-        """
-        takes an np array of x values and returns an np array of the same
-        length as the input array representing the corresponding y values
-        """
-        return self._function(xs)
-
-class InterpolatedSpline(InterpolationStrategy):
-    """
-    Produces a smooth spline between the input points
-    """
-    name = _('Spline')
-    description = _('Very smooth but very self-willed, too.')
-    def setPoints(self, points):
-        super(InterpolatedSpline, self).setPoints(points)
-        # The number of data points must be larger than the spline degree k
-        k = 5#3
-        M = len(self._x)
-        if k >= M:
-            k = M-1
-        self._function = interpolate.UnivariateSpline(self._x,self._y,s=0,k=k)
-
-class InterpolatedMonotoneCubic(InterpolationStrategy):
-    """warnings
-    Produces a smoothend curve between the input points using a monotonic
-    cubic interpolation PCHIP: Piecewise Cubic Hermite Interpolating Polynomia
-    """
-    name = _('Monotone Cubic')
-    description = _('Smooth and does what you say. Not as smooth as Spline.')
-    def setPoints(self, points):
-        super(InterpolatedMonotoneCubic, self).setPoints(points)
-        self._function = interpolate.pchip(self._x, self._y)
-
-class InterpolatedLinear(InterpolationStrategy):
-    """
-    Produces a lineaer interpolation between the input points
-    """
-    name = _('Linear')
-    description = _('Just straight lines between control points.')
-    def _function(self, xs):
-        return np.interp(xs, self._x, self._y)
-
-# this is to keep the list ordered
-interpolationStrategies = (
-    ('monotoneCubic', InterpolatedMonotoneCubic),
-    ('spline'       , InterpolatedSpline),
-    ('linear'       , InterpolatedLinear)
-)
-# this is for faster lookup
-interpolationStrategiesDict = dict(interpolationStrategies)
 
 class Scale(Emitter):
     def __init__(self, wh = (1, 1)):
@@ -155,30 +55,6 @@ def inCircle(center_x, center_y, radius, x, y):
     # if <= is used instead of < the test would include the points *on* the circle
     return square_dist < radius ** 2
 
-class Model(Emitter):
-    def triggerOnModelUpdated(self, *args):
-        for item in self:
-            item.onModelUpdated(self, *args)
-
-class ModelControlPoint(Model):
-    def __init__(self, xy):
-        super(ModelControlPoint, self).__init__()
-        self.xy = xy
-    
-    @property
-    def xy(self):
-        return self._xy
-    
-    @xy.setter
-    def xy(self, xy):
-        xy = (
-            max(0, min(1, xy[0])),
-            max(0, min(1, xy[1]))
-        )
-        if not hasattr(self, '_xy') or xy != self._xy:
-            self._xy = xy
-            self.triggerOnModelUpdated()
-
 class ControlPoint(Emitter):
     displayRadius = 2
     controlRadius = 5
@@ -186,7 +62,7 @@ class ControlPoint(Emitter):
     cursorType = Gdk.CursorType.FLEUR
     altCursorType = Gdk.CursorType.PIRATE
     # this is needed for the cairo context arc method, its enough to calculate this once
-    endAngle = 2*math.pi
+    endAngle = 2*pi
     def __init__(self, model, scale):
         super(ControlPoint, self).__init__()
         self._screenXY = None
@@ -250,94 +126,6 @@ class ControlPoint(Emitter):
     
     def onMotionNotify(self, x_in, y_in):
         self.setCoordinates(self.scale.toUnit((x_in, y_in)))
-
-class ModelCurve(Model):
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic'):
-        super(ModelCurve, self).__init__()
-        self.interpolation = interpolation
-        self.points = points
-    
-    def onModelUpdated(self, cp_model, *args):
-        self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
-    
-    def _addPoint(self, point):
-        model = ModelControlPoint(point)
-        model.add(self) # subscribe
-        self._points.append(model)
-        return model
-    
-    def addPoint(self, point):
-        model = self._addPoint(point)
-        self.triggerOnModelUpdated('addPoint', model)
-        # as a 'setter' this doesn't return
-        # return model
-    
-    def removePoint(self, model):
-        if len(self._points) == 2:
-            return
-        self._points.remove(model)
-        self.triggerOnModelUpdated('removePoint', model)
-    
-    @property
-    def points(self):
-        # this returns an unordered tuple of the point models
-        # the _points list is not returned because changing the _points
-        # list would change the model value and that's not intended as part
-        # of the interface
-        return tuple(self._points)
-        
-    @points.setter
-    def points(self, points):
-        self._points = []
-        for point in points:
-            self._addPoint(point)
-        self.triggerOnModelUpdated('setPoints')
-    
-    @property
-    def interpolation(self):
-        return self._interpolation
-    
-    @interpolation.setter
-    def interpolation(self, interpolation):
-        self._interpolation = interpolation
-        self.triggerOnModelUpdated('interpolationChanged')
-    
-    @property
-    def value(self):
-        return sorted(point.xy for point in self._points)
-    
-class ModelCurves(Model):
-    def __init__(self, curves=[]):
-        super(ModelCurves, self).__init__()
-        self.curves = curves
-    
-    @property
-    def curves(self):
-        return tuple(self._curves)
-    
-    @curves.setter
-    def curves(self, curves=[]):
-        self._curves = []
-        for curve in curves:
-            self._appendCurve(*curve)
-        self.triggerOnModelUpdated('setCurves')
-    
-    def onModelUpdated(self, curveModel, *args):
-        self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
-    
-    def _appendCurve(self, *args):
-        model = ModelCurve(*args)
-        model.add(self) # subscribe
-        self._curves.append(model)
-        return model
-    
-    def appendCurve(self, *args):
-        model = self._appendCurve(*args)
-        self.triggerOnModelUpdated('appendCurve', model)
-    
-    def removeCurve(self, model):
-        self._curves.remove(model)
-        self.triggerOnModelUpdated('removeCurve', model)
 
 class Curve(Emitter):
     controlRadius = 5
