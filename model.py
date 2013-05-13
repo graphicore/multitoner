@@ -4,6 +4,10 @@
 from __future__ import division
 from emitter import Emitter
 
+# just a preparation for i18n
+def _(string):
+    return string
+
 class Model(Emitter):
     def triggerOnModelUpdated(self, *args):
         for item in self:
@@ -29,10 +33,11 @@ class ModelControlPoint(Model):
             self.triggerOnModelUpdated()
 
 class ModelCurve(Model):
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic'):
+    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0)):
         super(ModelCurve, self).__init__()
         self.interpolation = interpolation
         self.points = points
+        self.displayColor = displayColor
     
     def onModelUpdated(self, cp_model, *args):
         self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
@@ -80,12 +85,22 @@ class ModelCurve(Model):
         self.triggerOnModelUpdated('interpolationChanged')
     
     @property
-    def value(self):
+    def pointsValue(self):
         return sorted(point.xy for point in self._points)
-
+    
+    @property
+    def displayColor(self):
+        return self._displayColor
+    
+    @displayColor.setter
+    def displayColor(self, value):
+        self._displayColor = value
+        self.triggerOnModelUpdated('displayColorChanged')
+    
 class ModelCurves(Model):
-    def __init__(self, curves=[]):
+    def __init__(self, curves=[], ChildModel = ModelCurve):
         super(ModelCurves, self).__init__()
+        self.ChildModel = ChildModel
         self.curves = curves
     
     @property
@@ -96,22 +111,49 @@ class ModelCurves(Model):
     def curves(self, curves=[]):
         self._curves = []
         for curve in curves:
-            self._appendCurve(*curve)
+            self._appendCurve(**curve)
         self.triggerOnModelUpdated('setCurves')
     
     def onModelUpdated(self, curveModel, *args):
         self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
     
-    def _appendCurve(self, *args):
-        model = ModelCurve(*args)
+    def _appendCurve(self, **args):
+        model = self.ChildModel(**args)
         model.add(self) # subscribe
         self._curves.append(model)
         return model
     
-    def appendCurve(self, *args):
-        model = self._appendCurve(*args)
+    def appendCurve(self, **args):
+        model = self._appendCurve(**args)
         self.triggerOnModelUpdated('appendCurve', model)
     
     def removeCurve(self, model):
         self._curves.remove(model)
         self.triggerOnModelUpdated('removeCurve', model)
+
+class ModelTint(ModelCurve):
+    def __init__(self, name=_('(unnamed)'), cmyk=(0.0, 0.0, 0.0, 0.0), **args):
+        super(ModelTint, self).__init__(**args)
+        self.name = name
+        self.cmyk = cmyk
+    
+    def onModelUpdated(self, curveModel, *args):
+        self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
+    
+    @property
+    def name(self):
+        return self._name
+    
+    @name.setter
+    def name(self, value):
+        self._name = value
+        self.triggerOnModelUpdated('nameChanged')
+    
+    @property
+    def cmyk(self):
+        return self._cmyk
+    
+    @cmyk.setter
+    def cmyk(self, value):
+        self._cmyk = value
+        self.triggerOnModelUpdated('cmykChanged')
