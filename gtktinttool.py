@@ -118,8 +118,21 @@ class TintController(object):
         self.tints = ModelCurves(ChildModel=ModelTint)
         #id, name, interpolation Name (for display) 
         self.tintListStore = Gtk.ListStore(int, str, str)
+        
+        self.tintListStore.connect('row_deleted', self.onRowDeleted)
+        
         self.tints.add(self) #subscribe
         self.tints.curves = curves
+    
+    def onRowDeleted(self, *args):
+        """
+        we use this to reorder the curves
+        """
+        print 'row_deleted', self == self, args
+        newOrder = []
+        for row in self.tintListStore:
+            newOrder.append(row[0])
+        self.tints.reorderByIdList(newOrder)
     
     def onModelUpdated(self, model, event, *args):
         if event == 'setCurves':
@@ -308,7 +321,7 @@ if __name__ == '__main__':
                 Gtk.Label(_('Id')), widget_id,
                 Gtk.Label(_('Name')), widget_name,
                 Gtk.Label(_('Curve Type')), widget_curveType,
-                Gtk.Label(_('Indicator Color')), colorButton
+                Gtk.Label(_('Editor Color')), colorButton
             )
             
             for i, w in enumerate(ws):
