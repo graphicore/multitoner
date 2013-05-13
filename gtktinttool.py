@@ -5,8 +5,8 @@ from __future__ import division
 from gi.repository import Gtk, Gdk
 import cairo
 from gtkcurvewidget import CurveEditor, CurveException
-from interpolation import interpolationStrategies
-from model import ModelCurves
+from interpolation import interpolationStrategies, interpolationStrategiesDict
+from model import ModelCurves, ModelTint
 
 # just a preparation for i18n
 def _(string):
@@ -40,7 +40,6 @@ class TintList(object):
         self.maxTints = maxTints if maxTints is not None else float('inf')
         pass
 
-from random import randint
 import cairo
 from array import array
 
@@ -95,9 +94,13 @@ class CellRendererTint (Gtk.CellRendererText):
         return (0, 0, self.width, self.height)
 
 
-class TintColumn (Gtk.TreeViewColumn):
-    def __init__(self, name, renderer, text):
+class TintColumnView (Gtk.TreeViewColumn):
+    def __init__(self, name, renderer, scale, text):
         self.renderer = renderer
+        # hookup the renderer to the scale objects onScaleChange event of the curveEditor
+        scale.add(self)
+        #self.scale  = scale
+        
         Gtk.TreeViewColumn.__init__(self, name, self.renderer, text=text)
     
     def onScaleChange(self, scale):
@@ -106,8 +109,63 @@ class TintColumn (Gtk.TreeViewColumn):
         if w != self.renderer.width:
             self.renderer.width = w
             self.queue_resize()
-    
 
+class TintControllerException(Exception):
+    pass
+
+class TintController(object):
+    def __init__(self, curves=[]):
+        self.tints = ModelCurves(ChildModel=ModelTint)
+        #id, name, interpolation Name (for display) 
+        self.tintListStore = Gtk.ListStore(int, str, str)
+        self.tints.add(self) #subscribe
+        self.tints.curves = curves
+    
+    def onModelUpdated(self, model, event, *args):
+        if event == 'setCurves':
+            self.tintListStore.clear()
+            for curveModel in self.tints.curves:
+                self._appendToList(curveModel)
+        elif event == 'appendCurve':
+            curveModel = args[0]
+            self._appendToList(curveModel)
+        elif event == 'removeCurve':
+            pass
+        elif event == 'curveUpdate':
+            curveModel = args[0]
+            curveEvent = args[1]
+            self._updateRow(curveModel, curveEvent, args[2:])
+    
+    def _updateRow(self, curveModel, curveEvent, *args):
+        interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
+        row = self._getRowByModel(curveModel)
+        row[1] = curveModel.name
+        row[2] = interpolationName
+    
+    def _getRowByModel(self, curveModel):
+        tintId = id(curveModel)
+        for row in self.tintListStore:
+            if row[0] == tintId:
+                return row
+        raise TintControllerException('Row not found by id {0}'.format(tintId))
+    
+    def _appendToList(self, curveModel):
+        modelId = id(curveModel)
+        interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
+        self.tintListStore.append([modelId, curveModel.name, interpolationName])
+        
+    def getTintById(self, tintId):
+        for curveModel in self.tints.curves:
+            if id(curveModel) == tintId:
+                return curveModel
+        raise TintControllerException('Tint not found by id {0}'.format(tintId))
+        
+
+#Model for the curveType choices, will be used with GtkCellRendererCombo 
+interpolationStrategiesListStore = Gtk.ListStore(str, str)
+for key, item in interpolationStrategies:
+    interpolationStrategiesListStore.append([item.name, key])
+        
 if __name__ == '__main__':
     w = Gtk.Window()
     
@@ -125,8 +183,12 @@ if __name__ == '__main__':
     
     w.connect('destroy', Gtk.main_quit)
     
-    curvesModel = ModelCurves()
-    curveEditor = CurveEditor.new(w, curvesModel)
+    
+    tintController = TintController()
+    
+    
+    
+    curveEditor = CurveEditor.new(w, tintController.tints)
     # will take all the space it can get
     curveEditor.set_hexpand(True)
     curveEditor.set_vexpand(True)
@@ -145,24 +207,9 @@ if __name__ == '__main__':
     # height : the number of rows that child will span
     tintGrid.attach(curveEditor, 0, 0, 1, 1)
     
-    # Model for the tints
-    # id, name, curve Type
-    tintModel = Gtk.ListStore(int, str, str)
-    tintModel.append([0, 'Blue', 'Monotone Cubic'])
-    tintModel.append([1, 'Green', 'Spline'])
-    tintModel.append([2, 'Red', 'Linear'])
     
-    
-    #Model for the curveType choices, will be used with GtkCellRendererCombo 
-    curveTypesModel = Gtk.ListStore(str, str)
-    for key, item in interpolationStrategies:
-        curveTypesModel.append([item.name, key])
-    def onCurveTypeCellChanged(widget, path, text):
-        tintModel[path][2] = text
-    
-    
-    #make a treeview …
-    controlView = Gtk.TreeView(model=tintModel)
+    # make a treeview …
+    controlView = Gtk.TreeView(model=tintController.tintListStore)
     controlView.set_reorderable(True)
     controlView.set_property('headers-visible', True)
     treeSelection = controlView.get_selection()
@@ -177,15 +224,13 @@ if __name__ == '__main__':
         print 'selected is', selected
     treeSelection.connect("changed", onChangedSelection)
     
-    gradientView = Gtk.TreeView(model=tintModel)
+    gradientView = Gtk.TreeView(model=tintController.tintListStore)
     gradientView.set_property('headers-visible', False)
     
     # the width value is just initial and will change when the scale of
     # the curveEditor changes
     renderer_tint = CellRendererTint(width=256)
-    column_tint = TintColumn(_('Tint'), renderer_tint, text=0)
-    # hookup the renderer to the scale objects onScaleChange event of the curveEditor
-    curveEditor.scale.add(column_tint)
+    column_tint = TintColumnView(_('Tint'), renderer_tint, scale=curveEditor.scale, text=0)
     gradientView.append_column(column_tint)
     
     renderer_id = Gtk.CellRendererText()
@@ -210,14 +255,6 @@ if __name__ == '__main__':
     rightColumn.attach(controlView, 0, 1, 1, 1)
     tintGrid.attach(rightColumn, 1, 0, 1, 2)
     
-    tints = [
-        [0, 'Blue', 'monotoneCubic'],
-        [1, 'Green', 'spline'],
-        [2, 'Red', 'linear']
-    ]
-    
-    
-    
     tintOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
     frame = Gtk.Frame()
     frame.set_label(_('Tint Setup'))
@@ -229,32 +266,43 @@ if __name__ == '__main__':
     
     
     def onWidgetCurveTypeChange(widget, tintId):
-        print 'curve of ', tintId, ' changed to', widget.get_active_id()
+        interpolation = widget.get_active_id()
+        tintController.getTintById(tintId).interpolation = interpolation
+    
+    def onWidgetNameChange(widget, tintId):
+        name = widget.get_text()
+        tintController.getTintById(tintId).name = name
+    
+    def onWidgetColorChange(widget, tintId):
+        color = widget.get_rgba()
+        rgb = (color.red, color.green, color.blue)
+        tintController.getTintById(tintId).displayColor = rgb
     
     def show_tint_options(tintId=None):
-       
         tintOptionsBox.foreach(lambda x, _: x.destroy(), None)
         
         if tintId is None:
             info = Gtk.Label(_('- No tint selected -'))
             tintOptionsBox.add(info)
         else:
-            tint = tints[int(tintId)]
+            tint = tintController.getTintById(tintId)
             
-            widget_id = Gtk.Label(tint[0])
+            widget_id = Gtk.Label(tintId)
             widget_id.set_halign(Gtk.Align.START)
         
             widget_name = Gtk.Entry()
-            widget_name.set_text(tint[1])
+            widget_name.set_text(tint.name)
+            widget_name.connect('changed', onWidgetNameChange, tintId);
             
             widget_curveType = Gtk.ComboBoxText.new()
-            widget_curveType.set_model(curveTypesModel)
+            widget_curveType.set_model(interpolationStrategiesListStore)
             widget_curveType.set_id_column(1)
-            widget_curveType.set_active_id(tint[2])
-            widget_curveType.connect('changed', onWidgetCurveTypeChange, tint[0]);
+            widget_curveType.set_active_id(tint.interpolation)
+            widget_curveType.connect('changed', onWidgetCurveTypeChange, tintId);
             
-            rgba = Gdk.RGBA(1,0,.5)
+            rgba = Gdk.RGBA(*tint.displayColor)
             colorButton = Gtk.ColorButton.new_with_rgba(rgba)
+            colorButton.connect('color-set', onWidgetColorChange, tintId);
             
             ws = (
                 Gtk.Label(_('Id')), widget_id,
@@ -267,17 +315,14 @@ if __name__ == '__main__':
                 hi = i % 2
                 tintOptionsBox.attach(w, hi, i-hi, 1, 1)
                 w.set_halign(Gtk.Align.FILL if hi else Gtk.Align.START)
-            
-            
-            
         tintOptionsBox.show_all()
     show_tint_options()
     
     
     
     ###
-    curvesModel.appendCurve([(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)])
-    curvesModel.appendCurve([(0.0,0.0), (0.1, 0.4), (0.2, 0.6)], 'spline')
+    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)])
+    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.2, 0.6)], interpolation='spline')
     w.show_all()
     
     Gtk.main()
