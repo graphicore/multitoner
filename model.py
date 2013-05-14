@@ -179,9 +179,45 @@ class ModelTint(ModelCurve):
     
     @property
     def cmyk(self):
-        return self._cmyk
+        return tuple(self._cmyk)
     
     @cmyk.setter
     def cmyk(self, value):
-        self._cmyk = value
+        self._cmyk = list(value)
+        self.triggerOnModelUpdated('cmykChanged')
+    
+    @property
+    def c(self):
+        return self._cmyk[0]
+    
+    @c.setter
+    def c(self, value):
+        self._cmyk[0] = value
+        self.triggerOnModelUpdated('cmykChanged')
+    
+    @property
+    def m(self):
+        return self._cmyk[1]
+    
+    @m.setter
+    def m(self, value):
+        self._cmyk[1] = value
+        self.triggerOnModelUpdated('cmykChanged')
+    
+    @property
+    def y(self):
+        return self._cmyk[2]
+    
+    @y.setter
+    def y(self, value):
+        self._cmyk[2] = value
+        self.triggerOnModelUpdated('cmykChanged')
+    
+    @property
+    def k(self):
+        return self._cmyk[3]
+    
+    @c.setter
+    def k(self, value):
+        self._cmyk[3] = value
         self.triggerOnModelUpdated('cmykChanged')
