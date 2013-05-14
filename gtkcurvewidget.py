@@ -409,6 +409,12 @@ class CurveEditor(Gtk.DrawingArea):
         return self.scale.transformEvent((x - allocation.x, y - allocation.y)), alternate
     
     def onModelUpdated(self, model, event=None, *args):
+        # especially cmykChanged can happen very often and needs no
+        # draw of this widget
+        if event == 'curveUpdate' and (args[1] == 'cmykChanged' \
+        or args[1] == 'nameChanged'):
+            return
+        
         if event == 'appendCurve':
             # add a curve
             curveModel = args[0]
@@ -437,7 +443,7 @@ class CurveEditor(Gtk.DrawingArea):
         cr.translate(0, height)
         cr.scale(1, -1)
         
-        for curve in self._curves:
+        for curve in reversed(self._curves):
             curve.draw(cr)
         for curve in self._curves:
             curve.drawControls(cr) 
