@@ -11,28 +11,6 @@ from model import ModelCurves, ModelTint
 # just a preparation for i18n
 def _(string):
     return string
-
-class tintValueCMYK(object):
-    def __init__(self, name, c=0.0, m=0.0, y=0.0, k=0.0):
-        self.name = name
-        self.c = c
-        self.m = m
-        self.y = y
-        self.k = k
-
-class displayColor(object):
-    def __init__(self, r=0.0, g=0.0, b=0.0):
-        self.r = r
-        self.g = g
-        self.b = b
-        
-# class Tint(object):
-#     def __init__():
-#         self.curveType = 
-#         self.curve = 
-#         self.displayColor
-#         self.tintValue
-
     
 class TintList(object):
     def __init__(maxTints = None):
@@ -52,8 +30,9 @@ class CellRendererTint (Gtk.CellRendererText):
        the "text" property to get the tint id
     for anything else, this could be a Gtk.GtkCellRenderer without objections
     """
-    def __init__(self, width=-1, height=-1):
+    def __init__(self, ctrl, width=-1, height=-1):
         Gtk.CellRendererText.__init__(self)
+        self.ctrl = ctrl
         self.width = width
         self.height = height
     
@@ -68,15 +47,19 @@ class CellRendererTint (Gtk.CellRendererText):
         """
         # print 'cellRendererTint', cell_area.width, cell_area.height, cell_area.x, cell_area.y
         tid = int(self.get_property('text'))
+        tint = self.ctrl.getTintById(tid)
+        color = tint.displayColor
         rgbbuf = array('B')
-        
         row = []
+        ip = interpolationStrategiesDict[tint.interpolation](tint.pointsValue)
         for i in range(self.width):
-            val = 255 - int(i/self.width * 255)
+            pos = max(0.0, min(1.0, ip(i/self.width)))
+            ff = 255 * (1-pos)
+            oo = 255 * pos
             row += [
-                val if tid != 0 else 255,
-                val if tid != 1 else 255,
-                val if tid != 2 else 255,
+                int(ff + oo * color[2]),
+                int(ff + oo * color[1]),
+                int(ff + oo * color[0]),
                 0
                 ]
         for _ in range(cell_area.height):
@@ -90,9 +73,47 @@ class CellRendererTint (Gtk.CellRendererText):
         cr.set_source_surface(cairo_surface, x , y)
         cr.paint()
     
-    def do_get_size(self, widget, cell_area):
-        return (0, 0, self.width, self.height)
+    #def do_get_size(self, widget, cell_area):
+    #    return (0, 0, self.width, self.height)
+    def do_get_preferred_size(self, widget):
+        
+        return (
+            Gtk.Requisition(self.width, self.height),
+            Gtk.Requisition(self.width, self.height)
+        )
 
+class CellRendererEditorColor (Gtk.CellRendererText):
+    """
+    inheriting from CellRendererText had two advantages
+    1. the other GtkTreeWidget is rendered with CellRendererTexts, that
+       this widget uses the right height automatically
+    2. I couldn't figure out how to set a custom property, so i can reuse
+       the "text" property to get the tint id
+    for anything else, this could be a Gtk.GtkCellRenderer without objections
+    """
+    def __init__(self, ctrl):
+        Gtk.CellRendererText.__init__(self)
+        self.ctrl = ctrl
+    
+    def do_render(self, cr, widget, background_area, cell_area, flags):
+        """
+        self ... a GtkCellRenderer
+        cr : a cairo context to draw to
+        widget : the widget owning window
+        background_area : entire cell area (including tree expanders and maybe padding on the sides)
+        cell_area : area normally rendered by a cell renderer
+        flags : flags that affect rendering
+        """
+        tid = int(self.get_property('text'))
+        tint = self.ctrl.getTintById(tid)
+        cr.set_source_rgb(*tint.displayColor)
+        width, height  = self.get_fixed_size()
+        width = min(width, cell_area.width)
+        height = min(height, cell_area.height)
+        x = int(cell_area.x + (cell_area.width/2 - width/2))
+        y = int(cell_area.y + (cell_area.height/2 - height/2))
+        cr.rectangle(x, y, width, height)
+        cr.fill()
 
 class TintColumnView (Gtk.TreeViewColumn):
     def __init__(self, name, renderer, scale, text):
@@ -128,7 +149,6 @@ class TintController(object):
         """
         we use this to reorder the curves
         """
-        print 'row_deleted', self == self, args
         newOrder = []
         for row in self.tintListStore:
             newOrder.append(row[0])
@@ -225,6 +245,7 @@ if __name__ == '__main__':
     controlView = Gtk.TreeView(model=tintController.tintListStore)
     controlView.set_reorderable(True)
     controlView.set_property('headers-visible', True)
+    
     treeSelection = controlView.get_selection()
     def onChangedSelection(selection):
         model, paths = selection.get_selected_rows()
@@ -242,12 +263,13 @@ if __name__ == '__main__':
     
     # the width value is just initial and will change when the scale of
     # the curveEditor changes
-    renderer_tint = CellRendererTint(width=256)
+    renderer_tint = CellRendererTint(ctrl=tintController,width=256)
     column_tint = TintColumnView(_('Tint'), renderer_tint, scale=curveEditor.scale, text=0)
     gradientView.append_column(column_tint)
     
-    renderer_id = Gtk.CellRendererText()
-    column_id = Gtk.TreeViewColumn(_('ID'), renderer_id, text=0)
+    renderer_editorColor = CellRendererEditorColor(ctrl=tintController)
+    renderer_editorColor.set_fixed_size (15,15)
+    column_id = Gtk.TreeViewColumn(_('ID'), renderer_editorColor, text=0)
     controlView.append_column(column_id)
     
     renderer_name = Gtk.CellRendererText()
@@ -262,6 +284,7 @@ if __name__ == '__main__':
     #controlView.set_vexpand(True) # so this pushes itself to the bottom
     gradientView.set_valign(Gtk.Align.END)
     
+    
     tintGrid.attach(gradientView, 0, 1, 1, 1)
     rightColumn = Gtk.Grid()
     rightColumn.set_row_spacing(5)
@@ -269,6 +292,8 @@ if __name__ == '__main__':
     tintGrid.attach(rightColumn, 1, 0, 1, 2)
     
     tintOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
+    
+    
     frame = Gtk.Frame()
     frame.set_label(_('Tint Setup'))
     frame.set_valign(Gtk.Align.FILL)
@@ -290,6 +315,11 @@ if __name__ == '__main__':
         color = widget.get_rgba()
         rgb = (color.red, color.green, color.blue)
         tintController.getTintById(tintId).displayColor = rgb
+    
+    def onWidgetCMYKValueChange(widget, tintId, colorAttr):
+        tint = tintController.getTintById(tintId)
+        value = widget.get_adjustment().get_value()
+        setattr(tint, colorAttr,  value)
     
     def show_tint_options(tintId=None):
         tintOptionsBox.foreach(lambda x, _: x.destroy(), None)
@@ -317,17 +347,41 @@ if __name__ == '__main__':
             colorButton = Gtk.ColorButton.new_with_rgba(rgba)
             colorButton.connect('color-set', onWidgetColorChange, tintId);
             
-            ws = (
+            ws = [
                 Gtk.Label(_('Id')), widget_id,
                 Gtk.Label(_('Name')), widget_name,
                 Gtk.Label(_('Curve Type')), widget_curveType,
                 Gtk.Label(_('Editor Color')), colorButton
-            )
+            ]
+            
             
             for i, w in enumerate(ws):
                 hi = i % 2
-                tintOptionsBox.attach(w, hi, i-hi, 1, 1)
+                tintOptionsBox.attach(w, hi, (i-hi)/2, 1, 1)
                 w.set_halign(Gtk.Align.FILL if hi else Gtk.Align.START)
+            
+            offset = len(ws)
+            for i, (colorAttr, label) in enumerate([('c',_('C')),('m',_('M')),('y',_('Y')),('k', _('K'))]):
+                w = Gtk.Label(label)
+                w.set_halign(Gtk.Align.START)
+                tintOptionsBox.attach(w, 0,i+offset, 1, 1)
+                
+                # value: the initial value.
+                # lower : the minimum value.
+                # upper : the maximum value.
+                # step_increment : the step increment.
+                # page_increment : the page increment.
+                # page_size : The page size of the adjustment.
+                value = getattr(tint, colorAttr)
+                adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.1)
+                entry = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
+                entry.set_halign(Gtk.Align.FILL)
+                entry.connect('value-changed', onWidgetCMYKValueChange,tintId, colorAttr)
+                tintOptionsBox.attach(entry, 1, i+offset, 1, 1)
+                
+                
+                
+            
         tintOptionsBox.show_all()
     show_tint_options()
     
@@ -337,5 +391,4 @@ if __name__ == '__main__':
     tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)])
     tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.2, 0.6)], interpolation='spline')
     w.show_all()
-    
     Gtk.main()
