@@ -4,6 +4,7 @@
 from __future__ import division
 from gi.repository import Gtk, Gdk
 import cairo
+import numpy as np
 from gtkcurvewidget import CurveEditor, CurveException
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from model import ModelCurves, ModelTint
@@ -35,6 +36,7 @@ class CellRendererTint (Gtk.CellRendererText):
         self.ctrl = ctrl
         self.width = width
         self.height = height
+        self.cache = {}
     
     def do_render(self, cr, widget, background_area, cell_area, flags):
         """
@@ -46,25 +48,44 @@ class CellRendererTint (Gtk.CellRendererText):
         flags : flags that affect rendering
         """
         # print 'cellRendererTint', cell_area.width, cell_area.height, cell_area.x, cell_area.y
-        tid = int(self.get_property('text'))
+        tidHash = self.get_property('text')
+        tid = int(tidHash)
         tint = self.ctrl.getTintById(tid)
         color = tint.displayColor
-        rgbbuf = array('B')
-        row = []
-        ip = interpolationStrategiesDict[tint.interpolation](tint.pointsValue)
-        for i in range(self.width):
-            pos = max(0.0, min(1.0, ip(i/self.width)))
-            ff = 255 * (1-pos)
-            oo = 255 * pos
-            row += [
-                int(ff + oo * color[2]),
-                int(ff + oo * color[1]),
-                int(ff + oo * color[0]),
-                0
-                ]
-        for _ in range(cell_area.height):
-            rgbbuf.extend(row)
-        cairo_surface = cairo.ImageSurface.create_for_data(rgbbuf, cairo.FORMAT_RGB24, self.width, cell_area.height, self.width * 4)
+        
+        try:
+            cache = self.cache[tid]
+        except:
+            cache = None
+        points = tint.pointsValue
+        wh = (self.width, cell_area.height)
+        if cache is None or cache[0] != points or cache[1] != wh \
+            or cache[2] is not tint.interpolation or cache[3] is not color:
+            rgbbuf = array('B')
+            row = []
+            ip = interpolationStrategiesDict[tint.interpolation](points)
+            poses = ip(np.linspace(0, 1, self.width))
+            poses = np.nan_to_num(poses)
+            # no pos will be smaller than 0 or bigger than 1
+            poses[poses < 0] = 0 # max(0, y)
+            poses[poses > 1] = 1 # min(1, y)
+            
+            for i in range(self.width):
+                pos = poses[i]
+                ff = 255 * (1-pos)
+                oo = 255 * pos
+                row += [
+                    int(ff + oo * color[2]),
+                    int(ff + oo * color[1]),
+                    int(ff + oo * color[0]),
+                    0
+                    ]
+            for _ in range(cell_area.height):
+                rgbbuf.extend(row)
+            cairo_surface = cairo.ImageSurface.create_for_data(rgbbuf, cairo.FORMAT_RGB24, self.width, cell_area.height, self.width * 4)
+            self.cache[tid] = (points, wh, tint.interpolation, color, cairo_surface)
+        else:
+            cairo_surface = cache[4]
         # x = cell_area.x # this used to be 1 but should have been 0 ??
         # this workaround make this cell renderer useless for other
         # positions than the first cell in a tree, i suppose
