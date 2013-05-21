@@ -217,7 +217,7 @@ class ModelTint(ModelCurve):
     def k(self):
         return self._cmyk[3]
     
-    @c.setter
+    @k.setter
     def k(self, value):
         self._cmyk[3] = value
         self.triggerOnModelUpdated('cmykChanged')
