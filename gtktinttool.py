@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import division
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, GObject
 import cairo
 import numpy as np
+from weakref import ref as Weakref
 from gtkcurvewidget import CurveEditor, CurveException
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from model import ModelCurves, ModelTint
+from GradientWorker import GradientWorker
 
 # just a preparation for i18n
 def _(string):
@@ -22,6 +24,8 @@ class TintList(object):
 import cairo
 from array import array
 
+# FIXME, this leaks memory because the 'state' for tints is not cleared
+# when a tint is deleted, solve when tint deletion becomes available 
 class CellRendererTint (Gtk.CellRendererText):
     """
     inheriting from CellRendererText had two advantages
@@ -31,12 +35,60 @@ class CellRendererTint (Gtk.CellRendererText):
        the "text" property to get the tint id
     for anything else, this could be a Gtk.GtkCellRenderer without objections
     """
-    def __init__(self, ctrl, width=-1, height=-1):
+    def __init__(self, ctrl, gradientWorker, width=-1, height=-1):
         Gtk.CellRendererText.__init__(self)
         self.ctrl = ctrl
+        self.gradientWorker = gradientWorker
         self.width = width
         self.height = height
-        self.cache = {}
+        self.state = {}
+    
+    def onModelUpdated(self, model, event, *args):
+        tid = id(model)
+        if tid in self.state:
+            self._requestNewSurface(model)
+    
+    def _requestNewSurface(self, model):
+        """ this will be called very frequently, because generating the
+        gradients can take a moment this waits until the last call to this
+        method was 300 millisecconds ago and then let the rendering start
+        """
+        
+        tid = id(model)
+        state =  self.state[tid]
+        
+        # reset the timeout
+        if state['timeout'] is not None:
+            GObject.source_remove(state['timeout'])
+        # schedule a new execution
+        state['timeout'] = GObject.timeout_add(
+            300, self._updateSurface, Weakref(model))
+    
+    def _updateSurface(self, weakrefModel):
+        model = weakrefModel()
+        # see if the model still exists
+        if model is None:
+            # need to return False, to cancel the timeout
+            return False
+        tid = id(model)
+        state = self.state[tid]
+        
+        callback = (self._receiveSurface, tid)
+        self.gradientWorker.addJob(callback, model)
+        
+        # this timout shall not be executed repeatedly, thus returning false
+        return False
+    
+    def _receiveSurface(self, tid, w, h, buf):
+        state = self.state[tid]
+        cairo_surface = cairo.ImageSurface.create_for_data(
+            buf, cairo.FORMAT_RGB24, w, h, w * 4
+        )
+        state['surface'] = cairo_surface
+        
+        self.ctrl.triggerRowChanged(tid)
+        #schedule a redraw ?
+        #img.darea.queue_draw()
     
     def do_render(self, cr, widget, background_area, cell_area, flags):
         """
@@ -51,48 +103,28 @@ class CellRendererTint (Gtk.CellRendererText):
         tidHash = self.get_property('text')
         tid = int(tidHash)
         tint = self.ctrl.getTintById(tid)
-        color = tint.displayColor
         
-        try:
-            cache = self.cache[tid]
-        except:
-            cache = None
-        points = tint.pointsValue
-        wh = (self.width, cell_area.height)
-        if cache is None or cache[0] != points or cache[1] != wh \
-            or cache[2] is not tint.interpolation or cache[3] is not color:
-            rgbbuf = array('B')
-            row = []
-            ip = interpolationStrategiesDict[tint.interpolation](points)
-            poses = ip(np.linspace(0, 1, self.width))
-            poses = np.nan_to_num(poses)
-            # no pos will be smaller than 0 or bigger than 1
-            poses[poses < 0] = 0 # max(0, y)
-            poses[poses > 1] = 1 # min(1, y)
-            
-            for i in range(self.width):
-                pos = poses[i]
-                ff = 255 * (1-pos)
-                oo = 255 * pos
-                row += [
-                    int(ff + oo * color[2]),
-                    int(ff + oo * color[1]),
-                    int(ff + oo * color[0]),
-                    0
-                    ]
-            for _ in range(cell_area.height):
-                rgbbuf.extend(row)
-            cairo_surface = cairo.ImageSurface.create_for_data(rgbbuf, cairo.FORMAT_RGB24, self.width, cell_area.height, self.width * 4)
-            self.cache[tid] = (points, wh, tint.interpolation, color, cairo_surface)
-        else:
-            cairo_surface = cache[4]
+        
+        # init the state for the tint
+        if tid not in self.state:
+            self.state[tid] = {'surface':None, 'timeout':None}
+            tint.add(self) #subscribe
+        
+        width, height = (self.width, cell_area.height)
+        cairo_surface = self.state[tid]['surface']
         # x = cell_area.x # this used to be 1 but should have been 0 ??
         # this workaround make this cell renderer useless for other
         # positions than the first cell in a tree, i suppose
-        x = 0
-        y = cell_area.y
-        cr.set_source_surface(cairo_surface, x , y)
-        cr.paint()
+        if cairo_surface is not None:
+            x = 0
+            y = cell_area.y
+            ctm = cr.get_matrix()
+            cr.translate(width, 0)
+            cr.scale(-(width/256), 1)
+            for y in xrange(0+y, height+y):
+                cr.set_source_surface(cairo_surface, x , y)
+                cr.paint()
+            cr.set_matrix(ctm)
     
     #def do_get_size(self, widget, cell_area):
     #    return (0, 0, self.width, self.height)
@@ -166,6 +198,12 @@ class TintController(object):
         self.tints.add(self) #subscribe
         self.tints.curves = curves
     
+    def triggerRowChanged(self, tid):
+        row = self._getRowById(tid)
+        path = row.path
+        itr = self.tintListStore.get_iter(path)
+        self.tintListStore.row_changed(path, itr)
+    
     def onRowDeleted(self, *args):
         """
         we use this to reorder the curves
@@ -198,11 +236,14 @@ class TintController(object):
     
     def _getRowByModel(self, curveModel):
         tintId = id(curveModel)
+        return self._getRowById(tintId)
+    
+    def _getRowById(self, tintId):
         for row in self.tintListStore:
             if row[0] == tintId:
                 return row
         raise TintControllerException('Row not found by id {0}'.format(tintId))
-    
+        
     def _appendToList(self, curveModel):
         modelId = id(curveModel)
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
@@ -221,6 +262,13 @@ for key, item in interpolationStrategies:
     interpolationStrategiesListStore.append([item.name, key])
         
 if __name__ == '__main__':
+    import sys
+    
+    GObject.threads_init()
+    gradientWorker = GradientWorker()
+    
+    use_gui, __ = Gtk.init_check(sys.argv)
+    
     w = Gtk.Window()
     
     cssProvider = Gtk.CssProvider()
@@ -284,7 +332,7 @@ if __name__ == '__main__':
     
     # the width value is just initial and will change when the scale of
     # the curveEditor changes
-    renderer_tint = CellRendererTint(ctrl=tintController,width=256)
+    renderer_tint = CellRendererTint(ctrl=tintController, gradientWorker=gradientWorker, width=256)
     column_tint = TintColumnView(_('Tint'), renderer_tint, scale=curveEditor.scale, text=0)
     gradientView.append_column(column_tint)
     
@@ -394,15 +442,12 @@ if __name__ == '__main__':
                 # page_increment : the page increment.
                 # page_size : The page size of the adjustment.
                 value = getattr(tint, colorAttr)
-                adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.1)
+                adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.0)
                 entry = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
                 entry.set_halign(Gtk.Align.FILL)
                 entry.connect('value-changed', onWidgetCMYKValueChange,tintId, colorAttr)
                 tintOptionsBox.attach(entry, 1, i+offset, 1, 1)
                 
-                
-                
-            
         tintOptionsBox.show_all()
     show_tint_options()
     
