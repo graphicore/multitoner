@@ -6,6 +6,7 @@ import mom.codec as codec
 from interpolation import interpolationStrategiesDict
 import numpy as np
 import binascii
+from datetime import datetime
 
 # might be used one day
 initColors = Template("""gsave % clipping path gsave
@@ -220,11 +221,11 @@ def getImageBinary(string):
     string = codec.base85_encode(string)
     string = junked(string, 65)
     string = '\n'.join(string)
-    string = ('\n{0}~>\n%%EndBinary'.format(string))
+    string = ('\nbeginimage\n{0}~>'.format(string))
     length = len(string)
-    return '%%BeginBinary: {0}\nbeginimage{1}'.format(len(string), string)
+    return '%%BeginBinary: {0}{1}\n%%EndBinary'.format(len(string), string)
 
-def getDeviceNLuT(tints):
+def getDeviceNLuT(*tints):
     """
         This table has 256 indexes. For two used colors the first index
         points to two bytes (in the hex representation 4 bytes, 2 bytes
@@ -244,15 +245,14 @@ def getDeviceNLuT(tints):
         vals[vals < 0] = 0 # max(0, y)
         vals[vals > 1] = 1 # min(1, y)
         table.append(vals)
-    #round to int
+    # round to int, make bytes, transpose so that all first bytes are first,
+    # its like zip()
     table = np.rint(np.array(table) * 255) \
-    #make bytes
         .astype(np.uint8) \
-    #transpose so that all first bytes are first, its like zip()
         .T \
         .tostring()
     table = binascii.hexlify(table).upper()
-    return '\n  '.join(junked(table, 65))
+    return '\n  '.join(junked(table, 66))
 
 
 processColors = {
@@ -265,7 +265,7 @@ processColors = {
 def isProcessColor(tint):
     return tint.name in processColors
 
-def getInitColors(tints):
+def getInitColors(*tints):
     processColorValue = '{0} {1} {2} {3}'
     initProcessColorsTpl = Template(\
     '/setcmykcolor where {pop\n  $value setcmykcolor\n  \
@@ -296,7 +296,7 @@ lineto stroke\n} if')
         'initCustomColors' : '\n'.join(customColorsInit)
     })
     
-def getDSCColors(tints):
+def getDSCColors(*tints):
     # this has a process color
     # %%DocumentProcessColors:  Black
     # %%DocumentCustomColors: (PANTONE 144 CVC)
@@ -321,17 +321,17 @@ def getDSCColors(tints):
     if len(processColors):
         DocumentProcessColors =  colorsSeparator.join([
             tint.name for tint in processColors])
-        result.append('%%DocumentProcessColors {0}'.format(DocumentProcessColors))
+        result.append('%%DocumentProcessColors: {0}'.format(DocumentProcessColors))
     if len(customColors):
         DocumentCustomColors = colorsSeparator.join([
             '({name})'.format(name=tint.name) for tint in customColors])
-        result.append('%%DocumentCustomColors {0}'.format(DocumentCustomColors))
+        result.append('%%DocumentCustomColors: {0}'.format(DocumentCustomColors))
         result += [
             cmykCustomFormat.format(*tint.cmyk, name=tint.name) for tint in customColors
         ]
     return '\n'.join(result)   
 
-def getDuotoneNames(tints):
+def getDuotoneNames(*tints):
     # '/DuotoneNames [ /Black (PANTONE 144 CVC) ] def',
     names = [
         ('/{0}' if isProcessColor(tint) else '({0})').format(tint.name)
@@ -339,7 +339,7 @@ def getDuotoneNames(tints):
     ]    
     return '/DuotoneNames [ {0} ] def'.format(' '.join(names))
 
-def getDuotoneCMYKValues(tints):
+def getDuotoneCMYKValues(*tints):
     # /DuotoneCMYKValues [
     #   [0.0000  0.0000  0.0000 1.0000] % Black
     #   [0.0300 0.5800 1.0000 0.0000] % PANTONE 144CVC
@@ -354,36 +354,53 @@ def getDuotoneCMYKValues(tints):
     ])
     return '/DuotoneCMYKValues [\n{0}\n] def'.format(CMYKValues)
 
+class EPSTool(object):
+    def __init__(self):
+        self._mapping = {}
+        self._gotColor = False
+        self._gotImage = False
+    
+    def setColorData(self, *curves):
+        self._gotColor = True
+        self._mapping['deviceNLUT'] = getDeviceNLuT(*curves)
+        self._mapping['initColors'] = getInitColors(*curves)
+        self._mapping['DSCColors'] = getDSCColors(*curves)
+        self._mapping['DuotoneNames'] = getDuotoneNames(*curves)
+        self._mapping['DuotoneCMYKValues'] = getDuotoneCMYKValues(*curves)
+    
+    def setImageData(self, imageBin, size):
+        self._gotImage = True
+        self._mapping['ImageBinary'] = getImageBinary(imageBin)
+        self._mapping['width'], self._mapping['height'] = size
+    
+    def create(self):
+        if not self._gotColor:
+            raise Exception('Color information is missing, use setColorData')
+            
+        if not self._gotImage:
+            raise Exception('Image data is missing, use setImageData')
+        
+        self._mapping['CreationDate'] = datetime.now().ctime()
+        return epsTemplate.substitute(self._mapping)
 
 if __name__== '__main__':
     import sys
     from model import ModelCurves, ModelTint
-    from datetime import datetime
     import PIL.Image as Image
     
     curvesModel = ModelCurves(ChildModel=ModelTint)
     curvesModel.appendCurve(name='Black', cmyk=(0.0, 0.0, 0.0, 1))
     
-    curvesModel.appendCurve(name='Pantone Green', cmyk=(0.7421, 0.0140, 0.7892, 0.0040)
+    curvesModel.appendCurve(name='PANTONE Greeen', cmyk=(0.0800, 0.0020, 0.9, 0)
         ,interpolation='linear' )
     
-    curvesModel.appendCurve(name='Orange', cmyk=(0.0, 0.6, 1.0, 0.0040)
+    curvesModel.appendCurve(name='Orange', cmyk=(0.0, 0.1, 0.0002, 0.0040)
         ,interpolation='linear' )
     
-    mapping = {
-        'CreationDate': datetime.now().ctime(),
-    }
-    # color data
-    mapping['deviceNLUT'] = getDeviceNLuT(curvesModel.curves)
-    mapping['initColors'] = getInitColors(curvesModel.curves)
-    mapping['DSCColors'] = getDSCColors(curvesModel.curves)
-    mapping['DuotoneNames'] = getDuotoneNames(curvesModel.curves)
-    mapping['DuotoneCMYKValues'] = getDuotoneCMYKValues(curvesModel.curves)
-    
-    #image data
     filename = sys.argv[1]
     im = Image.open(filename)
-    mapping['ImageBinary'] = getImageBinary(im.tostring())
-    mapping['width'], mapping['height'] = im.size
     
-    print epsTemplate.substitute(mapping)
+    epsTool = EPSTool();
+    epsTool.setColorData(*curvesModel.curves)
+    epsTool.setImageData(im.tostring(), im.size)
+    print epsTool.create()
