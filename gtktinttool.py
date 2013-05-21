@@ -85,10 +85,15 @@ class CellRendererTint (Gtk.CellRendererText):
             buf, cairo.FORMAT_RGB24, w, h, w * 4
         )
         state['surface'] = cairo_surface
-        
+        #schedule a redraw
         self.ctrl.triggerRowChanged(tid)
-        #schedule a redraw ?
-        #img.darea.queue_draw()
+    
+    def _init_tint(self, tint):
+        """ init the state for a tint"""
+        tid = id(tint)
+        self.state[tid] = {'surface':None, 'timeout':None}
+        tint.add(self) #subscribe
+        self._requestNewSurface(tint)
     
     def do_render(self, cr, widget, background_area, cell_area, flags):
         """
@@ -104,11 +109,9 @@ class CellRendererTint (Gtk.CellRendererText):
         tid = int(tidHash)
         tint = self.ctrl.getTintById(tid)
         
-        
-        # init the state for the tint
         if tid not in self.state:
-            self.state[tid] = {'surface':None, 'timeout':None}
-            tint.add(self) #subscribe
+            self._init_tint(tint)
+            
         
         width, height = (self.width, cell_area.height)
         cairo_surface = self.state[tid]['surface']
@@ -134,6 +137,70 @@ class CellRendererTint (Gtk.CellRendererText):
             Gtk.Requisition(self.width, self.height),
             Gtk.Requisition(self.width, self.height)
         )
+
+class ColorPreviewWidget(Gtk.DrawingArea):
+    def __init__(self, model, gradientWorker):
+        super(ColorPreviewWidget, self).__init__()
+        model.add(self) #subscribe
+        self._gradientWorker = gradientWorker
+        self._surface = None
+        self._timeout = None
+        self.connect('draw' , self.onDraw)
+    
+    def onModelUpdated(self, model, event, *args):
+         self._requestNewSurface(model)
+    
+    def _requestNewSurface(self, model):
+        """ this will be called very frequently, because generating the
+        gradients can take a moment this waits until the last call to this
+        method was 300 millisecconds ago and then let the rendering start
+        """
+        
+        # reset the timeout
+        if self._timeout is not None:
+            GObject.source_remove(self._timeout)
+        # schedule a new execution
+        self._timeout = GObject.timeout_add(
+            300, self._updateSurface, Weakref(model))
+    
+    def _updateSurface(self, weakrefModel):
+        model = weakrefModel()
+        # see if the model still exists
+        if model is None:
+            # need to return False, to cancel the timeout
+            return False
+        
+        callback = (self._receiveSurface, )
+        self._gradientWorker.addJob(callback, *model.curves)
+        
+        # this timout shall not be executed repeatedly, thus returning false
+        return False
+    
+    def _receiveSurface(self, w, h, buf):
+        cairo_surface = cairo.ImageSurface.create_for_data(
+            buf, cairo.FORMAT_RGB24, w, h, w * 4
+        )
+        self._surface = cairo_surface
+        self.queue_draw()
+    
+    @staticmethod
+    def onDraw(self, cr):
+        width = self.get_allocated_width()
+        height = self.get_allocated_height()
+        cairo_surface = self._surface
+        # x = cell_area.x # this used to be 1 but should have been 0 ??
+        # this workaround make this cell renderer useless for other
+        # positions than the first cell in a tree, i suppose
+        if cairo_surface is not None:
+            x = 0
+            y = 0
+            ctm = cr.get_matrix()
+            cr.translate(width, 0)
+            cr.scale(-(width/256), 1)
+            for y in xrange(0+y, height+y):
+                cr.set_source_surface(cairo_surface, x , y)
+                cr.paint()
+            cr.set_matrix(ctm)
 
 class CellRendererEditorColor (Gtk.CellRendererText):
     """
@@ -254,7 +321,7 @@ class TintController(object):
             if id(curveModel) == tintId:
                 return curveModel
         raise TintControllerException('Tint not found by id {0}'.format(tintId))
-        
+
 
 #Model for the curveType choices, will be used with GtkCellRendererCombo 
 interpolationStrategiesListStore = Gtk.ListStore(str, str)
@@ -355,6 +422,23 @@ if __name__ == '__main__':
     
     
     tintGrid.attach(gradientView, 0, 1, 1, 1)
+    
+    
+    colorPreviewWidget = ColorPreviewWidget(tintController.tints, gradientWorker)
+    colorPreviewWidget.set_hexpand(True)
+    colorPreviewWidget.set_vexpand(False)
+    # set min height
+    colorPreviewWidget.set_size_request(-1, 30)
+    tintGrid.attach(colorPreviewWidget, 0, 2, 1, 1)
+    
+    colorPreviewLabel = Gtk.Label(_('Result'))
+    colorPreviewLabel.set_halign(Gtk.Align.START)
+    tintGrid.attach(colorPreviewLabel, 1, 2, 1, 1)
+    
+    
+    
+    tintGrid.set_row_spacing(5)
+    
     rightColumn = Gtk.Grid()
     rightColumn.set_row_spacing(5)
     rightColumn.attach(controlView, 0, 1, 1, 1)
@@ -454,7 +538,9 @@ if __name__ == '__main__':
     
     
     ###
-    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)])
-    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.2, 0.6)], interpolation='spline')
+    tintController.tints.appendCurve(points=[(0.0, 1.0), (0.5, 0.3), (1, 0.0)], interpolation='spline', name="Yellow")
+    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.4, 0.7)], interpolation='spline', name="Magenta")
+    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)], name="Black")
+    
     w.show_all()
     Gtk.main()
