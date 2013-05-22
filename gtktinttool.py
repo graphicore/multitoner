@@ -328,8 +328,7 @@ class TintController(object):
         if len(self.tints) < self.max_tints:
             self.tints.appendCurve(**args)
     
-    def deleteTint(self, path, tid):
-        tintModel = self.getTintById(tid)
+    def deleteTint(self, tintModel):
         self.tints.removeCurve(tintModel)
     
     def onRowDeleted(self, *args):
@@ -383,7 +382,11 @@ class TintController(object):
         modelId = id(curveModel)
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
         self.tintListStore.append([modelId, curveModel.name, interpolationName])
-        
+    
+    def getTintByPath(self, path):
+        row = self.tintListStore[path]
+        return self.getTintById(row[0])
+    
     def getTintById(self, tintId):
         for curveModel in self.tints.curves:
             if id(curveModel) == tintId:
@@ -412,18 +415,8 @@ class AddInkButton(Gtk.Button):
         addInkButton.set_sensitive(active)
 
 class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
-    __gproperties__ = {
-        'tintId' : (
-            GObject.TYPE_STRING,
-            'tint id',
-            'a string of the object id of the tint object',
-            None,
-            GObject.PARAM_READWRITE
-        )
-    }
-    
     __gsignals__ = {
-        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, GObject.TYPE_STRING))
+        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
     }
 
     def __init__(self):
@@ -432,21 +425,8 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
 
     def do_activate(self, event, widget, path, background_area, cell_area,
                     flags):
-        self.emit('clicked', path, self.get_property('tintId'))
-
-    
-    def do_get_property( self, property ):
-        if property.name == 'tintId':
-            return self.tintId
-        else:
-            raise AttributeError, 'unknown property %s' % property.name
-    
-    # is only readable
-    def do_set_property( self, property, value ):
-        if property.name == 'tintId':
-            self.tintId = value
-        else: 
-            raise AttributeError, 'unknown property %s' % property.name
+        self.emit('clicked', path)
+        return True # activate event got 'consumed'
 
 #Model for the curveType choices, will be used with GtkCellRendererCombo 
 interpolationStrategiesListStore = Gtk.ListStore(str, str)
@@ -530,13 +510,22 @@ if __name__ == '__main__':
     
     renderer_deleteRow = CellRendererPixbufButton()
     renderer_deleteRow.set_property('stock-id', Gtk.STOCK_DELETE)
-    def deleteRow(cellRenderer, path, tid):
+    
+    def deleteRow(cellRenderer, path):
+        model = tintController.getTintByPath(path)
         
-        tintController.deleteTint(path, int(tid))
+        dialog = Gtk.MessageDialog(w, 0, Gtk.MessageType.QUESTION,
+            Gtk.ButtonsType.YES_NO, _('Delete the color “{0}”?').format(model.name))
+        dialog.format_secondary_text(
+            _('You will loose all of its properties.'))
+        response = dialog.run()
+        if response == Gtk.ResponseType.YES:
+            tintController.deleteTint(model)
+        dialog.destroy()
+
     renderer_deleteRow.connect('clicked', deleteRow)
     
     column_id.pack_start(renderer_deleteRow, False)
-    column_id.set_attributes(renderer_deleteRow, tintId=0)
     
     controlView.append_column(column_id)
     
