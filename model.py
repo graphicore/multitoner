@@ -117,6 +117,9 @@ class ModelCurves(Model):
             self._appendCurve(**curve)
         self.triggerOnModelUpdated('setCurves')
     
+    def __len__(self):
+        return len(self._curves)
+    
     def reorderByIdList(self, ids):
         currentOrder = map(id, self._curves)
         if ids == currentOrder:
