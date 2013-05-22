@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import division
-from gi.repository import Gtk, Gdk, GObject
+import os
+from gi.repository import Gtk, Gdk, GObject, GdkPixbuf
 import cairo
 import numpy as np
 from weakref import ref as Weakref
@@ -428,6 +429,21 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
         self.emit('clicked', path)
         return True # activate event got 'consumed'
 
+class CellRendererPixbufToggle(Gtk.CellRendererPixbuf):
+    __gsignals__ = {
+        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
+    }
+
+    def __init__(self):
+        Gtk.CellRendererPixbuf.__init__(self)
+        self.set_property('mode', Gtk.CellRendererMode.ACTIVATABLE)
+
+    def do_activate(self, event, widget, path, background_area, cell_area,
+                    flags):
+        self.emit('clicked', path)
+        return True # activate event got 'consumed'
+
+
 #Model for the curveType choices, will be used with GtkCellRendererCombo 
 interpolationStrategiesListStore = Gtk.ListStore(str, str)
 for key, item in interpolationStrategies:
@@ -508,9 +524,6 @@ if __name__ == '__main__':
     renderer_editorColor.set_fixed_size (15,15)
     column_id = Gtk.TreeViewColumn(_('ID'), renderer_editorColor, text=0)
     
-    renderer_deleteRow = CellRendererPixbufButton()
-    renderer_deleteRow.set_property('stock-id', Gtk.STOCK_DELETE)
-    
     def deleteRow(cellRenderer, path):
         model = tintController.getTintByPath(path)
         
@@ -522,9 +535,20 @@ if __name__ == '__main__':
         if response == Gtk.ResponseType.YES:
             tintController.deleteTint(model)
         dialog.destroy()
-
+    
+    renderer_deleteRow = CellRendererPixbufButton()
+    renderer_deleteRow.set_property('stock-id', Gtk.STOCK_DELETE)
     renderer_deleteRow.connect('clicked', deleteRow)
     
+    #renderer_lockRow = CellRendererPixbufToggle()
+    renderer_lockRow = CellRendererPixbufButton()
+    unlockedIcon = GdkPixbuf.Pixbuf.new_from_file_at_size(os.path.join(os.path.dirname(__file__), 'icons', 'unlocked.svg'), 16, 16)
+    renderer_lockRow.set_property('pixbuf', unlockedIcon)
+    #renderer_lockRow.connect('clicked', deleteRow)
+    
+    
+    
+    column_id.pack_start(renderer_lockRow, False)
     column_id.pack_start(renderer_deleteRow, False)
     
     controlView.append_column(column_id)
