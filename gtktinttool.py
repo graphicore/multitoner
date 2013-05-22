@@ -45,7 +45,12 @@ class CellRendererTint (Gtk.CellRendererText):
     def _init_tint(self, tintModel):
         """ init the state for a tintModel"""
         tid = id(tintModel)
-        self.state[tid] = {'surface':None, 'timeout':None}
+        self.state[tid] = {
+            'surface':None,
+            'timeout':None,
+            'waiting': False,
+            'update_needed': None
+        }
         self._requestNewSurface(tintModel)
     
     def onModelUpdated(self, model, event, *args):
@@ -82,7 +87,12 @@ class CellRendererTint (Gtk.CellRendererText):
             return False
         tid = id(tintModel)
         state = self.state[tid]
-        
+        if state['waiting']:
+            # we are waiting for a job to finish, so we don't put another
+            # job on the queue right now
+            state['update_needed'] = weakrefModel
+            return False
+        state['waiting'] = True
         callback = (self._receiveSurface, tid)
         self.gradientWorker.addJob(callback, tintModel)
         
@@ -97,6 +107,14 @@ class CellRendererTint (Gtk.CellRendererText):
             buf, cairo.FORMAT_RGB24, w, h, w * 4
         )
         state['surface'] = cairo_surface
+        state['waiting'] = False
+        if state['update_needed'] is not None:
+            # while we where waiting another update became due
+            tintModel = state['update_needed']() # its a weakref
+            state['update_needed'] = None
+            if tintModel is not None:
+                self._requestNewSurface(tintModel)
+        
         #schedule a redraw
         self.ctrl.triggerRowChanged(tid)
     
@@ -150,6 +168,8 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._gradientWorker = gradientWorker
         self._surface = None
         self._timeout = None
+        self._waiting = False
+        self._update_needed = None
         self.connect('draw' , self.onDraw)
     
     def onModelUpdated(self, tintsModel, event, *args):
@@ -175,6 +195,14 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             # need to return False, to cancel the timeout
             return False
         
+        if self._waiting:
+            # we are waiting for a job to finish, so we don't put another
+            # job on the queue right now
+            self._update_needed =  weakrefModel
+            return False
+        self._waiting = True
+        
+        
         callback = (self._receiveSurface, )
         self._gradientWorker.addJob(callback, *tintsModel.curves)
         
@@ -185,6 +213,15 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         cairo_surface = cairo.ImageSurface.create_for_data(
             buf, cairo.FORMAT_RGB24, w, h, w * 4
         )
+        
+        self._waiting = False
+        if self._update_needed is not None:
+            # while we where waiting another update became due
+            tintsModel = self._update_needed() # its a weakref
+            self._update_needed = None
+            if tintsModel is not None:
+                self._requestNewSurface(tintsModel)
+        
         self._surface = cairo_surface
         self.queue_draw()
     
@@ -276,6 +313,10 @@ class TintController(object):
         itr = self.tintListStore.get_iter(path)
         self.tintListStore.row_changed(path, itr)
     
+    def addTint(self, **args):
+        if len(self.tints) < 10:
+            self.tints.appendCurve(**args)
+    
     def onRowDeleted(self, *args):
         """
         we use this to reorder the curves
@@ -357,10 +398,7 @@ if __name__ == '__main__':
     
     w.connect('destroy', Gtk.main_quit)
     
-    
     tintController = TintController()
-    
-    
     
     curveEditor = CurveEditor.new(w, tintController.tints)
     # will take all the space it can get
@@ -440,6 +478,16 @@ if __name__ == '__main__':
     colorPreviewLabel.set_halign(Gtk.Align.START)
     tintGrid.attach(colorPreviewLabel, 1, 2, 1, 1)
     
+    addInkButton = Gtk.Button.new_from_stock(Gtk.STOCK_ADD)
+    addInkButton.set_halign(Gtk.Align.END)
+    addInkButton.set_tooltip_text (_('Add a new ink'))
+    def addInk(widget, *args):
+        tintController.addTint()
+    addInkButton.connect('clicked', addInk)
+    tintGrid.attach(addInkButton, 2, 2, 1, 1)
+    
+    
+    
     
     
     tintGrid.set_row_spacing(5)
@@ -447,7 +495,7 @@ if __name__ == '__main__':
     rightColumn = Gtk.Grid()
     rightColumn.set_row_spacing(5)
     rightColumn.attach(controlView, 0, 1, 1, 1)
-    tintGrid.attach(rightColumn, 1, 0, 1, 2)
+    tintGrid.attach(rightColumn, 1, 0, 2, 2)
     
     tintOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
     
