@@ -298,6 +298,10 @@ class TintControllerException(Exception):
 
 class TintController(object):
     def __init__(self, curves=[]):
+        # ghosscript doesn't do more as it seems
+        self.max_tints = 10 
+        
+        
         self.tints = ModelCurves(ChildModel=ModelTint)
         #id, name, interpolation Name (for display) 
         self.tintListStore = Gtk.ListStore(int, str, str)
@@ -314,7 +318,7 @@ class TintController(object):
         self.tintListStore.row_changed(path, itr)
     
     def addTint(self, **args):
-        if len(self.tints) < 10:
+        if len(self.tints) < self.max_tints:
             self.tints.appendCurve(**args)
     
     def onRowDeleted(self, *args):
@@ -368,7 +372,28 @@ class TintController(object):
                 return curveModel
         raise TintControllerException('Tint not found by id {0}'.format(tintId))
 
-
+class AddInkButton(Gtk.Button):
+    def __init__(self, ctrl, stockID=None, tooltip=None):
+        super(AddInkButton, self).__init__()
+        if stockID is not None:
+            self.set_label(stockID)
+            self.set_use_stock(True)
+        if tooltip is not None:
+            self.set_tooltip_text(tooltip)
+        self.ctrl = ctrl
+        self.connect('clicked', self.addInk)
+        self.ctrl.tints.add(self)
+    
+    def addInk(self, *args):
+        self.ctrl.addTint()
+    
+    def onModelUpdated(self, model, event, *args):
+        if event not in ('removeCurve', 'appendCurve', 'setCurves'):
+            return
+        active = len(model) < self.ctrl.max_tints
+        addInkButton.set_sensitive(active)
+        
+        
 #Model for the curveType choices, will be used with GtkCellRendererCombo 
 interpolationStrategiesListStore = Gtk.ListStore(str, str)
 for key, item in interpolationStrategies:
@@ -478,14 +503,9 @@ if __name__ == '__main__':
     colorPreviewLabel.set_halign(Gtk.Align.START)
     tintGrid.attach(colorPreviewLabel, 1, 2, 1, 1)
     
-    addInkButton = Gtk.Button.new_from_stock(Gtk.STOCK_ADD)
+    addInkButton = AddInkButton(tintController, Gtk.STOCK_ADD, _('Add a new ink'))
     addInkButton.set_halign(Gtk.Align.END)
-    addInkButton.set_tooltip_text (_('Add a new ink'))
-    def addInk(widget, *args):
-        tintController.addTint()
-    addInkButton.connect('clicked', addInk)
     tintGrid.attach(addInkButton, 2, 2, 1, 1)
-    
     
     
     
