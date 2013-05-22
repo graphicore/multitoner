@@ -173,7 +173,13 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self.connect('draw' , self.onDraw)
     
     def onModelUpdated(self, tintsModel, event, *args):
+        if len(tintsModel) == 0:
+            self._surface = None
+            self.queue_draw()
+            return
         self._requestNewSurface(tintsModel)
+        
+        
     
     def _requestNewSurface(self, tintsModel):
         """ this will be called very frequently, because generating the
@@ -191,7 +197,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
     def _updateSurface(self, weakrefModel):
         tintsModel = weakrefModel()
         # see if the model still exists
-        if tintsModel is None:
+        if tintsModel is None or len(tintsModel) == 0:
             # need to return False, to cancel the timeout
             return False
         
@@ -200,6 +206,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             # job on the queue right now
             self._update_needed =  weakrefModel
             return False
+        
         self._waiting = True
         
         
@@ -321,6 +328,10 @@ class TintController(object):
         if len(self.tints) < self.max_tints:
             self.tints.appendCurve(**args)
     
+    def deleteTint(self, path, tid):
+        tintModel = self.getTintById(tid)
+        self.tints.removeCurve(tintModel)
+    
     def onRowDeleted(self, *args):
         """
         we use this to reorder the curves
@@ -339,7 +350,8 @@ class TintController(object):
             curveModel = args[0]
             self._appendToList(curveModel)
         elif event == 'removeCurve':
-            pass
+            curveModel = args[0]
+            self._removeFromList(curveModel)
         elif event == 'curveUpdate':
             curveModel = args[0]
             curveEvent = args[1]
@@ -361,6 +373,12 @@ class TintController(object):
                 return row
         raise TintControllerException('Row not found by id {0}'.format(tintId))
         
+    def _removeFromList(self, curveModel):
+        row = self._getRowByModel(curveModel)
+        path = row.path
+        itr = self.tintListStore.get_iter(path)
+        self.tintListStore.remove(itr)
+    
     def _appendToList(self, curveModel):
         modelId = id(curveModel)
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
@@ -374,7 +392,7 @@ class TintController(object):
 
 class AddInkButton(Gtk.Button):
     def __init__(self, ctrl, stockID=None, tooltip=None):
-        super(AddInkButton, self).__init__()
+        Gtk.Button.__init__(self)
         if stockID is not None:
             self.set_label(stockID)
             self.set_use_stock(True)
@@ -392,8 +410,44 @@ class AddInkButton(Gtk.Button):
             return
         active = len(model) < self.ctrl.max_tints
         addInkButton.set_sensitive(active)
-        
-        
+
+class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
+    __gproperties__ = {
+        'tintId' : (
+            GObject.TYPE_STRING,
+            'tint id',
+            'a string of the object id of the tint object',
+            None,
+            GObject.PARAM_READWRITE
+        )
+    }
+    
+    __gsignals__ = {
+        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, GObject.TYPE_STRING))
+    }
+
+    def __init__(self):
+        Gtk.CellRendererPixbuf.__init__(self)
+        self.set_property('mode', Gtk.CellRendererMode.ACTIVATABLE)
+
+    def do_activate(self, event, widget, path, background_area, cell_area,
+                    flags):
+        self.emit('clicked', path, self.get_property('tintId'))
+
+    
+    def do_get_property( self, property ):
+        if property.name == 'tintId':
+            return self.tintId
+        else:
+            raise AttributeError, 'unknown property %s' % property.name
+    
+    # is only readable
+    def do_set_property( self, property, value ):
+        if property.name == 'tintId':
+            self.tintId = value
+        else: 
+            raise AttributeError, 'unknown property %s' % property.name
+
 #Model for the curveType choices, will be used with GtkCellRendererCombo 
 interpolationStrategiesListStore = Gtk.ListStore(str, str)
 for key, item in interpolationStrategies:
@@ -444,7 +498,6 @@ if __name__ == '__main__':
     # height : the number of rows that child will span
     tintGrid.attach(curveEditor, 0, 0, 1, 1)
     
-    
     # make a treeview …
     controlView = Gtk.TreeView(model=tintController.tintListStore)
     controlView.set_reorderable(True)
@@ -474,7 +527,20 @@ if __name__ == '__main__':
     renderer_editorColor = CellRendererEditorColor(ctrl=tintController)
     renderer_editorColor.set_fixed_size (15,15)
     column_id = Gtk.TreeViewColumn(_('ID'), renderer_editorColor, text=0)
+    
+    renderer_deleteRow = CellRendererPixbufButton()
+    renderer_deleteRow.set_property('stock-id', Gtk.STOCK_DELETE)
+    def deleteRow(cellRenderer, path, tid):
+        
+        tintController.deleteTint(path, int(tid))
+    renderer_deleteRow.connect('clicked', deleteRow)
+    
+    column_id.pack_start(renderer_deleteRow, False)
+    column_id.set_attributes(renderer_deleteRow, tintId=0)
+    
     controlView.append_column(column_id)
+    
+    
     
     renderer_name = Gtk.CellRendererText()
     column_name = Gtk.TreeViewColumn(_('Name'), renderer_name, text=1)
@@ -547,13 +613,15 @@ if __name__ == '__main__':
         value = widget.get_adjustment().get_value()
         setattr(tint, colorAttr,  value)
     
+    
     def show_tint_options(tintId=None):
-        tintOptionsBox.foreach(lambda x, _: x.destroy(), None)
-        
         if tintId is None:
-            info = Gtk.Label(_('- No tint selected -'))
-            tintOptionsBox.add(info)
+            tintOptionsBox.set_sensitive(False)
+            # just disable, this prevents the size of the box from changing
+            # and it tells the ui story right
         else:
+            tintOptionsBox.foreach(lambda x, _: x.destroy(), None)
+            tintOptionsBox.set_sensitive(True)
             tint = tintController.getTintById(tintId)
             
             widget_id = Gtk.Label(tintId)
