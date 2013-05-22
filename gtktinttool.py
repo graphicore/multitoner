@@ -24,8 +24,6 @@ class TintList(object):
 import cairo
 from array import array
 
-# FIXME, this leaks memory because the 'state' for tints is not cleared
-# when a tint is deleted, solve when tint deletion becomes available 
 class CellRendererTint (Gtk.CellRendererText):
     """
     inheriting from CellRendererText had two advantages
@@ -35,26 +33,38 @@ class CellRendererTint (Gtk.CellRendererText):
        the "text" property to get the tint id
     for anything else, this could be a Gtk.GtkCellRenderer without objections
     """
-    def __init__(self, ctrl, gradientWorker, width=-1, height=-1):
+    def __init__(self, ctrl, model, gradientWorker, width=-1, height=-1):
         Gtk.CellRendererText.__init__(self)
+        model.add(self) #subscribe
         self.ctrl = ctrl
         self.gradientWorker = gradientWorker
         self.width = width
         self.height = height
         self.state = {}
     
-    def onModelUpdated(self, model, event, *args):
-        tid = id(model)
-        if tid in self.state:
-            self._requestNewSurface(model)
+    def _init_tint(self, tintModel):
+        """ init the state for a tintModel"""
+        tid = id(tintModel)
+        self.state[tid] = {'surface':None, 'timeout':None}
+        self._requestNewSurface(tintModel)
     
-    def _requestNewSurface(self, model):
+    def onModelUpdated(self, model, event, *args):
+        if event == 'curveUpdate':
+            tintModel = args[0]
+            self._requestNewSurface(tintModel)
+        if event == 'removeCurve':
+            tintModel = args[0]
+            tid = id(tintModel)
+            if tid in self.state:
+                del self.state[tid]
+    
+    def _requestNewSurface(self, tintModel):
         """ this will be called very frequently, because generating the
         gradients can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
         """
         
-        tid = id(model)
+        tid = id(tintModel)
         state =  self.state[tid]
         
         # reset the timeout
@@ -62,24 +72,26 @@ class CellRendererTint (Gtk.CellRendererText):
             GObject.source_remove(state['timeout'])
         # schedule a new execution
         state['timeout'] = GObject.timeout_add(
-            300, self._updateSurface, Weakref(model))
+            300, self._updateSurface, Weakref(tintModel))
     
     def _updateSurface(self, weakrefModel):
-        model = weakrefModel()
+        tintModel = weakrefModel()
         # see if the model still exists
-        if model is None:
+        if tintModel is None:
             # need to return False, to cancel the timeout
             return False
-        tid = id(model)
+        tid = id(tintModel)
         state = self.state[tid]
         
         callback = (self._receiveSurface, tid)
-        self.gradientWorker.addJob(callback, model)
+        self.gradientWorker.addJob(callback, tintModel)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
     def _receiveSurface(self, tid, w, h, buf):
+        if tid not in self.state:
+            return
         state = self.state[tid]
         cairo_surface = cairo.ImageSurface.create_for_data(
             buf, cairo.FORMAT_RGB24, w, h, w * 4
@@ -87,13 +99,6 @@ class CellRendererTint (Gtk.CellRendererText):
         state['surface'] = cairo_surface
         #schedule a redraw
         self.ctrl.triggerRowChanged(tid)
-    
-    def _init_tint(self, tint):
-        """ init the state for a tint"""
-        tid = id(tint)
-        self.state[tid] = {'surface':None, 'timeout':None}
-        tint.add(self) #subscribe
-        self._requestNewSurface(tint)
     
     def do_render(self, cr, widget, background_area, cell_area, flags):
         """
@@ -107,10 +112,10 @@ class CellRendererTint (Gtk.CellRendererText):
         # print 'cellRendererTint', cell_area.width, cell_area.height, cell_area.x, cell_area.y
         tidHash = self.get_property('text')
         tid = int(tidHash)
-        tint = self.ctrl.getTintById(tid)
+        tintModel = self.ctrl.getTintById(tid)
         
         if tid not in self.state:
-            self._init_tint(tint)
+            self._init_tint(tintModel)
             
         
         width, height = (self.width, cell_area.height)
@@ -147,10 +152,10 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._timeout = None
         self.connect('draw' , self.onDraw)
     
-    def onModelUpdated(self, model, event, *args):
-         self._requestNewSurface(model)
+    def onModelUpdated(self, tintsModel, event, *args):
+        self._requestNewSurface(tintsModel)
     
-    def _requestNewSurface(self, model):
+    def _requestNewSurface(self, tintsModel):
         """ this will be called very frequently, because generating the
         gradients can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
@@ -161,17 +166,17 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             GObject.source_remove(self._timeout)
         # schedule a new execution
         self._timeout = GObject.timeout_add(
-            300, self._updateSurface, Weakref(model))
+            300, self._updateSurface, Weakref(tintsModel))
     
     def _updateSurface(self, weakrefModel):
-        model = weakrefModel()
+        tintsModel = weakrefModel()
         # see if the model still exists
-        if model is None:
+        if tintsModel is None:
             # need to return False, to cancel the timeout
             return False
         
         callback = (self._receiveSurface, )
-        self._gradientWorker.addJob(callback, *model.curves)
+        self._gradientWorker.addJob(callback, *tintsModel.curves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
@@ -399,7 +404,7 @@ if __name__ == '__main__':
     
     # the width value is just initial and will change when the scale of
     # the curveEditor changes
-    renderer_tint = CellRendererTint(ctrl=tintController, gradientWorker=gradientWorker, width=256)
+    renderer_tint = CellRendererTint(ctrl=tintController, model=tintController.tints, gradientWorker=gradientWorker, width=256)
     column_tint = TintColumnView(_('Tint'), renderer_tint, scale=curveEditor.scale, text=0)
     gradientView.append_column(column_tint)
     
