@@ -36,11 +36,13 @@ class ModelControlPoint(Model):
             self.triggerOnModelUpdated()
 
 class ModelCurve(Model):
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0)):
+    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0), locked=False, visible=True):
         super(ModelCurve, self).__init__()
         self.interpolation = interpolation
         self.points = points
         self.displayColor = displayColor
+        self.locked = locked
+        self.visible = visible
     
     def onModelUpdated(self, cp_model, *args):
         self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
@@ -99,6 +101,24 @@ class ModelCurve(Model):
     def displayColor(self, value):
         self._displayColor = value
         self.triggerOnModelUpdated('displayColorChanged')
+    
+    @property
+    def locked(self):
+        return self._locked
+    
+    @locked.setter
+    def locked(self, value):
+        self._locked = bool(value)
+        self.triggerOnModelUpdated('lockedChanged')
+    
+    @property
+    def visible(self):
+        return self._visible
+    
+    @visible.setter
+    def visible(self, value):
+        self._visible = bool(value)
+        self.triggerOnModelUpdated('visibleChanged')
     
 class ModelCurves(Model):
     def __init__(self, curves=[], ChildModel = ModelCurve):
