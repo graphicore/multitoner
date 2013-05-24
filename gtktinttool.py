@@ -688,11 +688,6 @@ if __name__ == '__main__':
         name = widget.get_text()
         tintController.getTintById(tintId).name = name
     
-    def onWidgetColorChange(widget, tintId):
-        color = widget.get_rgba()
-        rgb = (color.red, color.green, color.blue)
-        tintController.getTintById(tintId).displayColor = rgb
-    
     def onWidgetCMYKValueChange(widget, tintId, colorAttr):
         tint = tintController.getTintById(tintId)
         value = widget.get_adjustment().get_value()
@@ -719,14 +714,9 @@ if __name__ == '__main__':
             widget_curveType.set_active_id(tint.interpolation)
             widget_curveType.connect('changed', onWidgetCurveTypeChange, tintId);
             
-            rgba = Gdk.RGBA(*tint.displayColor)
-            colorButton = Gtk.ColorButton.new_with_rgba(rgba)
-            colorButton.connect('color-set', onWidgetColorChange, tintId);
-            
             ws = [
                 Gtk.Label(_('Name')), widget_name,
                 Gtk.Label(_('Curve Type')), widget_curveType,
-                Gtk.Label(_('Editor Color')), colorButton
             ]
             
             
