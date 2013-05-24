@@ -470,19 +470,15 @@ class CellRendererToggle(Gtk.CellRenderer):
         flags : flags that affect rendering
         """
         active = self.get_property('active')
-        print 'do render ', active
-        
         if active:
             pixbuf = self.activeIcon
         else:
             pixbuf = self.inactiveIcon
         
-        
-        
         width, height = pixbuf.get_width(), pixbuf.get_height()
-        
         x = int(cell_area.width/2 - width/2) + cell_area.x
         y = int(cell_area.height/2 - height/2) + cell_area.y
+        
         Gdk.cairo_set_source_pixbuf(cr, pixbuf, x, y)
         cr.paint()
 
@@ -565,7 +561,6 @@ if __name__ == '__main__':
     
     renderer_editorColor = CellRendererEditorColor(ctrl=tintController)
     renderer_editorColor.set_fixed_size (16,16)
-    column_id = Gtk.TreeViewColumn(_('ID'), renderer_editorColor, text=0)
     
     def deleteRow(cellRenderer, path):
         model = tintController.getTintByPath(path)
@@ -609,13 +604,16 @@ if __name__ == '__main__':
     renderer_visibilityRow.connect('clicked', toggleVisible)
     
     
-    column_id.pack_start(renderer_lockRow, False)
-    column_id.add_attribute(renderer_lockRow, 'active', 3)
+    column_id = Gtk.TreeViewColumn(_('Tools'))
     
     column_id.pack_start(renderer_visibilityRow, False)
-    column_id.add_attribute(renderer_visibilityRow, 'active', 4)
-    
+    column_id.pack_start(renderer_lockRow, False)
+    column_id.pack_start(renderer_editorColor, False)
     column_id.pack_start(renderer_deleteRow, False)
+    
+    column_id.add_attribute(renderer_editorColor, 'text', 0)
+    column_id.add_attribute(renderer_lockRow, 'active', 3)
+    column_id.add_attribute(renderer_visibilityRow, 'active', 4)
     
     controlView.append_column(column_id)
     
