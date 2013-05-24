@@ -57,7 +57,11 @@ class CellRendererTint (Gtk.CellRendererText):
     def onModelUpdated(self, model, event, *args):
         if event == 'curveUpdate':
             tintModel = args[0]
-            self._requestNewSurface(tintModel)
+            tintEvent = args[1]
+            # whitelist, needs probbaly an update when more relevant events occur
+            if tintEvent in ('pointUpdate', 'addPoint', 'removePoint', 'setPoints',
+                   'interpolationChanged', 'cmykChanged'):
+                self._requestNewSurface(tintModel)
         if event == 'removeCurve':
             tintModel = args[0]
             tid = id(tintModel)
@@ -178,9 +182,13 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             self._surface = None
             self.queue_draw()
             return
+        if event == 'curveUpdate':
+            # whitelist, needs probbaly an update when more relevant events occur
+            tintEvent = args[1]
+            if tintEvent not in ('pointUpdate', 'addPoint', 'removePoint', 'setPoints',
+                             'interpolationChanged', 'cmykChanged'):
+                return
         self._requestNewSurface(tintsModel)
-        
-        
     
     def _requestNewSurface(self, tintsModel):
         """ this will be called very frequently, because generating the
@@ -311,8 +319,8 @@ class TintController(object):
         
         
         self.tints = ModelCurves(ChildModel=ModelTint)
-        #id, name, interpolation Name (for display) 
-        self.tintListStore = Gtk.ListStore(int, str, str)
+        #id, name, interpolation Name (for display), locked, visible
+        self.tintListStore = Gtk.ListStore(int, str, str, bool, bool)
         
         self.tintListStore.connect('row_deleted', self.onRowDeleted)
         
@@ -362,6 +370,9 @@ class TintController(object):
         row = self._getRowByModel(curveModel)
         row[1] = curveModel.name
         row[2] = interpolationName
+        row[3] = curveModel.locked
+        row[4] = curveModel.visible
+        
     
     def _getRowByModel(self, curveModel):
         tintId = id(curveModel)
@@ -382,7 +393,8 @@ class TintController(object):
     def _appendToList(self, curveModel):
         modelId = id(curveModel)
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
-        self.tintListStore.append([modelId, curveModel.name, interpolationName])
+        #id, name, interpolation Name (for display), locked, visible
+        self.tintListStore.append([modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible])
     
     def getTintByPath(self, path):
         row = self.tintListStore[path]
@@ -429,19 +441,50 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
         self.emit('clicked', path)
         return True # activate event got 'consumed'
 
-class CellRendererPixbufToggle(Gtk.CellRendererPixbuf):
+class CellRendererToggle(Gtk.CellRenderer):
     __gsignals__ = {
         'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
     }
-
-    def __init__(self):
-        Gtk.CellRendererPixbuf.__init__(self)
+    
+    #active property
+    active = GObject.property(type=bool, default=False)
+    
+    def __init__(self,  activeIcon, inactiveIcon):
+        Gtk.CellRenderer.__init__(self)
         self.set_property('mode', Gtk.CellRendererMode.ACTIVATABLE)
+        self.activeIcon = activeIcon
+        self.inactiveIcon = inactiveIcon
 
     def do_activate(self, event, widget, path, background_area, cell_area,
                     flags):
         self.emit('clicked', path)
         return True # activate event got 'consumed'
+
+    def do_render(self, cr, widget, background_area, cell_area, flags):
+        """
+        self ... a GtkCellRenderer
+        cr : a cairo context to draw to
+        widget : the widget owning window
+        background_area : entire cell area (including tree expanders and maybe padding on the sides)
+        cell_area : area normally rendered by a cell renderer
+        flags : flags that affect rendering
+        """
+        active = self.get_property('active')
+        print 'do render ', active
+        
+        if active:
+            pixbuf = self.activeIcon
+        else:
+            pixbuf = self.inactiveIcon
+        
+        
+        
+        width, height = pixbuf.get_width(), pixbuf.get_height()
+        
+        x = int(cell_area.width/2 - width/2) + cell_area.x
+        y = int(cell_area.height/2 - height/2) + cell_area.y
+        Gdk.cairo_set_source_pixbuf(cr, pixbuf, x, y)
+        cr.paint()
 
 
 #Model for the curveType choices, will be used with GtkCellRendererCombo 
@@ -521,7 +564,7 @@ if __name__ == '__main__':
     gradientView.append_column(column_tint)
     
     renderer_editorColor = CellRendererEditorColor(ctrl=tintController)
-    renderer_editorColor.set_fixed_size (15,15)
+    renderer_editorColor.set_fixed_size (16,16)
     column_id = Gtk.TreeViewColumn(_('ID'), renderer_editorColor, text=0)
     
     def deleteRow(cellRenderer, path):
@@ -540,15 +583,38 @@ if __name__ == '__main__':
     renderer_deleteRow.set_property('stock-id', Gtk.STOCK_DELETE)
     renderer_deleteRow.connect('clicked', deleteRow)
     
-    #renderer_lockRow = CellRendererPixbufToggle()
-    renderer_lockRow = CellRendererPixbufButton()
-    unlockedIcon = GdkPixbuf.Pixbuf.new_from_file_at_size(os.path.join(os.path.dirname(__file__), 'icons', 'unlocked.svg'), 16, 16)
-    renderer_lockRow.set_property('pixbuf', unlockedIcon)
-    #renderer_lockRow.connect('clicked', deleteRow)
+    #locked row
+    def toggleLocked(cellRenderer, path):
+        model = tintController.getTintByPath(path)
+        model.locked = not model.locked
     
+    icons = {}
+    for key, fileName in {'activeIcon': 'locked.svg', 'inactiveIcon': 'unlocked.svg'}.items():
+        iconPath = os.path.join(os.path.dirname(__file__), 'icons', fileName)
+        icons[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(iconPath, 16, 16)
+    renderer_lockRow = CellRendererToggle(**icons)
+    renderer_lockRow.set_fixed_size (16, 16)
+    renderer_lockRow.connect('clicked', toggleLocked)
+    
+    def toggleVisible(cellRenderer, path):
+        model = tintController.getTintByPath(path)
+        model.visible = not model.visible
+    
+    icons = {}
+    for key, fileName in {'activeIcon': 'visible.svg', 'inactiveIcon': 'invisible.svg'}.items():
+        iconPath = os.path.join(os.path.dirname(__file__), 'icons', fileName)
+        icons[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(iconPath, 16, 16)
+    renderer_visibilityRow = CellRendererToggle(**icons)
+    renderer_visibilityRow.set_fixed_size (16, 16)
+    renderer_visibilityRow.connect('clicked', toggleVisible)
     
     
     column_id.pack_start(renderer_lockRow, False)
+    column_id.add_attribute(renderer_lockRow, 'active', 3)
+    
+    column_id.pack_start(renderer_visibilityRow, False)
+    column_id.add_attribute(renderer_visibilityRow, 'active', 4)
+    
     column_id.pack_start(renderer_deleteRow, False)
     
     controlView.append_column(column_id)
