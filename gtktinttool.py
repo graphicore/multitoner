@@ -709,9 +709,6 @@ if __name__ == '__main__':
             tintOptionsBox.set_sensitive(True)
             tint = tintController.getTintById(tintId)
             
-            widget_id = Gtk.Label(tintId)
-            widget_id.set_halign(Gtk.Align.START)
-        
             widget_name = Gtk.Entry()
             widget_name.set_text(tint.name)
             widget_name.connect('changed', onWidgetNameChange, tintId);
@@ -727,7 +724,6 @@ if __name__ == '__main__':
             colorButton.connect('color-set', onWidgetColorChange, tintId);
             
             ws = [
-                Gtk.Label(_('Id')), widget_id,
                 Gtk.Label(_('Name')), widget_name,
                 Gtk.Label(_('Curve Type')), widget_curveType,
                 Gtk.Label(_('Editor Color')), colorButton
