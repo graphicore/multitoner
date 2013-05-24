@@ -192,9 +192,6 @@ class ModelTint(ModelCurve):
         self.name = name
         self.cmyk = cmyk
     
-    def onModelUpdated(self, curveModel, *args):
-        self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
-    
     @property
     def name(self):
         return self._name
