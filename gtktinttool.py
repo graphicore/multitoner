@@ -178,15 +178,16 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self.connect('draw' , self.onDraw)
     
     def onModelUpdated(self, tintsModel, event, *args):
-        if len(tintsModel) == 0:
+        if len(tintsModel.visibleCurves) == 0:
             self._surface = None
             self.queue_draw()
             return
         if event == 'curveUpdate':
             # whitelist, needs probbaly an update when more relevant events occur
             tintEvent = args[1]
-            if tintEvent not in ('pointUpdate', 'addPoint', 'removePoint', 'setPoints',
-                             'interpolationChanged', 'cmykChanged'):
+            if tintEvent not in ('pointUpdate', 'addPoint', 'removePoint',
+                                 'setPoints', 'interpolationChanged',
+                                 'visibleChanged', 'cmykChanged'):
                 return
         self._requestNewSurface(tintsModel)
     
@@ -206,7 +207,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
     def _updateSurface(self, weakrefModel):
         tintsModel = weakrefModel()
         # see if the model still exists
-        if tintsModel is None or len(tintsModel) == 0:
+        if tintsModel is None or len(tintsModel.visibleCurves) == 0:
             # need to return False, to cancel the timeout
             return False
         
@@ -218,9 +219,8 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         
         self._waiting = True
         
-        
         callback = (self._receiveSurface, )
-        self._gradientWorker.addJob(callback, *tintsModel.curves)
+        self._gradientWorker.addJob(callback, *tintsModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
