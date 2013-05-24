@@ -260,39 +260,6 @@ class ColorPreviewWidget(Gtk.DrawingArea):
                 cr.paint()
             cr.set_matrix(ctm)
 
-class CellRendererEditorColor (Gtk.CellRendererText):
-    """
-    inheriting from CellRendererText had two advantages
-    1. the other GtkTreeWidget is rendered with CellRendererTexts, that
-       this widget uses the right height automatically
-    2. I couldn't figure out how to set a custom property, so i can reuse
-       the "text" property to get the tint id
-    for anything else, this could be a Gtk.GtkCellRenderer without objections
-    """
-    def __init__(self, ctrl):
-        Gtk.CellRendererText.__init__(self)
-        self.ctrl = ctrl
-    
-    def do_render(self, cr, widget, background_area, cell_area, flags):
-        """
-        self ... a GtkCellRenderer
-        cr : a cairo context to draw to
-        widget : the widget owning window
-        background_area : entire cell area (including tree expanders and maybe padding on the sides)
-        cell_area : area normally rendered by a cell renderer
-        flags : flags that affect rendering
-        """
-        tid = int(self.get_property('text'))
-        tint = self.ctrl.getTintById(tid)
-        cr.set_source_rgb(*tint.displayColor)
-        width, height  = self.get_fixed_size()
-        width = min(width, cell_area.width)
-        height = min(height, cell_area.height)
-        x = int(cell_area.x + (cell_area.width/2 - width/2))
-        y = int(cell_area.y + (cell_area.height/2 - height/2))
-        cr.rectangle(x, y, width, height)
-        cr.fill()
-
 class TintColumnView (Gtk.TreeViewColumn):
     def __init__(self, name, renderer, scale, text):
         self.renderer = renderer
@@ -441,6 +408,33 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
         self.emit('clicked', path)
         return True # activate event got 'consumed'
 
+class CellRendererEditorColor (CellRendererPixbufButton):
+    def __init__(self, ctrl):
+        CellRendererPixbufButton.__init__(self)
+        self.ctrl = ctrl
+    
+    text = GObject.property(type=str, default='')
+    
+    def do_render(self, cr, widget, background_area, cell_area, flags):
+        """
+        self ... a GtkCellRenderer
+        cr : a cairo context to draw to
+        widget : the widget owning window
+        background_area : entire cell area (including tree expanders and maybe padding on the sides)
+        cell_area : area normally rendered by a cell renderer
+        flags : flags that affect rendering
+        """
+        tid = int(self.get_property('text'))
+        tint = self.ctrl.getTintById(tid)
+        cr.set_source_rgb(*tint.displayColor)
+        width, height  = self.get_fixed_size()
+        width = min(width, cell_area.width)
+        height = min(height, cell_area.height)
+        x = int(cell_area.x + (cell_area.width/2 - width/2))
+        y = int(cell_area.y + (cell_area.height/2 - height/2))
+        cr.rectangle(x, y, width, height)
+        cr.fill()
+
 class CellRendererToggle(Gtk.CellRenderer):
     __gsignals__ = {
         'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
@@ -559,14 +553,28 @@ if __name__ == '__main__':
     column_tint = TintColumnView(_('Tint'), renderer_tint, scale=curveEditor.scale, text=0)
     gradientView.append_column(column_tint)
     
+    
+    def changeColor(cellRenderer, path):
+        model = tintController.getTintByPath(path)
+        #open colorchooser Dialog
+        dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'), w)
+        color = Gdk.RGBA(*model.displayColor)
+        dialog.set_rgba(color)
+        dialog.run()
+        color = dialog.get_rgba()
+        rgb = (color.red, color.green, color.blue)
+        model.displayColor = rgb
+        dialog.destroy()
+    
     renderer_editorColor = CellRendererEditorColor(ctrl=tintController)
     renderer_editorColor.set_fixed_size (16,16)
+    renderer_editorColor.connect('clicked', changeColor)
     
     def deleteRow(cellRenderer, path):
         model = tintController.getTintByPath(path)
         
         dialog = Gtk.MessageDialog(w, 0, Gtk.MessageType.QUESTION,
-            Gtk.ButtonsType.YES_NO, _('Delete the color “{0}”?').format(model.name))
+            Gtk.ButtonsType.YES_NO, _('Delete the ink “{0}”?').format(model.name))
         dialog.format_secondary_text(
             _('You will loose all of its properties.'))
         response = dialog.run()
