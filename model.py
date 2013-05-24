@@ -137,6 +137,10 @@ class ModelCurves(Model):
             self._appendCurve(**curve)
         self.triggerOnModelUpdated('setCurves')
     
+    @property
+    def visibleCurves(self):
+        return tuple(filter(lambda x: x.visible, self._curves))
+    
     def __len__(self):
         return len(self._curves)
     
