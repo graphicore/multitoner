@@ -249,6 +249,9 @@ class Curve(Emitter):
         pass
     
     def draw(self, cr):
+        if not self.model.visible:
+            return
+        
         ctm = cr.get_matrix()
         self.scale.transformCairo(cr)
         cr.set_source_rgb(*self.model.displayColor)
@@ -265,10 +268,14 @@ class Curve(Emitter):
         cr.stroke()
     
     def drawControls(self, cr):
+        if self.model.locked or not self.model.visible:
+            return
         for ctrl in self._controls:
             ctrl.draw(cr)
     
     def isControl(self, x_in, y_in):
+        if self.model.locked:
+            return False
         intersection = self.getIntersection(x_in)
         x, y = self.scale.toScreen(intersection)
         return inCircle(x, y, self.controlRadius, x_in, y_in)
@@ -278,6 +285,9 @@ class Curve(Emitter):
         When 'level' we can first ask for all ControlPoints and then
         for all curves. So all ControllPoints are 'over' all Curves
         """
+        if self.model.locked:
+            return None
+        
         if level is None or level == 0:
             for ctrl in self._controls:
                 if ctrl.isControl(x, y):
