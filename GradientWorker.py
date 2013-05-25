@@ -1,30 +1,55 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from Worker import Worker
-from array import array
 from epstool import EPSTool
-from GhostScriptRunner import GhostScriptRunner
+from array import array
+from multiprocessing import Pool, cpu_count
+import ctypes as c
 
-class GradientWorker(Worker):
+gs = None
+def initializer(*args):
+    """ 
+    import and initialize ghostscript only in a worker process
+    the main process doesn't need it
+    """
+    from GhostScriptRunner import GhostScriptRunner
+    global gs
+    gs = GhostScriptRunner()
+
+def work(job):
+    """
+    This runs in its own process, ideally, then there is no threading
+    problem with ghostscript
+    """
+    r = gs.run(job)
+    # need to transport the result as a string
+    result = r[0], r[1], r[2].raw
+    return result
+
+class GradientWorker(object):
     def __init__(self):
-        super(GradientWorker, self).__init__()
+        self.pool = Pool(initializer=initializer)
+        
         self._epsTool = EPSTool()
         gradientBin = array('B', xrange(0, 256))
         # FIXME: there seems to be a problem wit a 0 byte at the beginning
         # this must be in the ascii85 representation i suppose
-        #gradientBin.reverse()
+        # gradientBin.reverse()
         
         # the input gradient is 256 pixels wide and 1 pixel height
         # we don't need more data and scale this on display
         self._epsTool.setImageData(gradientBin.tostring(), (256, 1))
-        self._gs = GhostScriptRunner()
-        
+    
+    def callback(self, callback, result):
+        """
+        this restores the buffer data from string and runs the callback
+        """
+        buf = c.create_string_buffer(result[2])
+        args = callback[1:] + (result[0], result[1], buf)
+        callback[0](*args)
+    
     def addJob(self, callback, *tints):
         self._epsTool.setColorData(*tints)
         eps = self._epsTool.create()
-        job = (eps, )
-        self._queue.put( (job, callback) )
-        
-    def _run(self, eps):
-        return self._gs.run(eps)
+        cb = lambda result: self.callback(callback, result)
+        self.pool.apply_async(work, args=(eps, ), callback=cb)
