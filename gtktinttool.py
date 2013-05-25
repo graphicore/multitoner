@@ -111,6 +111,7 @@ class CellRendererTint (Gtk.CellRendererText):
         cairo_surface = cairo.ImageSurface.create_for_data(
             buf, cairo.FORMAT_RGB24, w, h, w * 4
         )
+        
         state['surface'] = cairo_surface
         state['waiting'] = False
         if state['update_needed'] is not None:
@@ -135,14 +136,18 @@ class CellRendererTint (Gtk.CellRendererText):
         # print 'cellRendererTint', cell_area.width, cell_area.height, cell_area.x, cell_area.y
         tidHash = self.get_property('text')
         tid = int(tidHash)
-        tintModel = self.ctrl.getTintById(tid)
         
         if tid not in self.state:
+            tintModel = self.ctrl.getTintById(tid)
             self._init_tint(tintModel)
             
         
         width, height = (self.width, cell_area.height)
+        
+        
         cairo_surface = self.state[tid]['surface']
+        
+        
         # x = cell_area.x # this used to be 1 but should have been 0 ??
         # this workaround make this cell renderer useless for other
         # positions than the first cell in a tree, i suppose
@@ -181,7 +186,9 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         if len(tintsModel.visibleCurves) == 0:
             self._surface = None
             self.queue_draw()
+            self._noTints = True
             return
+        self._noTints = False
         if event == 'curveUpdate':
             # whitelist, needs probbaly an update when more relevant events occur
             tintEvent = args[1]
@@ -226,9 +233,13 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         return False
     
     def _receiveSurface(self, w, h, buf):
-        cairo_surface = cairo.ImageSurface.create_for_data(
-            buf, cairo.FORMAT_RGB24, w, h, w * 4
-        )
+        if self._noTints:
+            # this may receive a surface after all tints are invisible
+            cairo_surface = None
+        else:
+            cairo_surface = cairo.ImageSurface.create_for_data(
+                buf, cairo.FORMAT_RGB24, w, h, w * 4
+            )
         
         self._waiting = False
         if self._update_needed is not None:
@@ -487,7 +498,6 @@ if __name__ == '__main__':
     
     GObject.threads_init()
     gradientWorker = GradientWorker()
-    
     use_gui, __ = Gtk.init_check(sys.argv)
     
     w = Gtk.Window()
