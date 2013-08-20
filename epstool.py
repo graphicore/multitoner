@@ -172,7 +172,7 @@ setcolorspace
     _subImageRows 0 gt
     {
       /_subImageRows _subImageRows 1 sub def
-      dup _leftPad _picsubstr rawreaddata putinterval
+      dup _leftPad _picsubstr rawreaddata puinkerval
     }
     { pop _rowpadstr }
     ifelse
@@ -225,7 +225,7 @@ def getImageBinary(string):
     length = len(string)
     return '%%BeginBinary: {0}{1}\n%%EndBinary'.format(len(string), string)
 
-def getDeviceNLuT(*tints):
+def getDeviceNLuT(*inks):
     """
         This table has 256 indexes. For two used colors the first index
         points to two bytes (in the hex representation 4 bytes, 2 bytes
@@ -237,8 +237,8 @@ def getDeviceNLuT(*tints):
     """
     table = []
     xs = np.linspace(1.0, 0.0, 256)
-    for tint in tints:
-        ip = interpolationStrategiesDict[tint.interpolation](tint.pointsValue)
+    for ink in inks:
+        ip = interpolationStrategiesDict[ink.interpolation](ink.pointsValue)
         vals = ip(xs)
         vals = np.nan_to_num(vals)
         # no pos will be smaller than 0 or bigger than 1
@@ -262,10 +262,10 @@ processColors = {
     'Black'  : (0.0, 0.0, 0.0, 1.0)
 }
 
-def isProcessColor(tint):
-    return tint.name in processColors
+def isProcessColor(ink):
+    return ink.name in processColors
 
-def getInitColors(*tints):
+def getInitColors(*inks):
     processColorValue = '{0} {1} {2} {3}'
     initProcessColorsTpl = Template(\
     '/setcmykcolor where {pop\n  $value setcmykcolor\n  \
@@ -280,14 +280,14 @@ lineto stroke\n} if')
     processColorsInit = []
     customColorsInit  = []
     
-    for tint in tints:
+    for ink in inks:
         
-        if isProcessColor(tint):
-            value = processColorValue.format(*processColors[tint.name])
+        if isProcessColor(ink):
+            value = processColorValue.format(*processColors[ink.name])
             processColorsInit.append(
                 initProcessColorsTpl.substitute({'value': value}))
         else:
-            value = customColorValue.format(*tint.cmyk, name=tint.name)
+            value = customColorValue.format(*ink.cmyk, name=ink.name)
             customColorsInit.append(
                 initCustomColorsTpl.substitute({'value': value}))
     
@@ -296,7 +296,7 @@ lineto stroke\n} if')
         'initCustomColors' : '\n'.join(customColorsInit)
     })
     
-def getDSCColors(*tints):
+def getDSCColors(*inks):
     # this has a process color
     # %%DocumentProcessColors:  Black
     # %%DocumentCustomColors: (PANTONE 144 CVC)
@@ -315,31 +315,31 @@ def getDSCColors(*tints):
     colorsSeparator = '\n%%+ '
     cmykCustomFormat = '%%CMYKCustomColor: {0:.4f} {1:.4f} {2:.4f} {3:.4f} ({name})'
     
-    for tint in tints:
-        (processColors if isProcessColor(tint) else customColors).append(tint)
+    for ink in inks:
+        (processColors if isProcessColor(ink) else customColors).append(ink)
 
     if len(processColors):
         DocumentProcessColors =  colorsSeparator.join([
-            tint.name for tint in processColors])
+            ink.name for ink in processColors])
         result.append('%%DocumentProcessColors: {0}'.format(DocumentProcessColors))
     if len(customColors):
         DocumentCustomColors = colorsSeparator.join([
-            '({name})'.format(name=tint.name) for tint in customColors])
+            '({name})'.format(name=ink.name) for ink in customColors])
         result.append('%%DocumentCustomColors: {0}'.format(DocumentCustomColors))
         result += [
-            cmykCustomFormat.format(*tint.cmyk, name=tint.name) for tint in customColors
+            cmykCustomFormat.format(*ink.cmyk, name=ink.name) for ink in customColors
         ]
     return '\n'.join(result)   
 
-def getDuotoneNames(*tints):
+def getDuotoneNames(*inks):
     # '/DuotoneNames [ /Black (PANTONE 144 CVC) ] def',
     names = [
-        ('/{0}' if isProcessColor(tint) else '({0})').format(tint.name)
-        for tint in tints
+        ('/{0}' if isProcessColor(ink) else '({0})').format(ink.name)
+        for ink in inks
     ]    
     return '/DuotoneNames [ {0} ] def'.format(' '.join(names))
 
-def getDuotoneCMYKValues(*tints):
+def getDuotoneCMYKValues(*inks):
     # /DuotoneCMYKValues [
     #   [0.0000  0.0000  0.0000 1.0000] % Black
     #   [0.0300 0.5800 1.0000 0.0000] % PANTONE 144CVC
@@ -348,9 +348,9 @@ def getDuotoneCMYKValues(*tints):
 
     CMYKValues = '\n'.join([
         CMYKValuesFormat.format(
-            *(processColors[tint.name] if isProcessColor(tint) else tint.cmyk),
-            name=tint.name
-        ) for tint in tints
+            *(processColors[ink.name] if isProcessColor(ink) else ink.cmyk),
+            name=ink.name
+        ) for ink in inks
     ])
     return '/DuotoneCMYKValues [\n{0}\n] def'.format(CMYKValues)
 

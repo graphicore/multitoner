@@ -31,7 +31,7 @@ def initializer(*args):
     global gs
     gs = GhostScriptRunner()
  
-def work(filename, tints):
+def work(filename, inks):
     """
     This runs in its own process, ideally, then there is no threading
     problem with ghostscript
@@ -44,10 +44,10 @@ def work(filename, tints):
         print 'image mode', im.mode
         epsTool.setImageData(im.tostring(), im.size)
     
-    print tints
-    tints = [ModelInk(**t) for t in tints]
+    print inks
+    inks = [ModelInk(**t) for t in inks]
     
-    epsTool.setColorData(*tints)
+    epsTool.setColorData(*inks)
     eps = epsTool.create()
     # eps = open(imageName + '.eps').read()
     with open(imageName + '.tst.eps', 'w') as f:
@@ -70,12 +70,12 @@ class PreviewWorker(object):
         args = callback[1:] + (result[0], result[1], buf)
         callback[0](*args)
     
-    def addJob(self, callback, imageName, *tints):
+    def addJob(self, callback, imageName, *inks):
         cb = lambda result: self.callback(callback, result)
         
-        print tints
-        tints = [t.getArgs() for t in tints]
-        self.pool.apply_async(work, args=(imageName, tints), callback=cb)
+        print inks
+        inks = [t.getArgs() for t in inks]
+        self.pool.apply_async(work, args=(imageName, inks), callback=cb)
 
 class PreviewDrawinArea(Gtk.DrawingArea):
     def __init__(self):
@@ -92,9 +92,9 @@ class PreviewDrawinArea(Gtk.DrawingArea):
         return True
         
 class PreviewWindow(Gtk.Window):
-    def __init__(self, tintsModel, imageName):
+    def __init__(self, inksModel, imageName):
         Gtk.Window.__init__(self)
-        tintsModel.add(self) #subscribe
+        inksModel.add(self) #subscribe
         self.imageName = imageName
         
         self.set_title(_('Multitoner Tool preview: {filename}').format(filename=imageName))
@@ -105,29 +105,29 @@ class PreviewWindow(Gtk.Window):
         self._timeout = None
         self._waiting = False
         self._update_needed = None
-        self._noTints = False
+        self._noInks = False
         
         self.da = PreviewDrawinArea()
         self.add(self.da)
         self._previewWorker = PreviewWorker()
     
-    def onModelUpdated(self, tintsModel, event, *args):
-        if len(tintsModel.visibleCurves) == 0:
+    def onModelUpdated(self, inksModel, event, *args):
+        if len(inksModel.visibleCurves) == 0:
             self.da.surface = None
             self.da.queue_draw()
-            self._noTints = True
+            self._noInks = True
             return
-        self._noTints = False
+        self._noInks = False
         if event == 'curveUpdate':
             # whitelist, needs probbaly an update when more relevant events occur
-            tintEvent = args[1]
-            if tintEvent not in ('pointUpdate', 'addPoint', 'removePoint',
+            inkEvent = args[1]
+            if inkEvent not in ('pointUpdate', 'addPoint', 'removePoint',
                                  'setPoints', 'interpolationChanged',
                                  'visibleChanged', 'cmykChanged'):
                 return
-        self._requestNewSurface(tintsModel)
+        self._requestNewSurface(inksModel)
     
-    def _requestNewSurface(self, tintsModel):
+    def _requestNewSurface(self, inksModel):
         """ this will be called very frequently, because generating the
         preview can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
@@ -138,12 +138,12 @@ class PreviewWindow(Gtk.Window):
             GObject.source_remove(self._timeout)
         # schedule a new execution
         self._timeout = GObject.timeout_add(
-            300, self._updateSurface, Weakref(tintsModel))
+            300, self._updateSurface, Weakref(inksModel))
     
     def _updateSurface(self, weakrefModel):
-        tintsModel = weakrefModel()
+        inksModel = weakrefModel()
         # see if the model still exists
-        if tintsModel is None or len(tintsModel.visibleCurves) == 0:
+        if inksModel is None or len(inksModel.visibleCurves) == 0:
             # need to return False, to cancel the timeout
             return False
         
@@ -156,7 +156,7 @@ class PreviewWindow(Gtk.Window):
         self._waiting = True
         
         callback = (self._receiveSurface, )
-        self._previewWorker.addJob(callback, self.imageName, *tintsModel.visibleCurves)
+        self._previewWorker.addJob(callback, self.imageName, *inksModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
@@ -164,8 +164,8 @@ class PreviewWindow(Gtk.Window):
     def _receiveSurface(self, w, h, buf):
         print '_receiveSurface'
         self.da.set_size_request(w, h)
-        if self._noTints:
-            # this may receive a surface after all tints are invisible
+        if self._noInks:
+            # this may receive a surface after all inks are invisible
             cairo_surface = None
         else:
             cairo_surface = cairo.ImageSurface.create_for_data(
@@ -175,10 +175,10 @@ class PreviewWindow(Gtk.Window):
         self._waiting = False
         if self._update_needed is not None:
             # while we where waiting another update became due
-            tintsModel = self._update_needed() # its a weakref
+            inksModel = self._update_needed() # its a weakref
             self._update_needed = None
-            if tintsModel is not None:
-                self._requestNewSurface(tintsModel)
+            if inksModel is not None:
+                self._requestNewSurface(inksModel)
         
         self.da.surface = cairo_surface
         self.da.queue_draw()
