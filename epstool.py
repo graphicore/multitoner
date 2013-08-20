@@ -218,7 +218,7 @@ def junked(string, chunkLen):
     return [string[i:i+chunkLen] for i in range(0, len(string), chunkLen)]
 
 def getImageBinary(string):
-    string = codec.base85_encode(string)
+    string = codec.base85_encode(string, codec.B85_ASCII)
     string = junked(string, 65)
     string = '\n'.join(string)
     string = ('\nbeginimage\n{0}~>'.format(string))
