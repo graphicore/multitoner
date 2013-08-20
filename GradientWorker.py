@@ -48,8 +48,8 @@ class GradientWorker(object):
         args = callback[1:] + (result[0], result[1], buf)
         callback[0](*args)
     
-    def addJob(self, callback, *tints):
-        self._epsTool.setColorData(*tints)
+    def addJob(self, callback, *inks):
+        self._epsTool.setColorData(*inks)
         eps = self._epsTool.create()
         cb = lambda result: self.callback(callback, result)
         self.pool.apply_async(work, args=(eps, ), callback=cb)
