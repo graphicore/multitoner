@@ -3,6 +3,7 @@
 
 from __future__ import division
 import os
+import sys
 from gi.repository import Gtk, Gdk, GObject, GdkPixbuf
 import cairo
 import numpy as np
@@ -11,6 +12,7 @@ from gtkcurvewidget import CurveEditor, CurveException
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from model import ModelCurves, ModelTint
 from GradientWorker import GradientWorker
+from PreviewWindow import PreviewWindow
 
 # just a preparation for i18n
 def _(string):
@@ -172,6 +174,9 @@ class CellRendererTint (Gtk.CellRendererText):
         )
 
 class ColorPreviewWidget(Gtk.DrawingArea):
+    """
+        display a preview gradient of all visible colors using ghostscript
+    """
     def __init__(self, model, gradientWorker):
         super(ColorPreviewWidget, self).__init__()
         model.add(self) #subscribe
@@ -180,6 +185,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._timeout = None
         self._waiting = False
         self._update_needed = None
+        self._noTints = False
         self.connect('draw' , self.onDraw)
     
     def onModelUpdated(self, tintsModel, event, *args):
@@ -257,9 +263,6 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         width = self.get_allocated_width()
         height = self.get_allocated_height()
         cairo_surface = self._surface
-        # x = cell_area.x # this used to be 1 but should have been 0 ??
-        # this workaround make this cell renderer useless for other
-        # positions than the first cell in a tree, i suppose
         if cairo_surface is not None:
             x = 0
             y = 0
@@ -508,7 +511,7 @@ if __name__ == '__main__':
     styleContext = Gtk.StyleContext()
     styleContext.add_provider_for_screen(screen, cssProvider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     
-    w.set_name('win')
+    w.set_title(_('Multitoner Tool'))
     w.set_default_size(640, 480)
     w.set_has_resize_grip(True)
     # the theme should do so
@@ -757,12 +760,54 @@ if __name__ == '__main__':
         tintOptionsBox.show_all()
     show_tint_options()
     
-    
-    
     ###
-    tintController.tints.appendCurve(points=[(0.0, 1.0), (0.5, 0.3), (1, 0.0)], interpolation='spline', name="Yellow")
-    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.4, 0.7)], interpolation='spline', name="Magenta")
-    tintController.tints.appendCurve(points=[(0.0, 0.0), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)], name="Black")
+    # tintController.tints.appendCurve(points=[(0.0, 1.0), (0.5, 0.3), (1, 0.0)], interpolation='spline', name="Yellow")
+    # tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.4, 0.7)], interpolation='spline', name="Magenta")
+    # tintController.tints.appendCurve(points=[(0.0, 0.0), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)], name="Black")
+    
+    
+    if len(sys.argv) > 1:
+        imageName = sys.argv[1]
+        previewWindow = PreviewWindow(tintController.tints, imageName)
+        previewWindow.connect('destroy', Gtk.main_quit)
+        previewWindow.show_all()
+    
+    
+    initTints = [
+        {
+            'locked': True,
+            'name': 'PANTONE 406 C',
+            'displayColor': (0.8233333333333334, 0.7876555555555557, 0.7876555555555557),
+            'cmyk': (0.05, 0.09, 0.1, 0.13),
+            'visible': True,
+            'points': [(0, 0.13370473537604458), (1, 0.45403899721448465), (0.18808777429467086, 0.2590529247910863)],
+            'interpolation': 'monotoneCubic'
+        },
+        {
+            'locked': False,
+            'name': 'PANTONE 409 C',
+            'displayColor': (0.5333333333333333, 0.5411764705882353, 0.5215686274509804),
+            'cmyk': (0.16, 0.25, 0.21, 0.45),
+            'visible': True,
+            'points': [(0, 0), (0.38557993730407525, 0.22841225626740946), (0.7084639498432602, 0.6434540389972145), (1, 0.8495821727019499)],
+            'interpolation': 'linear'
+        },
+        {
+            'locked': False,
+            'name': 'Black',
+            'displayColor': (0, 0, 0),
+            'cmyk': (0.0, 0.0, 0.0, 0.0),
+            'visible': True,
+            'points': [(0.4890282131661442, 0), (1, 1), (0, 0), (0.780564263322884, 0.6295264623955432)],
+            'interpolation': 'spline'
+        }
+    ]
+    
+    for t in initTints:
+        tintController.tints.appendCurve(**t)
+    
+    
+    
     
     w.show_all()
     Gtk.main()
