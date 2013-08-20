@@ -18,10 +18,6 @@ from model import ModelCurves
 def _(string):
     return string
 
-class CurveException(Exception):
-    pass
-
-
 class Scale(Emitter):
     def __init__(self, wh = (1, 1)):
         super(Scale, self).__init__()

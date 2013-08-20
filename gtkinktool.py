@@ -8,7 +8,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf
 import cairo
 from weakref import ref as Weakref
 
-from gtkcurvewidget import CurveEditor, CurveException
+from gtkcurvewidget import CurveEditor
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from model import ModelCurves, ModelInk
 from GradientWorker import GradientWorker
