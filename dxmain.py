@@ -5,7 +5,7 @@ Ghostscript frontend which provides a graphical window
 using PyGtk and python-ghostscript
 """
 # 
-# this is a python port from dxmain.c by artifex http://www.artifex.com
+# This is a python port from dxmain.c by artifex http://www.artifex.com
 # dxmain.c is int the ghostscript repositoty at ghostpdl/gs/psi/dxmain.c
 #
 # Copyright 2013 by Lasse Fister <commander@graphicore.de>
@@ -37,12 +37,12 @@ using PyGtk and python-ghostscript
 # more options: http://www.ghostscript.com/doc/current/Use.htm#Output_device
 #
 # see the main function to change the setup of the display device
+from __future__ import division
 
 __author__ = "Lasse Fister <commander@graphicore.de>"
 __copyright__ = "Copyright 2013 by Lasse Fister <commander@graphicore.de>"
 __licence__ = "GNU General Public License version 3 (GPL v3)"
 
-from __future__ import division
 
 import ghostscript._gsprint as gs
 import ctypes as c
@@ -903,7 +903,7 @@ def main(argv):
                   gs.DISPLAY_DEPTH_8 | gs.DISPLAY_BIGENDIAN
     
     dformat = "-dDisplayFormat=%d" % \
-            ( CAIRO_FORMAT_RGB24 | gs.DISPLAY_TOPFIRST )
+            ( SEPARATION_FORMAT | gs.DISPLAY_TOPFIRST )
     
     nargv = [argv[0], dformat] + argv[1:]
     
