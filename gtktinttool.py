@@ -6,8 +6,8 @@ import os
 import sys
 from gi.repository import Gtk, Gdk, GObject, GdkPixbuf
 import cairo
-import numpy as np
 from weakref import ref as Weakref
+
 from gtkcurvewidget import CurveEditor, CurveException
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from model import ModelCurves, ModelTint
@@ -17,18 +17,11 @@ from PreviewWindow import PreviewWindow
 # just a preparation for i18n
 def _(string):
     return string
-    
-class TintList(object):
-    def __init__(maxTints = None):
-        # its a ghostscript limitation that is used as  delimiter here
-        self.maxTints = maxTints if maxTints is not None else float('inf')
-        pass
-
-import cairo
-from array import array
 
 class CellRendererTint (Gtk.CellRendererText):
     """
+    Display a preview gradient for just one color in the TreeView
+    
     inheriting from CellRendererText had two advantages
     1. the other GtkTreeWidget is rendered with CellRendererTexts, that
        this widget uses the right height automatically
@@ -388,6 +381,9 @@ class TintController(object):
         raise TintControllerException('Tint not found by id {0}'.format(tintId))
 
 class AddInkButton(Gtk.Button):
+    """
+        Button to add one more Ink
+    """
     def __init__(self, ctrl, stockID=None, tooltip=None):
         Gtk.Button.__init__(self)
         if stockID is not None:
