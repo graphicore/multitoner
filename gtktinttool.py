@@ -18,7 +18,7 @@ from PreviewWindow import PreviewWindow
 def _(string):
     return string
 
-class CellRendererTint (Gtk.CellRendererText):
+class CellRendererInk (Gtk.CellRendererText):
     """
     Display a preview gradient for just one color in the TreeView
     
@@ -26,7 +26,7 @@ class CellRendererTint (Gtk.CellRendererText):
     1. the other GtkTreeWidget is rendered with CellRendererTexts, that
        this widget uses the right height automatically
     2. I couldn't figure out how to set a custom property, so i can reuse
-       the "text" property to get the tint id
+       the "text" property to get the ink id
     for anything else, this could be a Gtk.GtkCellRenderer without objections
     """
     def __init__(self, ctrl, model, gradientWorker, width=-1, height=-1):
@@ -38,71 +38,71 @@ class CellRendererTint (Gtk.CellRendererText):
         self.height = height
         self.state = {}
     
-    def _init_tint(self, tintModel):
-        """ init the state for a tintModel"""
-        tid = id(tintModel)
-        self.state[tid] = {
+    def _init_ink(self, inkModel):
+        """ init the state for a inkModel"""
+        iid = id(inkModel)
+        self.state[iid] = {
             'surface':None,
             'timeout':None,
             'waiting': False,
             'update_needed': None
         }
-        self._requestNewSurface(tintModel)
+        self._requestNewSurface(inkModel)
     
     def onModelUpdated(self, model, event, *args):
         if event == 'curveUpdate':
-            tintModel = args[0]
-            tintEvent = args[1]
+            inkModel = args[0]
+            inkEvent = args[1]
             # whitelist, needs probbaly an update when more relevant events occur
-            if tintEvent in ('pointUpdate', 'addPoint', 'removePoint', 'setPoints',
+            if inkEvent in ('pointUpdate', 'addPoint', 'removePoint', 'setPoints',
                    'interpolationChanged', 'cmykChanged'):
-                self._requestNewSurface(tintModel)
+                self._requestNewSurface(inkModel)
         if event == 'removeCurve':
-            tintModel = args[0]
-            tid = id(tintModel)
-            if tid in self.state:
-                del self.state[tid]
+            inkModel = args[0]
+            iid = id(inkModel)
+            if iid in self.state:
+                del self.state[iid]
     
-    def _requestNewSurface(self, tintModel):
+    def _requestNewSurface(self, inkModel):
         """ this will be called very frequently, because generating the
         gradients can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
         """
         
-        tid = id(tintModel)
-        state =  self.state[tid]
+        iid = id(inkModel)
+        state =  self.state[iid]
         
         # reset the timeout
         if state['timeout'] is not None:
             GObject.source_remove(state['timeout'])
         # schedule a new execution
         state['timeout'] = GObject.timeout_add(
-            300, self._updateSurface, Weakref(tintModel))
+            300, self._updateSurface, Weakref(inkModel))
     
     def _updateSurface(self, weakrefModel):
-        tintModel = weakrefModel()
+        inkModel = weakrefModel()
         # see if the model still exists
-        if tintModel is None:
+        if inkModel is None:
             # need to return False, to cancel the timeout
             return False
-        tid = id(tintModel)
-        state = self.state[tid]
+        iid = id(inkModel)
+        state = self.state[iid]
         if state['waiting']:
             # we are waiting for a job to finish, so we don't put another
             # job on the queue right now
             state['update_needed'] = weakrefModel
             return False
         state['waiting'] = True
-        callback = (self._receiveSurface, tid)
-        self.gradientWorker.addJob(callback, tintModel)
+        callback = (self._receiveSurface, iid)
+        self.gradientWorker.addJob(callback, inkModel)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
-    def _receiveSurface(self, tid, w, h, buf):
-        if tid not in self.state:
+    def _receiveSurface(self, iid, w, h, buf):
+        if iid not in self.state:
             return
-        state = self.state[tid]
+        state = self.state[iid]
         cairo_surface = cairo.ImageSurface.create_for_data(
             buf, cairo.FORMAT_RGB24, w, h, w * 4
         )
@@ -111,13 +111,13 @@ class CellRendererTint (Gtk.CellRendererText):
         state['waiting'] = False
         if state['update_needed'] is not None:
             # while we where waiting another update became due
-            tintModel = state['update_needed']() # its a weakref
+            inkModel = state['update_needed']() # its a weakref
             state['update_needed'] = None
-            if tintModel is not None:
-                self._requestNewSurface(tintModel)
+            if inkModel is not None:
+                self._requestNewSurface(inkModel)
         
         #schedule a redraw
-        self.ctrl.triggerRowChanged(tid)
+        self.ctrl.triggerRowChanged(iid)
     
     def do_render(self, cr, widget, background_area, cell_area, flags):
         """
@@ -128,19 +128,19 @@ class CellRendererTint (Gtk.CellRendererText):
         cell_area : area normally rendered by a cell renderer
         flags : flags that affect rendering
         """
-        # print 'cellRendererTint', cell_area.width, cell_area.height, cell_area.x, cell_area.y
-        tidHash = self.get_property('text')
-        tid = int(tidHash)
+        # print 'cellRendererInk', cell_area.width, cell_area.height, cell_area.x, cell_area.y
+        iidHash = self.get_property('text')
+        iid = int(iidHash)
         
-        if tid not in self.state:
-            tintModel = self.ctrl.getTintById(tid)
-            self._init_tint(tintModel)
+        if iid not in self.state:
+            inkModel = self.ctrl.getInkById(iid)
+            self._init_ink(inkModel)
             
         
         width, height = (self.width, cell_area.height)
         
         
-        cairo_surface = self.state[tid]['surface']
+        cairo_surface = self.state[iid]['surface']
         
         
         # x = cell_area.x # this used to be 1 but should have been 0 ??
@@ -178,26 +178,26 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._timeout = None
         self._waiting = False
         self._update_needed = None
-        self._noTints = False
+        self._noInks = False
         self.connect('draw' , self.onDraw)
     
-    def onModelUpdated(self, tintsModel, event, *args):
-        if len(tintsModel.visibleCurves) == 0:
+    def onModelUpdated(self, inksModel, event, *args):
+        if len(inksModel.visibleCurves) == 0:
             self._surface = None
             self.queue_draw()
-            self._noTints = True
+            self._noInks = True
             return
-        self._noTints = False
+        self._noInks = False
         if event == 'curveUpdate':
             # whitelist, needs probbaly an update when more relevant events occur
-            tintEvent = args[1]
-            if tintEvent not in ('pointUpdate', 'addPoint', 'removePoint',
+            inkEvent = args[1]
+            if inkEvent not in ('pointUpdate', 'addPoint', 'removePoint',
                                  'setPoints', 'interpolationChanged',
                                  'visibleChanged', 'cmykChanged'):
                 return
-        self._requestNewSurface(tintsModel)
+        self._requestNewSurface(inksModel)
     
-    def _requestNewSurface(self, tintsModel):
+    def _requestNewSurface(self, inksModel):
         """ this will be called very frequently, because generating the
         gradients can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
@@ -208,12 +208,12 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             GObject.source_remove(self._timeout)
         # schedule a new execution
         self._timeout = GObject.timeout_add(
-            300, self._updateSurface, Weakref(tintsModel))
+            300, self._updateSurface, Weakref(inksModel))
     
     def _updateSurface(self, weakrefModel):
-        tintsModel = weakrefModel()
+        inksModel = weakrefModel()
         # see if the model still exists
-        if tintsModel is None or len(tintsModel.visibleCurves) == 0:
+        if inksModel is None or len(inksModel.visibleCurves) == 0:
             # need to return False, to cancel the timeout
             return False
         
@@ -226,14 +226,14 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._waiting = True
         
         callback = (self._receiveSurface, )
-        self._gradientWorker.addJob(callback, *tintsModel.visibleCurves)
+        self._gradientWorker.addJob(callback, *inksModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
     def _receiveSurface(self, w, h, buf):
-        if self._noTints:
-            # this may receive a surface after all tints are invisible
+        if self._noInks:
+            # this may receive a surface after all inks are invisible
             cairo_surface = None
         else:
             cairo_surface = cairo.ImageSurface.create_for_data(
@@ -243,10 +243,10 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._waiting = False
         if self._update_needed is not None:
             # while we where waiting another update became due
-            tintsModel = self._update_needed() # its a weakref
+            inksModel = self._update_needed() # its a weakref
             self._update_needed = None
-            if tintsModel is not None:
-                self._requestNewSurface(tintsModel)
+            if inksModel is not None:
+                self._requestNewSurface(inksModel)
         
         self._surface = cairo_surface
         self.queue_draw()
@@ -267,7 +267,11 @@ class ColorPreviewWidget(Gtk.DrawingArea):
                 cr.paint()
             cr.set_matrix(ctm)
 
-class TintColumnView (Gtk.TreeViewColumn):
+class HScalingTreeColumnView (Gtk.TreeViewColumn):
+    """ 
+        a Gtk.TreeViewColumn that scales its width according to the scale
+        object it subscribes to.
+    """
     def __init__(self, name, renderer, scale, text):
         self.renderer = renderer
         # hookup the renderer to the scale objects onScaleChange event of the curveEditor
@@ -283,50 +287,50 @@ class TintColumnView (Gtk.TreeViewColumn):
             self.renderer.width = w
             self.queue_resize()
 
-class TintControllerException(Exception):
+class InkControllerException(Exception):
     pass
 
-class TintController(object):
+class InkController(object):
     def __init__(self, curves=[]):
         # ghosscript doesn't do more as it seems
-        self.max_tints = 10 
+        self.max_inks = 10 
         
         
-        self.tints = ModelCurves(ChildModel=ModelInk)
+        self.inks = ModelCurves(ChildModel=ModelInk)
         #id, name, interpolation Name (for display), locked, visible
-        self.tintListStore = Gtk.ListStore(int, str, str, bool, bool)
+        self.inkListStore = Gtk.ListStore(int, str, str, bool, bool)
         
-        self.tintListStore.connect('row_deleted', self.onRowDeleted)
+        self.inkListStore.connect('row_deleted', self.onRowDeleted)
         
-        self.tints.add(self) #subscribe
-        self.tints.curves = curves
+        self.inks.add(self) #subscribe
+        self.inks.curves = curves
     
-    def triggerRowChanged(self, tid):
-        row = self._getRowById(tid)
+    def triggerRowChanged(self, iid):
+        row = self._getRowById(iid)
         path = row.path
-        itr = self.tintListStore.get_iter(path)
-        self.tintListStore.row_changed(path, itr)
+        itr = self.inkListStore.get_iter(path)
+        self.inkListStore.row_changed(path, itr)
     
-    def addTint(self, **args):
-        if len(self.tints) < self.max_tints:
-            self.tints.appendCurve(**args)
+    def addInk(self, **args):
+        if len(self.inks) < self.max_inks:
+            self.inks.appendCurve(**args)
     
-    def deleteTint(self, tintModel):
-        self.tints.removeCurve(tintModel)
+    def deleteInk(self, inkModel):
+        self.inks.removeCurve(inkModel)
     
     def onRowDeleted(self, *args):
         """
         we use this to reorder the curves
         """
         newOrder = []
-        for row in self.tintListStore:
+        for row in self.inkListStore:
             newOrder.append(row[0])
-        self.tints.reorderByIdList(newOrder)
+        self.inks.reorderByIdList(newOrder)
     
     def onModelUpdated(self, model, event, *args):
         if event == 'setCurves':
-            self.tintListStore.clear()
-            for curveModel in self.tints.curves:
+            self.inkListStore.clear()
+            for curveModel in self.inks.curves:
                 self._appendToList(curveModel)
         elif event == 'appendCurve':
             curveModel = args[0]
@@ -349,36 +353,36 @@ class TintController(object):
         
     
     def _getRowByModel(self, curveModel):
-        tintId = id(curveModel)
-        return self._getRowById(tintId)
+        inkId = id(curveModel)
+        return self._getRowById(inkId)
     
-    def _getRowById(self, tintId):
-        for row in self.tintListStore:
-            if row[0] == tintId:
+    def _getRowById(self, inkId):
+        for row in self.inkListStore:
+            if row[0] == inkId:
                 return row
-        raise TintControllerException('Row not found by id {0}'.format(tintId))
+        raise InkControllerException('Row not found by id {0}'.format(inkId))
         
     def _removeFromList(self, curveModel):
         row = self._getRowByModel(curveModel)
         path = row.path
-        itr = self.tintListStore.get_iter(path)
-        self.tintListStore.remove(itr)
+        itr = self.inkListStore.get_iter(path)
+        self.inkListStore.remove(itr)
     
     def _appendToList(self, curveModel):
         modelId = id(curveModel)
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
         #id, name, interpolation Name (for display), locked, visible
-        self.tintListStore.append([modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible])
+        self.inkListStore.append([modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible])
     
-    def getTintByPath(self, path):
-        row = self.tintListStore[path]
-        return self.getTintById(row[0])
+    def getInkByPath(self, path):
+        row = self.inkListStore[path]
+        return self.getInkById(row[0])
     
-    def getTintById(self, tintId):
-        for curveModel in self.tints.curves:
-            if id(curveModel) == tintId:
+    def getInkById(self, inkId):
+        for curveModel in self.inks.curves:
+            if id(curveModel) == inkId:
                 return curveModel
-        raise TintControllerException('Tint not found by id {0}'.format(tintId))
+        raise InkControllerException('Ink not found by id {0}'.format(inkId))
 
 class AddInkButton(Gtk.Button):
     """
@@ -393,15 +397,15 @@ class AddInkButton(Gtk.Button):
             self.set_tooltip_text(tooltip)
         self.ctrl = ctrl
         self.connect('clicked', self.addInk)
-        self.ctrl.tints.add(self)
+        self.ctrl.inks.add(self)
     
     def addInk(self, *args):
-        self.ctrl.addTint()
+        self.ctrl.addInk()
     
     def onModelUpdated(self, model, event, *args):
         if event not in ('removeCurve', 'appendCurve', 'setCurves'):
             return
-        active = len(model) < self.ctrl.max_tints
+        active = len(model) < self.ctrl.max_inks
         addInkButton.set_sensitive(active)
 
 class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
@@ -434,9 +438,9 @@ class CellRendererEditorColor (CellRendererPixbufButton):
         cell_area : area normally rendered by a cell renderer
         flags : flags that affect rendering
         """
-        tid = int(self.get_property('text'))
-        tint = self.ctrl.getTintById(tid)
-        cr.set_source_rgb(*tint.displayColor)
+        iid = int(self.get_property('text'))
+        ink = self.ctrl.getInkById(iid)
+        cr.set_source_rgb(*ink.displayColor)
         width, height  = self.get_fixed_size()
         width = min(width, cell_area.width)
         height = min(height, cell_area.height)
@@ -515,29 +519,29 @@ if __name__ == '__main__':
     
     w.connect('destroy', Gtk.main_quit)
     
-    tintController = TintController()
+    inkController = InkController()
     
-    curveEditor = CurveEditor.new(w, tintController.tints)
+    curveEditor = CurveEditor.new(w, inkController.inks)
     # will take all the space it can get
     curveEditor.set_hexpand(True)
     curveEditor.set_vexpand(True)
     # min width is 256
     curveEditor.set_size_request(256, -1)
     
-    tintGrid = Gtk.Grid()
-    tintGrid.set_column_spacing(5)
-    # tintGrid.set_column_homogeneous(True)
-    # tintGrid.set_row_homogeneous(True)
-    w.add(tintGrid)
+    inkGrid = Gtk.Grid()
+    inkGrid.set_column_spacing(5)
+    # inkGrid.set_column_homogeneous(True)
+    # inkGrid.set_row_homogeneous(True)
+    w.add(inkGrid)
     
     # left : the column number to attach the left side of child to
     # top : the row number to attach the top side of child to
     # width : the number of columns that child will span
     # height : the number of rows that child will span
-    tintGrid.attach(curveEditor, 0, 0, 1, 1)
+    inkGrid.attach(curveEditor, 0, 0, 1, 1)
     
     # make a treeview …
-    controlView = Gtk.TreeView(model=tintController.tintListStore)
+    controlView = Gtk.TreeView(model=inkController.inkListStore)
     controlView.set_reorderable(True)
     controlView.set_property('headers-visible', True)
     
@@ -549,22 +553,22 @@ if __name__ == '__main__':
             selected = model[path][0]
         else:
             selected = None
-        show_tint_options(selected)
+        show_ink_options(selected)
         print 'selected is', selected
     treeSelection.connect("changed", onChangedSelection)
     
-    gradientView = Gtk.TreeView(model=tintController.tintListStore)
+    gradientView = Gtk.TreeView(model=inkController.inkListStore)
     gradientView.set_property('headers-visible', False)
     
     # the width value is just initial and will change when the scale of
     # the curveEditor changes
-    renderer_tint = CellRendererTint(ctrl=tintController, model=tintController.tints, gradientWorker=gradientWorker, width=256)
-    column_tint = TintColumnView(_('Tint'), renderer_tint, scale=curveEditor.scale, text=0)
-    gradientView.append_column(column_tint)
+    renderer_ink = CellRendererInk(ctrl=inkController, model=inkController.inks, gradientWorker=gradientWorker, width=256)
+    column_ink = HScalingTreeColumnView(_('Ink'), renderer_ink, scale=curveEditor.scale, text=0)
+    gradientView.append_column(column_ink)
     
     
     def changeColor(cellRenderer, path):
-        model = tintController.getTintByPath(path)
+        model = inkController.getInkByPath(path)
         #open colorchooser Dialog
         dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'), w)
         color = Gdk.RGBA(*model.displayColor)
@@ -575,12 +579,12 @@ if __name__ == '__main__':
         model.displayColor = rgb
         dialog.destroy()
     
-    renderer_editorColor = CellRendererEditorColor(ctrl=tintController)
+    renderer_editorColor = CellRendererEditorColor(ctrl=inkController)
     renderer_editorColor.set_fixed_size (16,16)
     renderer_editorColor.connect('clicked', changeColor)
     
     def deleteRow(cellRenderer, path):
-        model = tintController.getTintByPath(path)
+        model = inkController.getInkByPath(path)
         
         dialog = Gtk.MessageDialog(w, 0, Gtk.MessageType.QUESTION,
             Gtk.ButtonsType.YES_NO, _('Delete the ink “{0}”?').format(model.name))
@@ -588,7 +592,7 @@ if __name__ == '__main__':
             _('You will loose all of its properties.'))
         response = dialog.run()
         if response == Gtk.ResponseType.YES:
-            tintController.deleteTint(model)
+            inkController.deleteInk(model)
         dialog.destroy()
     
     renderer_deleteRow = CellRendererPixbufButton()
@@ -597,7 +601,7 @@ if __name__ == '__main__':
     
     #locked row
     def toggleLocked(cellRenderer, path):
-        model = tintController.getTintByPath(path)
+        model = inkController.getInkByPath(path)
         model.locked = not model.locked
     
     icons = {}
@@ -609,7 +613,7 @@ if __name__ == '__main__':
     renderer_lockRow.connect('clicked', toggleLocked)
     
     def toggleVisible(cellRenderer, path):
-        model = tintController.getTintByPath(path)
+        model = inkController.getInkByPath(path)
         model.visible = not model.visible
     
     icons = {}
@@ -649,79 +653,79 @@ if __name__ == '__main__':
     gradientView.set_valign(Gtk.Align.END)
     
     
-    tintGrid.attach(gradientView, 0, 1, 1, 1)
+    inkGrid.attach(gradientView, 0, 1, 1, 1)
     
     
-    colorPreviewWidget = ColorPreviewWidget(tintController.tints, gradientWorker)
+    colorPreviewWidget = ColorPreviewWidget(inkController.inks, gradientWorker)
     colorPreviewWidget.set_hexpand(True)
     colorPreviewWidget.set_vexpand(False)
     # set min height
     colorPreviewWidget.set_size_request(-1, 30)
-    tintGrid.attach(colorPreviewWidget, 0, 2, 1, 1)
+    inkGrid.attach(colorPreviewWidget, 0, 2, 1, 1)
     
     colorPreviewLabel = Gtk.Label(_('Result'))
     colorPreviewLabel.set_halign(Gtk.Align.START)
-    tintGrid.attach(colorPreviewLabel, 1, 2, 1, 1)
+    inkGrid.attach(colorPreviewLabel, 1, 2, 1, 1)
     
-    addInkButton = AddInkButton(tintController, Gtk.STOCK_ADD, _('Add a new ink'))
+    addInkButton = AddInkButton(inkController, Gtk.STOCK_ADD, _('Add a new ink'))
     addInkButton.set_halign(Gtk.Align.END)
-    tintGrid.attach(addInkButton, 2, 2, 1, 1)
+    inkGrid.attach(addInkButton, 2, 2, 1, 1)
     
     
     
     
-    tintGrid.set_row_spacing(5)
+    inkGrid.set_row_spacing(5)
     
     rightColumn = Gtk.Grid()
     rightColumn.set_row_spacing(5)
     rightColumn.attach(controlView, 0, 1, 1, 1)
-    tintGrid.attach(rightColumn, 1, 0, 2, 2)
+    inkGrid.attach(rightColumn, 1, 0, 2, 2)
     
-    tintOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
+    inkOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
     
     
     frame = Gtk.Frame()
-    frame.set_label(_('Tint Setup'))
+    frame.set_label(_('Ink Setup'))
     frame.set_valign(Gtk.Align.FILL)
-    frame.add(tintOptionsBox)
+    frame.add(inkOptionsBox)
     frame.set_vexpand(True) # so this pushes itself to the bottom
     
     rightColumn.attach(frame, 0, 0, 1, 1)
     
     
-    def onWidgetCurveTypeChange(widget, tintId):
+    def onWidgetCurveTypeChange(widget, inkId):
         interpolation = widget.get_active_id()
-        tintController.getTintById(tintId).interpolation = interpolation
+        inkController.getInkById(inkId).interpolation = interpolation
     
-    def onWidgetNameChange(widget, tintId):
+    def onWidgetNameChange(widget, inkId):
         name = widget.get_text()
-        tintController.getTintById(tintId).name = name
+        inkController.getInkById(inkId).name = name
     
-    def onWidgetCMYKValueChange(widget, tintId, colorAttr):
-        tint = tintController.getTintById(tintId)
+    def onWidgetCMYKValueChange(widget, inkId, colorAttr):
+        ink = inkController.getInkById(inkId)
         value = widget.get_adjustment().get_value()
-        setattr(tint, colorAttr,  value)
+        setattr(ink, colorAttr,  value)
     
     
-    def show_tint_options(tintId=None):
-        if tintId is None:
-            tintOptionsBox.set_sensitive(False)
+    def show_ink_options(inkId=None):
+        if inkId is None:
+            inkOptionsBox.set_sensitive(False)
             # just disable, this prevents the size of the box from changing
             # and it tells the ui story right
         else:
-            tintOptionsBox.foreach(lambda x, _: x.destroy(), None)
-            tintOptionsBox.set_sensitive(True)
-            tint = tintController.getTintById(tintId)
+            inkOptionsBox.foreach(lambda x, _: x.destroy(), None)
+            inkOptionsBox.set_sensitive(True)
+            ink = inkController.getInkById(inkId)
             
             widget_name = Gtk.Entry()
-            widget_name.set_text(tint.name)
-            widget_name.connect('changed', onWidgetNameChange, tintId);
+            widget_name.set_text(ink.name)
+            widget_name.connect('changed', onWidgetNameChange, inkId);
             
             widget_curveType = Gtk.ComboBoxText.new()
             widget_curveType.set_model(interpolationStrategiesListStore)
             widget_curveType.set_id_column(1)
-            widget_curveType.set_active_id(tint.interpolation)
-            widget_curveType.connect('changed', onWidgetCurveTypeChange, tintId);
+            widget_curveType.set_active_id(ink.interpolation)
+            widget_curveType.connect('changed', onWidgetCurveTypeChange, inkId);
             
             ws = [
                 Gtk.Label(_('Name')), widget_name,
@@ -731,14 +735,14 @@ if __name__ == '__main__':
             
             for i, w in enumerate(ws):
                 hi = i % 2
-                tintOptionsBox.attach(w, hi, (i-hi)/2, 1, 1)
+                inkOptionsBox.attach(w, hi, (i-hi)/2, 1, 1)
                 w.set_halign(Gtk.Align.FILL if hi else Gtk.Align.START)
             
             offset = len(ws)
             for i, (colorAttr, label) in enumerate([('c',_('C')),('m',_('M')),('y',_('Y')),('k', _('K'))]):
                 w = Gtk.Label(label)
                 w.set_halign(Gtk.Align.START)
-                tintOptionsBox.attach(w, 0,i+offset, 1, 1)
+                inkOptionsBox.attach(w, 0,i+offset, 1, 1)
                 
                 # value: the initial value.
                 # lower : the minimum value.
@@ -746,30 +750,30 @@ if __name__ == '__main__':
                 # step_increment : the step increment.
                 # page_increment : the page increment.
                 # page_size : The page size of the adjustment.
-                value = getattr(tint, colorAttr)
+                value = getattr(ink, colorAttr)
                 adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.0)
                 entry = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
                 entry.set_halign(Gtk.Align.FILL)
-                entry.connect('value-changed', onWidgetCMYKValueChange,tintId, colorAttr)
-                tintOptionsBox.attach(entry, 1, i+offset, 1, 1)
+                entry.connect('value-changed', onWidgetCMYKValueChange, inkId, colorAttr)
+                inkOptionsBox.attach(entry, 1, i+offset, 1, 1)
                 
-        tintOptionsBox.show_all()
-    show_tint_options()
+        inkOptionsBox.show_all()
+    show_ink_options()
     
     ###
-    # tintController.tints.appendCurve(points=[(0.0, 1.0), (0.5, 0.3), (1, 0.0)], interpolation='spline', name="Yellow")
-    # tintController.tints.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.4, 0.7)], interpolation='spline', name="Magenta")
-    # tintController.tints.appendCurve(points=[(0.0, 0.0), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)], name="Black")
+    # inkController.inks.appendCurve(points=[(0.0, 1.0), (0.5, 0.3), (1, 0.0)], interpolation='spline', name="Yellow")
+    # inkController.inks.appendCurve(points=[(0.0, 0.0), (0.1, 0.4), (0.4, 0.7)], interpolation='spline', name="Magenta")
+    # inkController.inks.appendCurve(points=[(0.0, 0.0), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)], name="Black")
     
     
     if len(sys.argv) > 1:
         imageName = sys.argv[1]
-        previewWindow = PreviewWindow(tintController.tints, imageName)
+        previewWindow = PreviewWindow(inkController.inks, imageName)
         previewWindow.connect('destroy', Gtk.main_quit)
         previewWindow.show_all()
     
     
-    initTints = [
+    initInks = [
         {
             'locked': True,
             'name': 'PANTONE 406 C',
@@ -799,11 +803,8 @@ if __name__ == '__main__':
         }
     ]
     
-    for t in initTints:
-        tintController.tints.appendCurve(**t)
-    
-    
-    
+    for t in initInks:
+        inkController.inks.appendCurve(**t)
     
     w.show_all()
     Gtk.main()
