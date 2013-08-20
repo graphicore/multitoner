@@ -11,7 +11,7 @@ import PIL.Image as Image
 from weakref import ref as Weakref
 from multiprocessing import Pool
 import ctypes as c
-from model import ModelTint
+from model import ModelInk
 
 # just a preparation for i18n
 def _(string):
@@ -45,7 +45,7 @@ def work(filename, tints):
         epsTool.setImageData(im.tostring(), im.size)
     
     print tints
-    tints = [ModelTint(**t) for t in tints]
+    tints = [ModelInk(**t) for t in tints]
     
     epsTool.setColorData(*tints)
     eps = epsTool.create()

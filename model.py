@@ -195,14 +195,14 @@ class ModelCurves(Model):
         self._curves.remove(model)
         self.triggerOnModelUpdated('removeCurve', model)
 
-class ModelTint(ModelCurve):
+class ModelInk(ModelCurve):
     def __init__(self, name=_('(unnamed)'), cmyk=(0.0, 0.0, 0.0, 0.0), **args):
-        super(ModelTint, self).__init__(**args)
+        super(ModelInk, self).__init__(**args)
         self.name = name
         self.cmyk = cmyk
     
     def getArgs(self):
-        args = super(ModelTint, self).getArgs()
+        args = super(ModelInk, self).getArgs()
         args['name'] = self.name
         args['cmyk'] = self.cmyk
         return args

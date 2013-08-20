@@ -10,7 +10,7 @@ from weakref import ref as Weakref
 
 from gtkcurvewidget import CurveEditor, CurveException
 from interpolation import interpolationStrategies, interpolationStrategiesDict
-from model import ModelCurves, ModelTint
+from model import ModelCurves, ModelInk
 from GradientWorker import GradientWorker
 from PreviewWindow import PreviewWindow
 
@@ -292,7 +292,7 @@ class TintController(object):
         self.max_tints = 10 
         
         
-        self.tints = ModelCurves(ChildModel=ModelTint)
+        self.tints = ModelCurves(ChildModel=ModelInk)
         #id, name, interpolation Name (for display), locked, visible
         self.tintListStore = Gtk.ListStore(int, str, str, bool, bool)
         

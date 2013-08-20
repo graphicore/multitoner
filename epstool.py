@@ -385,10 +385,10 @@ class EPSTool(object):
 
 if __name__== '__main__':
     import sys
-    from model import ModelCurves, ModelTint
+    from model import ModelCurves, ModelInk
     import PIL.Image as Image
     
-    curvesModel = ModelCurves(ChildModel=ModelTint)
+    curvesModel = ModelCurves(ChildModel=ModelInk)
     curvesModel.appendCurve(name='Black', cmyk=(0.0, 0.0, 0.0, 1))
     
     curvesModel.appendCurve(name='PANTONE Greeen', cmyk=(0.0800, 0.0020, 0.9, 0)
