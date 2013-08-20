@@ -44,6 +44,15 @@ class ModelCurve(Model):
         self.locked = locked
         self.visible = visible
     
+    def getArgs(self):
+        return {
+            'points': [p.xy for p in self.points],
+            'interpolation': self.interpolation,
+            'displayColor': self.displayColor,
+            'locked': self.locked,
+            'visible': self.visible
+        }
+    
     def onModelUpdated(self, cp_model, *args):
         self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
     
@@ -191,6 +200,12 @@ class ModelTint(ModelCurve):
         super(ModelTint, self).__init__(**args)
         self.name = name
         self.cmyk = cmyk
+    
+    def getArgs(self):
+        args = super(ModelTint, self).getArgs()
+        args['name'] = self.name
+        args['cmyk'] = self.cmyk
+        return args
     
     @property
     def name(self):
