@@ -637,6 +637,8 @@ class InkSetup(Emitter):
         
         self._inkOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.gtk.add(self._inkOptionsBox)
+        
+        self._connected = [];
         self.show();
     
     def show(self, ink=None):
@@ -645,6 +647,13 @@ class InkSetup(Emitter):
             # just disable, this prevents the size of the box from changing
             # and it tells the ui story right
         else:
+            # the 'value-changed' Signal of Gtk.SpinButton fired on calling
+            # its destroy method when it had focus (cursor blinking inside
+            # the textbox) with a value of 0 and so deleted the actual value
+            for widget, handler_id in self._connected:
+                widget.disconnect(handler_id)
+            self._connected = []
+            
             self._inkOptionsBox.foreach(lambda x, _: x.destroy(), None)
             self._inkOptionsBox.set_sensitive(True)
             inkId = id(ink)
@@ -686,7 +695,8 @@ class InkSetup(Emitter):
                 adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.0)
                 entry = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
                 entry.set_halign(Gtk.Align.FILL)
-                entry.connect('value-changed', self.onCMYKValueChange, inkId, colorAttr)
+                handler_id = entry.connect('value-changed', self.onCMYKValueChange, inkId, colorAttr)
+                self._connected.append((entry, handler_id))
                 self._inkOptionsBox.attach(entry, 1, i+offset, 1, 1)
                 
         self._inkOptionsBox.show_all()
