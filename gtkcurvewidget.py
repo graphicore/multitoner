@@ -305,7 +305,7 @@ class CurveEditor(Gtk.DrawingArea):
         super(CurveEditor, self).__init__()
     
     @classmethod
-    def new(Cls, window, model):
+    def new(Cls, model):
         """
         a factory to create a CurveEditor widget and connect all necessary events
         """
@@ -330,8 +330,20 @@ class CurveEditor(Gtk.DrawingArea):
         widget.connect('button-release-event', widget.onButtonRelease)
         widget.connect('motion-notify-event' , widget.onMotionNotify)
         widget.connect('configure-event'     , widget.onConfigure)
-        window.connect('key-press-event'     , widget.onKeyPress)
-        window.connect('key-release-event'   , widget.onKeyRelease)
+        
+        # this removes the immediate dependency to window
+        def onRealize(widget, *args):
+            """ 
+            closure to connect to window when it establishes this widget
+            """
+            window = widget.get_toplevel()
+            window.connect('key-press-event'     , widget.onKeyPress)
+            window.connect('key-release-event'   , widget.onKeyRelease)
+            # connect just once ever
+            widget.disconnect(realize_handler_id)
+        #save realize_handler_id for the closure of onRealize 
+        realize_handler_id = widget.connect('realize' , onRealize)
+        
         return widget
     
     def _appendCurve(self, curveModel):
@@ -532,7 +544,7 @@ if __name__ == '__main__':
     for interpolation, _ in interpolationStrategies:
         m.appendCurve(points=points, interpolation=interpolation)
     
-    a = CurveEditor.new(w, m)
+    a = CurveEditor.new(m)
     w.add(a)
 
     

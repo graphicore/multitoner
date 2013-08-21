@@ -547,7 +547,7 @@ class InkControlPanel(Gtk.TreeView):
     
     def onDelete(self, cellRenderer, path):
         model = self.inkController.getInkByPath(path)
-        window = self.get_ancestor(Gtk.WindowType)
+        window = self.get_toplevel()
         
         dialog = Gtk.MessageDialog(window, 0, Gtk.MessageType.QUESTION,
             Gtk.ButtonsType.YES_NO, _('Delete the ink “{0}”?').format(model.name))
@@ -560,7 +560,7 @@ class InkControlPanel(Gtk.TreeView):
     
     def onChangeColor(self, cellRenderer, path):
         model = self.inkController.getInkByPath(path)
-        window = self.get_ancestor(Gtk.WindowType)
+        window = self.get_toplevel()
         
         #open colorchooser Dialog
         dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'), window)
@@ -705,13 +705,9 @@ class InkSetup(Emitter):
         setattr(ink, colorAttr,  value)
 
 class InksEditor(Gtk.Grid):
-    def __init__(self, window, gradientWorker):
+    def __init__(self, gradientWorker):
         """
-        window: the toplevel gtk window
         gradientWorker: a initialized GradientWorker
-        
-        Fixme: window shouldnt be needed but is needed for CurveEditor,
-        that might be resolveable in CurveEditor itself
         """
         Gtk.Grid.__init__(self)
         self.set_column_spacing(5)
@@ -719,7 +715,7 @@ class InksEditor(Gtk.Grid):
         
         self.inkController = InkController()
         
-        curveEditor = self.initCurveEditor(window)
+        curveEditor = self.initCurveEditor()
         # left : the column number to attach the left side of child to
         # top : the row number to attach the top side of child to
         # width : the number of columns that child will span
@@ -749,8 +745,8 @@ class InksEditor(Gtk.Grid):
         addInkButton = self.initAddInkButton()
         self.attach(addInkButton, 2, 2, 1, 1)
         
-    def initCurveEditor(self, window):
-        curveEditor = CurveEditor.new(window, self.inkController.inks)
+    def initCurveEditor(self):
+        curveEditor = CurveEditor.new(self.inkController.inks)
         # will take all the space it can get
         curveEditor.set_hexpand(True)
         curveEditor.set_vexpand(True)
@@ -840,7 +836,7 @@ if __name__ == '__main__':
     window.connect('destroy', Gtk.main_quit)
     
     gradientWorker = GradientWorker()
-    inksEditor = InksEditor(window, gradientWorker)
+    inksEditor = InksEditor(gradientWorker)
     window.add(inksEditor)
     
     inkController = inksEditor.inkController
