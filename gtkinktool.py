@@ -310,12 +310,14 @@ class InkController(object):
         #id, name, interpolation Name (for display), locked, visible
         self.inkListStore = Gtk.ListStore(int, str, str, bool, bool)
         
-        self.inkListStore.connect('row_deleted', self.onRowDeleted)
+        # we use this to reorder the curves
+        self.inkListStore.connect('row_deleted', self.reorderInks)
         
         self.inks.add(self) #subscribe
         self.inks.curves = curves
     
     def triggerRowChanged(self, iid):
+        """ schedules a redraw """
         row = self._getRowById(iid)
         path = row.path
         itr = self.inkListStore.get_iter(path)
@@ -328,10 +330,7 @@ class InkController(object):
     def deleteInk(self, inkModel):
         self.inks.removeCurve(inkModel)
     
-    def onRowDeleted(self, *args):
-        """
-        we use this to reorder the curves
-        """
+    def reorderInks(self, *args):
         newOrder = []
         for row in self.inkListStore:
             newOrder.append(row[0])
@@ -340,7 +339,7 @@ class InkController(object):
     def onModelUpdated(self, model, event, *args):
         if event == 'setCurves':
             self.inkListStore.clear()
-            for curveModel in self.inks.curves:
+            for curveModel in model.curves:
                 self._appendToList(curveModel)
         elif event == 'appendCurve':
             curveModel = args[0]
@@ -360,7 +359,6 @@ class InkController(object):
         row[2] = interpolationName
         row[3] = curveModel.locked
         row[4] = curveModel.visible
-        
     
     def _getRowByModel(self, curveModel):
         inkId = id(curveModel)
