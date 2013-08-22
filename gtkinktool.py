@@ -301,12 +301,12 @@ class InkController(object):
     The attempt to have control over ModelCurves and a here synchronized
     Gtk.ListStore
     """
-    def __init__(self, curves=[]):
+    def __init__(self, model):
         # ghosscript doesn't do more as it seems
         self.max_inks = 10 
         
+        self.inks = model
         
-        self.inks = ModelCurves(ChildModel=ModelInk)
         #id, name, interpolation Name (for display), locked, visible
         self.inkListStore = Gtk.ListStore(int, str, str, bool, bool)
         
@@ -314,7 +314,6 @@ class InkController(object):
         self.inkListStore.connect('row_deleted', self.reorderInks)
         
         self.inks.add(self) #subscribe
-        self.inks.curves = curves
     
     def triggerRowChanged(self, iid):
         """ schedules a redraw """
@@ -715,7 +714,7 @@ class InkSetup(Emitter):
         setattr(ink, colorAttr,  value)
 
 class InksEditor(Gtk.Grid):
-    def __init__(self, gradientWorker):
+    def __init__(self, model, gradientWorker):
         """
         gradientWorker: a initialized GradientWorker
         """
@@ -723,7 +722,7 @@ class InksEditor(Gtk.Grid):
         self.set_column_spacing(5)
         self.set_row_spacing(5)
         
-        self.inkController = InkController()
+        self.inkController = InkController(model)
         
         curveEditor = self.initCurveEditor()
         # left : the column number to attach the left side of child to
@@ -845,16 +844,15 @@ if __name__ == '__main__':
     
     window.connect('destroy', Gtk.main_quit)
     
+    model = ModelCurves(ChildModel=ModelInk)
     gradientWorker = GradientWorker()
-    inksEditor = InksEditor(gradientWorker)
+    inksEditor = InksEditor(model, gradientWorker)
     window.add(inksEditor)
-    
-    inkController = inksEditor.inkController
     
     # preview Window
     if len(sys.argv) > 1:
         imageName = sys.argv[1]
-        previewWindow = PreviewWindow(inkController.inks, imageName)
+        previewWindow = PreviewWindow(model, imageName)
         previewWindow.connect('destroy', Gtk.main_quit)
         previewWindow.show_all()
     
@@ -890,7 +888,7 @@ if __name__ == '__main__':
     ]
     
     for t in initInks:
-        inkController.inks.appendCurve(**t)
+        model.appendCurve(**t)
     
     window.show_all()
     Gtk.main()
