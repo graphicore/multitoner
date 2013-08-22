@@ -55,8 +55,9 @@ class CellRendererInk (Gtk.CellRendererText):
             inkModel = args[0]
             inkEvent = args[1]
             # whitelist, needs probbaly an update when more relevant events occur
-            if inkEvent in ('pointUpdate', 'addPoint', 'removePoint', 'setPoints',
-                   'interpolationChanged', 'cmykChanged'):
+            if inkEvent in ('pointUpdate', 'addPoint', 'removePoint',
+                            'setPoints', 'interpolationChanged',
+                            'cmykChanged', 'nameChanged'):
                 self._requestNewSurface(inkModel)
         if event == 'removeCurve':
             inkModel = args[0]
@@ -193,8 +194,9 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             # whitelist, needs probbaly an update when more relevant events occur
             inkEvent = args[1]
             if inkEvent not in ('pointUpdate', 'addPoint', 'removePoint',
-                                 'setPoints', 'interpolationChanged',
-                                 'visibleChanged', 'cmykChanged'):
+                                'setPoints', 'interpolationChanged',
+                                'visibleChanged', 'cmykChanged',
+                                'nameChanged'):
                 return
         self._requestNewSurface(inksModel)
     

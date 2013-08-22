@@ -122,8 +122,9 @@ class PreviewWindow(Gtk.Window):
             # whitelist, needs probbaly an update when more relevant events occur
             inkEvent = args[1]
             if inkEvent not in ('pointUpdate', 'addPoint', 'removePoint',
-                                 'setPoints', 'interpolationChanged',
-                                 'visibleChanged', 'cmykChanged'):
+                                'setPoints', 'interpolationChanged',
+                                'visibleChanged', 'cmykChanged',
+                                'nameChanged'):
                 return
         self._requestNewSurface(inksModel)
     
