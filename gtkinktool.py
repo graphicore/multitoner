@@ -273,15 +273,14 @@ class ColorPreviewWidget(Gtk.DrawingArea):
 class HScalingTreeColumnView (Gtk.TreeViewColumn):
     """ 
         a Gtk.TreeViewColumn that scales its width according to the scale
-        object it subscribes to.
-    """
-    def __init__(self, name, renderer, scale, text):
-        self.renderer = renderer
-        # hookup the renderer to the scale objects onScaleChange event of the curveEditor
-        scale.add(self)
-        #self.scale  = scale
+        object it should to be subscribed to.
         
-        Gtk.TreeViewColumn.__init__(self, name, self.renderer, text=text)
+        hookup the renderer to the scale objects onScaleChange:
+        scale.add(object of HScalingTreeColumnView)
+    """
+    def __init__(self, name, renderer, text):
+        self.renderer = renderer
+        Gtk.TreeViewColumn.__init__(self, name, renderer, text=text)
     
     def onScaleChange(self, scale):
         """ be as wide as the curve widget """
@@ -314,6 +313,19 @@ class InkController(object):
         self.inkListStore.connect('row_deleted', self.reorderInks)
         
         self.inks.add(self) #subscribe
+    
+    def initGradientView(self, gradientWorker, scale):
+        gradientView = Gtk.TreeView(model=self.inkListStore)
+        gradientView.set_valign(Gtk.Align.END)
+        
+        gradientView.set_property('headers-visible', False)
+        # the width value is just initial and will change when the scale of
+        # the curveEditor changes
+        renderer_ink = CellRendererInk(ctrl=self, model=self.inks, gradientWorker=gradientWorker, width=256)
+        column_ink = HScalingTreeColumnView(_('Ink'), renderer_ink, text=0)
+        gradientView.append_column(column_ink)
+        scale.add(column_ink)
+        return gradientView
     
     def triggerRowChanged(self, iid):
         """ schedules a redraw """
@@ -724,7 +736,7 @@ class InksEditor(Gtk.Grid):
         
         self.inkController = InkController(model)
         
-        curveEditor = self.initCurveEditor()
+        curveEditor = self.initCurveEditor(model)
         # left : the column number to attach the left side of child to
         # top : the row number to attach the top side of child to
         # width : the number of columns that child will span
@@ -742,10 +754,11 @@ class InksEditor(Gtk.Grid):
         rightColumn.attach(inkControlPanel, 0, 1, 1, 1)
         
         # scales to the width of curveEditor.scale
-        gradientView = self.initGradientView(gradientWorker, curveEditor.scale)
+        gradientView = self.inkController.initGradientView(gradientWorker,
+                                                           curveEditor.scale)
         self.attach(gradientView, 0, 1, 1, 1)
         
-        colorPreviewWidget = self.initColorPreviewWidget(gradientWorker)
+        colorPreviewWidget = self.initColorPreviewWidget(model, gradientWorker)
         self.attach(colorPreviewWidget, 0, 2, 1, 1)
         
         colorPreviewLabel = self.initColorPreviewLabel()
@@ -754,8 +767,8 @@ class InksEditor(Gtk.Grid):
         addInkButton = self.initAddInkButton()
         self.attach(addInkButton, 2, 2, 1, 1)
         
-    def initCurveEditor(self):
-        curveEditor = CurveEditor.new(self.inkController.inks)
+    def initCurveEditor(self, model):
+        curveEditor = CurveEditor.new(model)
         # will take all the space it can get
         curveEditor.set_hexpand(True)
         curveEditor.set_vexpand(True)
@@ -793,20 +806,8 @@ class InksEditor(Gtk.Grid):
         treeSelection.connect('changed', self.onChangedInkSelection)
         return inkControlPanel
     
-    def initGradientView(self, gradientWorker, scale):
-        gradientView = Gtk.TreeView(model=self.inkController.inkListStore)
-        gradientView.set_valign(Gtk.Align.END)
-        
-        gradientView.set_property('headers-visible', False)
-        # the width value is just initial and will change when the scale of
-        # the curveEditor changes
-        renderer_ink = CellRendererInk(ctrl=self.inkController, model=self.inkController.inks, gradientWorker=gradientWorker, width=256)
-        column_ink = HScalingTreeColumnView(_('Ink'), renderer_ink, scale=scale, text=0)
-        gradientView.append_column(column_ink)
-        return gradientView
-    
-    def initColorPreviewWidget(self, gradientWorker):
-        widget = ColorPreviewWidget(self.inkController.inks, gradientWorker)
+    def initColorPreviewWidget(self, model, gradientWorker):
+        widget = ColorPreviewWidget(model, gradientWorker)
         widget.set_hexpand(True)
         widget.set_vexpand(False)
         # set min height
