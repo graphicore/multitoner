@@ -292,7 +292,7 @@ class HScalingTreeColumnView (Gtk.TreeViewColumn):
 class InkControllerException(Exception):
     pass
 
-class InkController(object):
+class InkController(Emitter):
     """
     This is the interface used by the widgets.
     I'm unsure right now if the Widgets should rather emmit events
@@ -301,6 +301,7 @@ class InkController(object):
     Gtk.ListStore
     """
     def __init__(self, model):
+        Emitter.__init__(self)
         # ghosscript doesn't do more as it seems
         self.max_inks = 10 
         
@@ -313,6 +314,29 @@ class InkController(object):
         self.inkListStore.connect('row_deleted', self.reorderInks)
         
         self.inks.add(self) #subscribe
+    
+    def triggerOnChangedInkSelection(self, *args):
+        for item in self:
+            item.onChangedInkSelection(self, *args)
+    
+    def onChangedInkSelection(self, selection):
+        model, paths = selection.get_selected_rows()
+        if len(paths):
+            path = paths[0]
+            inkId = model[path][0]
+        else:
+            inkId = None
+        self.triggerOnChangedInkSelection(inkId)
+        print 'selected is', inkId
+    
+    def initControlPanel(self):
+        # make a treeview …
+        inkControlPanel = InkControlPanel(model=self.inkListStore,
+                                          inkController=self)
+        inkControlPanel.set_valign(Gtk.Align.END)
+        treeSelection = inkControlPanel.get_selection()
+        treeSelection.connect('changed', self.onChangedInkSelection)
+        return inkControlPanel
     
     def initGradientView(self, gradientWorker, scale):
         gradientView = Gtk.TreeView(model=self.inkListStore)
@@ -735,6 +759,7 @@ class InksEditor(Gtk.Grid):
         self.set_row_spacing(5)
         
         self.inkController = InkController(model)
+        self.inkController.add(self) # subscribe
         
         curveEditor = self.initCurveEditor(model)
         # left : the column number to attach the left side of child to
@@ -750,12 +775,12 @@ class InksEditor(Gtk.Grid):
         self.inkSetup = self.initInkSetup();
         rightColumn.attach(self.inkSetup.gtk, 0, 0, 1, 1)
         
-        inkControlPanel = self.initInkControlPanel(self.inkController.inkListStore)
+        inkControlPanel = self.inkController.initControlPanel()
         rightColumn.attach(inkControlPanel, 0, 1, 1, 1)
         
         # scales to the width of curveEditor.scale
-        gradientView = self.inkController.initGradientView(gradientWorker,
-                                                           curveEditor.scale)
+        gradientView = self.inkController.initGradientView(
+                       gradientWorker, curveEditor.scale)
         self.attach(gradientView, 0, 1, 1, 1)
         
         colorPreviewWidget = self.initColorPreviewWidget(model, gradientWorker)
@@ -782,29 +807,12 @@ class InksEditor(Gtk.Grid):
         inkSetup.gtk.set_vexpand(True) # so this pushes itself to the bottom
         return inkSetup;
     
-    def showInkOptions(self, inkId=None):
+    def onChangedInkSelection(self, inkController, inkId=None):
+        """ callback for the inkController event """
         ink = None
         if inkId is not None:
             ink = self.inkController.getInkById(inkId)
         self.inkSetup.show(ink)
-        
-    def onChangedInkSelection(self, selection):
-        model, paths = selection.get_selected_rows()
-        if len(paths):
-            path = paths[0]
-            selected = model[path][0]
-        else:
-            selected = None
-        self.showInkOptions(selected)
-        print 'selected is', selected
-    
-    def initInkControlPanel(self, inkListStore):
-        # make a treeview …
-        inkControlPanel = InkControlPanel(model=inkListStore, inkController=self.inkController)
-        inkControlPanel.set_valign(Gtk.Align.END)
-        treeSelection = inkControlPanel.get_selection()
-        treeSelection.connect('changed', self.onChangedInkSelection)
-        return inkControlPanel
     
     def initColorPreviewWidget(self, model, gradientWorker):
         widget = ColorPreviewWidget(model, gradientWorker)
