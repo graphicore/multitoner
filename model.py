@@ -178,6 +178,12 @@ class ModelCurves(Model):
         self._curves = newOrder
         self.triggerOnModelUpdated('reorderedCurves')
     
+    def getById(self, mid):
+        for model in self._curves:
+            if id(model) == mid:
+                return model
+        raise ModelException('Model not found by id {0}'.format(mid))
+    
     def onModelUpdated(self, curveModel, *args):
         self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
     
