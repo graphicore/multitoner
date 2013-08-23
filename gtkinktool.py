@@ -329,7 +329,7 @@ class InkController(Emitter):
         for item in self:
             item.onChangedInkSelection(self, *args)
     
-    def onChangedInkSelection(self, selection):
+    def changedInkSelectionHandler(self, selection):
         model, paths = selection.get_selected_rows()
         if len(paths):
             path = paths[0]
@@ -339,13 +339,52 @@ class InkController(Emitter):
         self.triggerOnChangedInkSelection(inkId)
         print 'selected is', inkId
     
+    def toggleVisibilityHandler(self, inkControlPanel, path):
+        model = self.getInkByPath(path)
+        model.visible = not model.visible
+    
+    def toggleLockedHandler(self, inkControlPanel, path):
+        model = self.getInkByPath(path)
+        model.locked = not model.locked
+    
+    def deleteHandler(self, inkControlPanel, path):
+        model = self.getInkByPath(path)
+        window = inkControlPanel.get_toplevel()
+        
+        dialog = Gtk.MessageDialog(window, 0, Gtk.MessageType.QUESTION,
+            Gtk.ButtonsType.YES_NO, _('Delete the ink “{0}”?').format(model.name))
+        dialog.format_secondary_text(
+            _('You will loose all of its properties.'))
+        response = dialog.run()
+        if response == Gtk.ResponseType.YES:
+            self.inks.removeCurve(model)
+        dialog.destroy()
+    
+    def setDisplayColorHandler(self, inkControlPanel, path):
+        model = self.getInkByPath(path)
+        window = inkControlPanel.get_toplevel()
+        
+        #open colorchooser Dialog
+        dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'), window)
+        color = Gdk.RGBA(*model.displayColor)
+        dialog.set_rgba(color)
+        dialog.run()
+        color = dialog.get_rgba()
+        rgb = (color.red, color.green, color.blue)
+        model.displayColor = rgb
+        dialog.destroy()
+    
     def initControlPanel(self):
         # make a treeview …
         inkControlPanel = InkControlPanel(
-                          model=self.inkListStore, inkController=self)
+                          model=self.inkListStore, inkModel=self.inks)
         inkControlPanel.set_valign(Gtk.Align.END)
         treeSelection = inkControlPanel.get_selection()
-        treeSelection.connect('changed', self.onChangedInkSelection)
+        treeSelection.connect('changed', self.changedInkSelectionHandler)
+        inkControlPanel.connect('toggle-visibility', self.toggleVisibilityHandler)
+        inkControlPanel.connect('toggle-locked', self.toggleLockedHandler)
+        inkControlPanel.connect('delete', self.deleteHandler)
+        inkControlPanel.connect('set-display-color', self.setDisplayColorHandler)
         return inkControlPanel
     
     def initGradientView(self, gradientWorker, scale):
@@ -369,9 +408,6 @@ class InkController(Emitter):
         path = row.path
         itr = self.inkListStore.get_iter(path)
         self.inkListStore.row_changed(path, itr)
-    
-    def deleteInk(self, inkModel):
-        self.inks.removeCurve(inkModel)
     
     def reorderInks(self, *args):
         newOrder = []
@@ -427,10 +463,7 @@ class InkController(Emitter):
     
     def getInkByPath(self, path):
         row = self.inkListStore[path]
-        return self.getInkById(row[0])
-    
-    def getInkById(self, inkId):
-        return self.inks.getById(inkId)
+        return self.inks.getById(row[0])
 
 class AddInkButton(Gtk.Button):
     """
@@ -554,96 +587,80 @@ class CellRendererToggle(Gtk.CellRenderer):
         Gdk.cairo_set_source_pixbuf(cr, pixbuf, x, y)
         cr.paint()
 
-#todo: remove the dependency to inkController using a subscription based on Emitter
 class InkControlPanel(Gtk.TreeView):
     """
     This is the 'table' with the toggles for lock and visibility, the
     delete button and the editor color chooser. Furthermore this can be
     used to reorder the inks with drag and drop.
     """
-    def __init__(self, inkController, model, **args):
+    __gsignals__ = {
+          'toggle-visibility': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
+                            # path
+                            GObject.TYPE_STRING, ))
+        , 'toggle-locked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
+                            # path
+                            GObject.TYPE_STRING, ))
+        , 'delete': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
+                            # path
+                            GObject.TYPE_STRING, ))
+        , 'set-display-color': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
+                            # path
+                            GObject.TYPE_STRING, )) 
+    }
+    
+    def __init__(self, inkModel, model, **args):
         Gtk.TreeView.__init__(self, model=model, **args)
         self.set_reorderable(True)
         self.set_property('headers-visible', True)
-        self.inkController = inkController
         
-        for initiate in (self._initColumnId, self._initColumnName,
+        def initColumnId():
+            return self._initColumnId(inkModel)
+        
+        for initiate in (initColumnId, self._initColumnName,
                          self._initColumnCurveType):
             column = initiate()
             self.append_column(column)
     
-    def _initToggle(self, icons, callback):
+    def _initToggle(self, icons, callback, *data):
         setup = {}
         for key, fileName in icons.items():
             iconPath = os.path.join(os.path.dirname(__file__), 'icons', fileName)
             setup[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(iconPath, 16, 16)
         toggle = CellRendererToggle(**setup)
         toggle.set_fixed_size (16, 16)
-        toggle.connect('clicked', callback)
+        toggle.connect('clicked', callback, *data)
         return toggle
     
-    def onToggleVisibility(self, cellRenderer, path):
-        model = self.inkController.getInkByPath(path)
-        model.visible = not model.visible
+    def trigger(self, cellRenderer, path, signalName):
+        self.emit(signalName, path)
     
-    def onToggleLocked(self, cellRenderer, path):
-        model = self.inkController.getInkByPath(path)
-        model.locked = not model.locked
-    
-    def onDelete(self, cellRenderer, path):
-        model = self.inkController.getInkByPath(path)
-        window = self.get_toplevel()
-        
-        dialog = Gtk.MessageDialog(window, 0, Gtk.MessageType.QUESTION,
-            Gtk.ButtonsType.YES_NO, _('Delete the ink “{0}”?').format(model.name))
-        dialog.format_secondary_text(
-            _('You will loose all of its properties.'))
-        response = dialog.run()
-        if response == Gtk.ResponseType.YES:
-            self.inkController.deleteInk(model)
-        dialog.destroy()
-    
-    def onChangeColor(self, cellRenderer, path):
-        model = self.inkController.getInkByPath(path)
-        window = self.get_toplevel()
-        
-        #open colorchooser Dialog
-        dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'), window)
-        color = Gdk.RGBA(*model.displayColor)
-        dialog.set_rgba(color)
-        dialog.run()
-        color = dialog.get_rgba()
-        rgb = (color.red, color.green, color.blue)
-        model.displayColor = rgb
-        dialog.destroy()
-    
-    def _initEditorColorInterface(self):
-        editorColor = CellRendererEditorColor(model=self.inkController.inks)
+    def _initEditorColorInterface(self, model):
+        editorColor = CellRendererEditorColor(model=model)
         editorColor.set_fixed_size(16,16)
-        editorColor.connect('clicked', self.onChangeColor)
+        editorColor.connect('clicked', self.trigger, 'set-display-color')
         return editorColor;
     
     def _initVisibilityToggle(self):
         icons = {'activeIcon': 'visible.svg', 'inactiveIcon': 'invisible.svg'}
-        return self._initToggle(icons, self.onToggleVisibility)
+        return self._initToggle(icons, self.trigger, 'toggle-visibility')
     
     def _initLockedToggle(self):
         icons = {'activeIcon': 'locked.svg', 'inactiveIcon': 'unlocked.svg'}
-        return self._initToggle(icons, self.onToggleLocked)
+        return self._initToggle(icons, self.trigger, 'toggle-locked')
     
     def _initDeleteButton(self):
         button = CellRendererPixbufButton()
         button.set_property('stock-id', Gtk.STOCK_DELETE)
-        button.connect('clicked', self.onDelete)
+        button.connect('clicked', self.trigger, 'delete')
         return button;
     
-    def _initColumnId(self):
+    def _initColumnId(self, model):
         column = Gtk.TreeViewColumn(_('Tools'))
         
         visibilityToggle = self._initVisibilityToggle()
         lockedToggle = self._initLockedToggle()
         deleteButton = self._initDeleteButton()
-        editorColor = self._initEditorColorInterface()
+        editorColor = self._initEditorColorInterface(model)
         
         column.pack_start(visibilityToggle, False)
         column.pack_start(lockedToggle, False)
@@ -668,6 +685,8 @@ class InkControlPanel(Gtk.TreeView):
 class InkSetup(object):
     """
     This is the Interface to change the setup of an ink
+    
+    todo: this should subscribe to model
     """
     def __init__(self, model):
         self.model = model
@@ -781,6 +800,9 @@ class InksEditor(Gtk.Grid):
         self.attach(rightColumn, 1, 0, 2, 2)
         
         inkSetup = self.initInkSetup(model);
+        # todo: the selection could and maybe should be part of the
+        # model data. Then the inksetup could just subscribe to
+        # onModelUpdated
         def onChangedInkSelection(inkController, inkId=None):
             """ callback for the inkController event """
             inkSetup.show(inkId)
