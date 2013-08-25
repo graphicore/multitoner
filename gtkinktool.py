@@ -62,7 +62,7 @@ class CellRendererInk (Gtk.CellRendererText):
                 self._requestNewSurface(inkModel)
         elif event == 'setCurves':
             inks = model.curves
-            ids = map(id, inks)
+            ids = map(lambda i: i.id, inks)
             # remove all missing inks
             for iid in self.state.keys():
                 if iid not in ids:
@@ -74,12 +74,12 @@ class CellRendererInk (Gtk.CellRendererText):
                     self._requestNewSurface(inkModel)
         elif event == 'appendCurve':
             inkModel = args[0]
-            iid = id(inkModel)
+            iid = inkModel.id
             self._init_ink(iid)
             self._requestNewSurface(inkModel)
         elif event == 'removeCurve':
             inkModel = args[0]
-            iid = id(inkModel)
+            iid = inkModel.id
             if iid in self.state:
                 del self.state[iid]
     
@@ -89,7 +89,7 @@ class CellRendererInk (Gtk.CellRendererText):
         method was 300 millisecconds ago and then let the rendering start
         """
         
-        iid = id(inkModel)
+        iid = inkModel.id
         state =  self.state[iid]
         
         # reset the timeout
@@ -105,7 +105,7 @@ class CellRendererInk (Gtk.CellRendererText):
         if inkModel is None:
             # need to return False, to cancel the timeout
             return False
-        iid = id(inkModel)
+        iid = inkModel.id
         state = self.state[iid]
         if state['waiting']:
             # we are waiting for a job to finish, so we don't put another
@@ -440,7 +440,7 @@ class InkController(Emitter):
         row[4] = curveModel.visible
     
     def _getRowByModel(self, curveModel):
-        inkId = id(curveModel)
+        inkId = curveModel.id
         return self._getRowById(inkId)
     
     def _getRowById(self, inkId):
@@ -456,7 +456,7 @@ class InkController(Emitter):
         self.inkListStore.remove(itr)
     
     def _appendToList(self, curveModel):
-        modelId = id(curveModel)
+        modelId = curveModel.id
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
         #id, name, interpolation Name (for display), locked, visible
         self.inkListStore.append([modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible])
@@ -719,7 +719,7 @@ class InkSetup(object):
             
             self._inkOptionsBox.foreach(lambda x, _: x.destroy(), None)
             self._inkOptionsBox.set_sensitive(True)
-            inkId = id(ink)
+            inkId = ink.id
             
             widget_name = Gtk.Entry()
             widget_name.set_text(ink.name)

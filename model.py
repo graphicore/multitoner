@@ -8,10 +8,25 @@ from emitter import Emitter
 def _(string):
     return string
 
+_uniqueIdCounter = 0
+def getUniqueId():
+    global _uniqueIdCounter
+    result = _uniqueIdCounter
+    _uniqueIdCounter += 1
+    return result
+
 class ModelException(Exception):
     pass
 
 class Model(Emitter):
+    def __init__(self, *args):
+        super(Model, self).__init__(*args)
+        self._id = getUniqueId()
+    
+    @property
+    def id(self):
+        return self._id
+    
     def triggerOnModelUpdated(self, *args):
         for item in self:
             item.onModelUpdated(self, *args)
@@ -154,7 +169,7 @@ class ModelCurves(Model):
         return len(self._curves)
     
     def reorderByIdList(self, ids):
-        currentOrder = map(id, self._curves)
+        currentOrder = map(lambda c: c.id, self._curves)
         if ids == currentOrder:
             # the same order was supplied
             return;
@@ -180,7 +195,7 @@ class ModelCurves(Model):
     
     def getById(self, mid):
         for model in self._curves:
-            if id(model) == mid:
+            if model.id == mid:
                 return model
         raise ModelException('Model not found by id {0}'.format(mid))
     
