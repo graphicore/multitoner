@@ -3,6 +3,10 @@
 
 from __future__ import division
 from emitter import Emitter
+from functools import wraps
+from weakref import ref as Weakref
+import cPickle as pickle
+from warnings import warn
 
 # just a preparation for i18n
 def _(string):
@@ -15,10 +19,63 @@ def getUniqueId():
     _uniqueIdCounter += 1
     return result
 
+def getSetterCommand(name, value):
+    value = pickle.dumps(value)
+    def cmd(obj):
+        value = pickle.loads(value)
+        setattr(obj, name, value)
+    return cmd
+
+def getCallingCommand(method, *args):
+    args = pickle.dumps(args)
+    def cmd(obj):
+        args = pickle.loads(args)
+        getattr(obj, method)(*args)
+
+
+def historize(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwds):
+        name = fn.__name__
+        obj = args[0]
+        gotValue = False
+        try:
+            value = getattr(obj, name)
+            gotValue = True
+        except AttributeError:
+            pass
+        if gotValue:
+            
+            undo = getSetterCommand(name, value)
+            obj.addHistory(undo)
+        return fn(*args, **kwds)
+    return wrapper
+
+class ModelHistoryApi(object):
+    @property
+    def historyAPI(self):
+        weakRef = getattr(self, '_historyAPI', None)
+        if weakRef is None:
+            return None
+        return weakRef()
+    
+    @historyAPI.setter
+    def historyAPI(self, api):
+        self._historyAPI = Weakref(api)
+    
+    def addHistory(self, command, path=[]):
+        historyAPI = self.historyAPI
+        if historyAPI is None:
+            warn('Missing History API for ' + str(self))
+            return
+        path.append(self.id)
+        historyAPI.addHistory(command, path)
+
+
 class ModelException(Exception):
     pass
 
-class Model(Emitter):
+class Model(ModelHistoryApi, Emitter):
     def __init__(self, *args):
         super(Model, self).__init__(*args)
         self._id = getUniqueId()
@@ -41,6 +98,7 @@ class ModelControlPoint(Model):
         return self._xy
     
     @xy.setter
+    @historize
     def xy(self, xy):
         xy = (
             max(0, min(1, xy[0])),
@@ -74,6 +132,7 @@ class ModelCurve(Model):
     def _addPoint(self, point):
         model = ModelControlPoint(point)
         model.add(self) # subscribe
+        model.historyAPI = self # for undo/redo
         self._points.append(model)
         return model
     
@@ -98,6 +157,7 @@ class ModelCurve(Model):
         return tuple(self._points)
         
     @points.setter
+    @historize
     def points(self, points):
         self._points = []
         for point in points:
@@ -109,6 +169,7 @@ class ModelCurve(Model):
         return self._interpolation
     
     @interpolation.setter
+    @historize
     def interpolation(self, interpolation):
         self._interpolation = interpolation
         self.triggerOnModelUpdated('interpolationChanged')
@@ -122,6 +183,7 @@ class ModelCurve(Model):
         return self._displayColor
     
     @displayColor.setter
+    @historize
     def displayColor(self, value):
         self._displayColor = value
         self.triggerOnModelUpdated('displayColorChanged')
@@ -131,6 +193,7 @@ class ModelCurve(Model):
         return self._locked
     
     @locked.setter
+    @historize
     def locked(self, value):
         self._locked = bool(value)
         self.triggerOnModelUpdated('lockedChanged')
@@ -140,6 +203,7 @@ class ModelCurve(Model):
         return self._visible
     
     @visible.setter
+    @historize
     def visible(self, value):
         self._visible = bool(value)
         self.triggerOnModelUpdated('visibleChanged')
@@ -155,6 +219,7 @@ class ModelCurves(Model):
         return tuple(self._curves)
     
     @curves.setter
+    @historize
     def curves(self, curves=[]):
         self._curves = []
         for curve in curves:
@@ -173,6 +238,10 @@ class ModelCurves(Model):
         if ids == currentOrder:
             # the same order was supplied
             return;
+        
+        undo = getCallingCommand('reorderByIdList', currentOrder)
+        self.addHistory(undo)
+        
         idSet = set(ids)
         if len(idSet) != len(self._curves):
             raise ModelException(
@@ -205,6 +274,7 @@ class ModelCurves(Model):
     def _appendCurve(self, **args):
         model = self.ChildModel(**args)
         model.add(self) # subscribe
+        model.historyAPI = self # for undo/redo
         self._curves.append(model)
         return model
     
@@ -233,6 +303,7 @@ class ModelInk(ModelCurve):
         return self._name
     
     @name.setter
+    @historize
     def name(self, value):
         self._name = value
         self.triggerOnModelUpdated('nameChanged')
@@ -242,6 +313,7 @@ class ModelInk(ModelCurve):
         return tuple(self._cmyk)
     
     @cmyk.setter
+    @historize
     def cmyk(self, value):
         self._cmyk = list(value)
         self.triggerOnModelUpdated('cmykChanged')
@@ -251,6 +323,7 @@ class ModelInk(ModelCurve):
         return self._cmyk[0]
     
     @c.setter
+    @historize
     def c(self, value):
         self._cmyk[0] = value
         self.triggerOnModelUpdated('cmykChanged')
@@ -260,6 +333,7 @@ class ModelInk(ModelCurve):
         return self._cmyk[1]
     
     @m.setter
+    @historize
     def m(self, value):
         self._cmyk[1] = value
         self.triggerOnModelUpdated('cmykChanged')
@@ -269,6 +343,7 @@ class ModelInk(ModelCurve):
         return self._cmyk[2]
     
     @y.setter
+    @historize
     def y(self, value):
         self._cmyk[2] = value
         self.triggerOnModelUpdated('cmykChanged')
@@ -278,6 +353,7 @@ class ModelInk(ModelCurve):
         return self._cmyk[3]
     
     @k.setter
+    @historize
     def k(self, value):
         self._cmyk[3] = value
         self.triggerOnModelUpdated('cmykChanged')
