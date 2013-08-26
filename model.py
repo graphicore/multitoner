@@ -3,10 +3,8 @@
 
 from __future__ import division
 from emitter import Emitter
-from functools import wraps
-from weakref import ref as Weakref
-import cPickle as pickle
-from warnings import warn
+from history import getSetterCommand, getCallingCommand, historize, ModelHistoryApi
+
 
 # just a preparation for i18n
 def _(string):
@@ -19,66 +17,15 @@ def getUniqueId():
     _uniqueIdCounter += 1
     return result
 
-def getSetterCommand(name, value):
-    value = pickle.dumps(value)
-    def cmd(obj):
-        value = pickle.loads(value)
-        setattr(obj, name, value)
-    return cmd
-
-def getCallingCommand(method, *args):
-    args = pickle.dumps(args)
-    def cmd(obj):
-        args = pickle.loads(args)
-        getattr(obj, method)(*args)
-
-
-def historize(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwds):
-        name = fn.__name__
-        obj = args[0]
-        gotValue = False
-        try:
-            value = getattr(obj, name)
-            gotValue = True
-        except AttributeError:
-            pass
-        if gotValue:
-            
-            undo = getSetterCommand(name, value)
-            obj.addHistory(undo)
-        return fn(*args, **kwds)
-    return wrapper
-
-class ModelHistoryApi(object):
-    @property
-    def historyAPI(self):
-        weakRef = getattr(self, '_historyAPI', None)
-        if weakRef is None:
-            return None
-        return weakRef()
-    
-    @historyAPI.setter
-    def historyAPI(self, api):
-        self._historyAPI = Weakref(api)
-    
-    def addHistory(self, command, path=[]):
-        historyAPI = self.historyAPI
-        if historyAPI is None:
-            warn('Missing History API for ' + str(self))
-            return
-        path.append(self.id)
-        historyAPI.addHistory(command, path)
-
-
 class ModelException(Exception):
     pass
 
 class Model(ModelHistoryApi, Emitter):
-    def __init__(self, *args):
-        super(Model, self).__init__(*args)
-        self._id = getUniqueId()
+    def __init__(self, _id=None):
+        super(Model, self).__init__()
+        if _id is None:
+            _id = getUniqueId()
+        self._id = _id
     
     @property
     def id(self):
@@ -89,8 +36,8 @@ class Model(ModelHistoryApi, Emitter):
             item.onModelUpdated(self, *args)
 
 class ModelControlPoint(Model):
-    def __init__(self, xy):
-        super(ModelControlPoint, self).__init__()
+    def __init__(self, xy, _id=None):
+        super(ModelControlPoint, self).__init__(_id=_id)
         self.xy = xy
     
     @property
@@ -109,8 +56,8 @@ class ModelControlPoint(Model):
             self.triggerOnModelUpdated()
 
 class ModelCurve(Model):
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0), locked=False, visible=True):
-        super(ModelCurve, self).__init__()
+    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0), locked=False, visible=True, _id=None):
+        super(ModelCurve, self).__init__(_id=_id)
         self.interpolation = interpolation
         self.points = points
         self.displayColor = displayColor
@@ -123,30 +70,52 @@ class ModelCurve(Model):
             'interpolation': self.interpolation,
             'displayColor': self.displayColor,
             'locked': self.locked,
-            'visible': self.visible
+            'visible': self.visible,
+            '_id': self.id
         }
+    
+    def getById(self, mid):
+        for model in self._points:
+            if model.id == mid:
+                return model
+        raise ModelException('Model not found by id {0}'.format(mid))
     
     def onModelUpdated(self, cp_model, *args):
         self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
     
-    def _addPoint(self, point):
-        model = ModelControlPoint(point)
+    def _addPoint(self, point, _id=None):
+        model = ModelControlPoint(point, _id=_id)
         model.add(self) # subscribe
         model.historyAPI = self # for undo/redo
         self._points.append(model)
         return model
     
-    def addPoint(self, point):
-        model = self._addPoint(point)
+    def addPoint(self, point, _id=None):
+        model = self._addPoint(point, _id=_id)
+        
+        undo = getCallingCommand('removePointById', model.id)
+        self.addHistory(undo)
+        
         self.triggerOnModelUpdated('addPoint', model)
-        # as a 'setter' this doesn't return
-        # return model
     
     def removePoint(self, model):
+        """
+            removes the point with model id
+            the invert of this is addPoint
+        """
         if len(self._points) == 2:
             return
-        self._points.remove(model)
+        position = self._points.index(model)
+        
+        undo = getCallingCommand('addPoint', model.xy, _id=model.id)
+        self.addHistory(undo)
+        
+        self._points.pop(position)
         self.triggerOnModelUpdated('removePoint', model)
+    
+    def removePointById(self, modelId):
+        model = self.getById(modelId)
+        self.removePoint(model)
     
     @property
     def points(self):
@@ -209,8 +178,8 @@ class ModelCurve(Model):
         self.triggerOnModelUpdated('visibleChanged')
     
 class ModelCurves(Model):
-    def __init__(self, curves=[], ChildModel = ModelCurve):
-        super(ModelCurves, self).__init__()
+    def __init__(self, curves=[], ChildModel = ModelCurve,  _id=None):
+        super(ModelCurves, self).__init__( _id=_id)
         self.ChildModel = ChildModel
         self.curves = curves
     
@@ -223,7 +192,8 @@ class ModelCurves(Model):
     def curves(self, curves=[]):
         self._curves = []
         for curve in curves:
-            self._appendCurve(**curve)
+            # -1 appends
+            self._insertCurve(-1, **curve)
         self.triggerOnModelUpdated('setCurves')
     
     @property
@@ -271,20 +241,42 @@ class ModelCurves(Model):
     def onModelUpdated(self, curveModel, *args):
         self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
     
-    def _appendCurve(self, **args):
-        model = self.ChildModel(**args)
+    def _insertCurve(self, position, **kwds):
+        model = self.ChildModel(**kwds)
         model.add(self) # subscribe
         model.historyAPI = self # for undo/redo
-        self._curves.append(model)
+        if position < 0:
+            # this appends to the list
+            position = len(self._curves)
+        self._curves.insert(position, model)
         return model
     
+    def insertCurve(self, position, **args):
+        model = self._insertCurve(position, **args)
+        
+        undo = getCallingCommand('removeCurveById', model.id)
+        self.addHistory(undo)
+        
+        # get the actual position the model has now
+        position = self._curves.index(model)
+        self.triggerOnModelUpdated('insertCurve', model, position)
+    
     def appendCurve(self, **args):
-        model = self._appendCurve(**args)
-        self.triggerOnModelUpdated('appendCurve', model)
+        """ this is a shortcut for self.insertCurve(-1, **args) """
+        self.insertCurve(-1, **args)
     
     def removeCurve(self, model):
-        self._curves.remove(model)
+        position = self._curves.index(model)
+        
+        undo = getCallingCommand('insertCurve', position, **model.getArgs())
+        self.addHistory(undo)
+        
+        self._curves.pop(position)
         self.triggerOnModelUpdated('removeCurve', model)
+    
+    def removeCurveById(self, modelId):
+        model = self.getById(modelId)
+        self.removeCurve(model)
 
 class ModelInk(ModelCurve):
     def __init__(self, name=_('(unnamed)'), cmyk=(0.0, 0.0, 0.0, 0.0), **args):
