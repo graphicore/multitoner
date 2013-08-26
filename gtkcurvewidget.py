@@ -346,9 +346,14 @@ class CurveEditor(Gtk.DrawingArea):
         
         return widget
     
-    def _appendCurve(self, curveModel):
+    def _insertCurve(self, position, curveModel):
+        if position < 0:
+            position = len(self._curves)
         curve = Curve(curveModel, self.scale)
-        self._curves.append(curve)
+        self._curves.insert(position, curve)
+    
+    def _appendCurve(self, curveModel):
+        self._insertCurve(-1, curveModel)
     
     def _removeCurve(self, curveModel):
         for curve in self._curves:
@@ -433,10 +438,11 @@ class CurveEditor(Gtk.DrawingArea):
         or args[1] == 'nameChanged'):
             return
         
-        if event == 'appendCurve':
+        if event == 'insertCurve':
             # add a curve
             curveModel = args[0]
-            self._appendCurve(curveModel)
+            position = args[1] 
+            self._insertCurve(position, curveModel)
         elif event == 'removeCurve':
             # remove a curve
             curveModel = args[0]
