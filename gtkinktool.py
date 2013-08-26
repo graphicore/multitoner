@@ -62,7 +62,7 @@ class CellRendererInk (Gtk.CellRendererText):
                 self._requestNewSurface(inkModel)
         elif event == 'setCurves':
             inks = model.curves
-            ids = map(lambda i: i.id, inks)
+            ids = inks.ids
             # remove all missing inks
             for iid in self.state.keys():
                 if iid not in ids:
@@ -319,10 +319,6 @@ class InkController(Emitter):
         
         #id, name, interpolation Name (for display), locked, visible
         self.inkListStore = Gtk.ListStore(int, str, str, bool, bool)
-        
-        # we use this to reorder the curves
-        self.inkListStore.connect('row_deleted', self.reorderInks)
-        
         self.inks.add(self) #subscribe
     
     def triggerOnChangedInkSelection(self, *args):
@@ -374,6 +370,21 @@ class InkController(Emitter):
         model.displayColor = rgb
         dialog.destroy()
     
+    def reorderHandler(self, inkControlPanel, sourcePath, targetPath, before):
+        source = self.getInkByPath(sourcePath)
+        target = self.getInkByPath(targetPath)
+        oldOrder = self.inks.ids
+        oldIndex = oldOrder.index(source.id)
+        removedSource = oldOrder[0:oldIndex] + oldOrder[oldIndex+1:]
+        
+        newIndex = oldOrder.index(target.id)
+        if not before:
+            newIndex += 1
+        if oldIndex < newIndex:
+            newIndex -= 1
+        newOrder = removedSource[0:newIndex] + (source.id, ) + removedSource[newIndex:]
+        self.inks.reorderByIdList(newOrder)
+    
     def initControlPanel(self):
         # make a treeview …
         inkControlPanel = InkControlPanel(
@@ -385,6 +396,7 @@ class InkController(Emitter):
         inkControlPanel.connect('toggle-locked', self.toggleLockedHandler)
         inkControlPanel.connect('delete', self.deleteHandler)
         inkControlPanel.connect('set-display-color', self.setDisplayColorHandler)
+        inkControlPanel.connect('reorder', self.reorderHandler)
         return inkControlPanel
     
     def initGradientView(self, gradientWorker, scale):
@@ -409,17 +421,19 @@ class InkController(Emitter):
         itr = self.inkListStore.get_iter(path)
         self.inkListStore.row_changed(path, itr)
     
-    def reorderInks(self, *args):
-        newOrder = []
-        for row in self.inkListStore:
-            newOrder.append(row[0])
-        self.inks.reorderByIdList(newOrder)
-    
     def onModelUpdated(self, model, event, *args):
         if event == 'setCurves':
             self.inkListStore.clear()
             for curveModel in model.curves:
                 self._appendToList(curveModel)
+        elif event == 'reorderedCurves':
+            modelOrder = args[0]
+            oldPosLookup = {}
+            for oldpos, row in enumerate(self.inkListStore):
+                oldPosLookup[row[0]] = oldpos
+            #newOrder[newpos] = oldpos
+            newOrder = [oldPosLookup[mid] for mid in modelOrder]
+            self.inkListStore.reorder(newOrder)
         elif event == 'insertCurve':
             curveModel = args[0]
             position = args[1]
@@ -611,13 +625,25 @@ class InkControlPanel(Gtk.TreeView):
                             GObject.TYPE_STRING, ))
         , 'set-display-color': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
                             # path
-                            GObject.TYPE_STRING, )) 
+                            GObject.TYPE_STRING, ))
+        , 'reorder': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
+                            # source_path, target_path, before/after
+                            GObject.TYPE_STRING, GObject.TYPE_STRING,
+                            GObject.TYPE_BOOLEAN))
     }
     
     def __init__(self, inkModel, model, **args):
         Gtk.TreeView.__init__(self, model=model, **args)
-        self.set_reorderable(True)
         self.set_property('headers-visible', True)
+        
+        # self.set_reorderable(True)
+        # The reordering is implemented by setting up the tree view as a
+        # drag source and destination.
+        targets = [('text/plain', Gtk.TargetFlags.SAME_WIDGET, 0)]
+        self.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK, targets, Gdk.DragAction.MOVE)
+        self.enable_model_drag_dest(targets, Gdk.DragAction.MOVE)
+        self.connect('drag-data-received', self.dragDataReceivedHandler)
+        self.connect('drag-data-get', self.dragDataGetHandler)
         
         def initColumnId():
             return self._initColumnId(inkModel)
@@ -626,6 +652,44 @@ class InkControlPanel(Gtk.TreeView):
                          self._initColumnCurveType):
             column = initiate()
             self.append_column(column)
+    
+    @staticmethod
+    def dragDataGetHandler(treeview, context, selection, info, timestamp):
+        # the easiest way seems to assume that the row beeing dropped
+        # is the selected row
+        model, iter = treeview.get_selection().get_selected()
+        path = str(model.get_path(iter))
+        selection.set(selection.get_target(), 8, path)
+        return
+    
+    @staticmethod
+    def dragDataReceivedHandler(treeview, context, x, y, data, info, time, *user_data):
+        """
+        Atguments:
+        GdkDragContext   context    <gtk.gdk.X11DragContext object at 0x325ad70 (GdkX11DragContext at 0x35fdd30)>,
+        gint             x          171,
+        gint             y          68,
+        GtkSelectionData *data      <GtkSelectionData at 0x7fff1c9796c0>,
+        guint            info       0L,
+        guint            time       4785524L
+                         *user_data
+        """
+        source_path = Gtk.TreePath.new_from_string(data.get_data())
+        target_path, drop_position = treeview.get_dest_row_at_pos(x, y)
+        # drop_positions:
+        #     # both before
+        beforePositions = (Gtk.TreeViewDropPosition.BEFORE, Gtk.TreeViewDropPosition.INTO_OR_BEFORE)
+        afterPositions = (Gtk.TreeViewDropPosition.AFTER, Gtk.TreeViewDropPosition.INTO_OR_AFTER)
+        if drop_position in beforePositions:
+            before = True
+        elif drop_position in afterPositions:
+            before = False
+        else:
+            warn('drop position is neither before nor after {0}'.format(drop_position))
+            return
+        
+        treeview.emit('reorder', source_path, target_path, before)
+        context.finish(success=True, del_=False, time=time)
     
     def _initToggle(self, icons, callback, *data):
         setup = {}
