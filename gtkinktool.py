@@ -14,7 +14,7 @@ from emitter import Emitter
 from model import ModelCurves, ModelInk
 from GradientWorker import GradientWorker
 from PreviewWindow import PreviewWindow
-
+from history import History
 # just a preparation for i18n
 def _(string):
     return string
@@ -72,7 +72,7 @@ class CellRendererInk (Gtk.CellRendererText):
                 if iid not in self.state:
                     self._init_ink(iid)
                     self._requestNewSurface(inkModel)
-        elif event == 'appendCurve':
+        elif event == 'insertCurve':
             inkModel = args[0]
             iid = inkModel.id
             self._init_ink(iid)
@@ -420,9 +420,10 @@ class InkController(Emitter):
             self.inkListStore.clear()
             for curveModel in model.curves:
                 self._appendToList(curveModel)
-        elif event == 'appendCurve':
+        elif event == 'insertCurve':
             curveModel = args[0]
-            self._appendToList(curveModel)
+            position = args[1]
+            self._insertIntoList(curveModel, position)
         elif event == 'removeCurve':
             curveModel = args[0]
             self._removeFromList(curveModel)
@@ -455,11 +456,16 @@ class InkController(Emitter):
         itr = self.inkListStore.get_iter(path)
         self.inkListStore.remove(itr)
     
-    def _appendToList(self, curveModel):
+    def _insertIntoList(self, curveModel, position):
         modelId = curveModel.id
         interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
         #id, name, interpolation Name (for display), locked, visible
-        self.inkListStore.append([modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible])
+        row = [modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible]
+        # when position is -1 this appends
+        self.inkListStore.insert(position, row);
+    
+    def _appendToList(self, curveModel):
+        self._insertIntoList(curveModel, -1)
     
     def getInkByPath(self, path):
         row = self.inkListStore[path]
@@ -477,7 +483,7 @@ class AddInkButton(Gtk.Button):
         if tooltip is not None:
             self.set_tooltip_text(tooltip)
         
-        # ghosscript doesn't do more as it seems
+        # ghostscript doesn't do more as it seems
         self.max_inks = 10 
         
         self.model = model
@@ -489,7 +495,7 @@ class AddInkButton(Gtk.Button):
             self.model.appendCurve()
     
     def onModelUpdated(self, model, event, *args):
-        if event not in ('removeCurve', 'appendCurve', 'setCurves'):
+        if event not in ('removeCurve', 'insertCurve', 'setCurves'):
             return
         active = len(model) < self.max_inks
         self.set_sensitive(active)
@@ -882,9 +888,29 @@ if __name__ == '__main__':
     window.connect('destroy', Gtk.main_quit)
     
     model = ModelCurves(ChildModel=ModelInk)
+    history = History(model)
     gradientWorker = GradientWorker()
     inksEditor = InksEditor(model, gradientWorker)
     window.add(inksEditor)
+    
+    
+    ####
+    def ctrlHistory(widget, action):
+        getattr(history, action)()
+    
+    undoButton = Gtk.Button()
+    undoButton.set_label('gtk-undo')
+    undoButton.set_use_stock(True)
+    undoButton.connect('clicked', ctrlHistory, 'undo')
+    
+    redoButton = Gtk.Button()
+    redoButton.set_label('gtk-redo')
+    redoButton.set_use_stock(True)
+    redoButton.connect('clicked', ctrlHistory, 'redo')
+    
+    inksEditor.attach(undoButton, 0, -1, 1, 1)
+    inksEditor.attach(redoButton, 1, -1, 1, 1)
+    ####
     
     # preview Window
     if len(sys.argv) > 1:
