@@ -203,8 +203,13 @@ class ModelCurves(Model):
     def __len__(self):
         return len(self._curves)
     
+    @property
+    def ids(self):
+        return tuple(map(lambda c: c.id, self._curves))
+        
     def reorderByIdList(self, ids):
-        currentOrder = map(lambda c: c.id, self._curves)
+        currentOrder = self.ids
+        ids = tuple(ids)
         if ids == currentOrder:
             # the same order was supplied
             return;
@@ -230,7 +235,7 @@ class ModelCurves(Model):
                 raise ModelException('Model not found by id {0}'.format(mid))
             newOrder.append(self._curves[currentPos])
         self._curves = newOrder
-        self.triggerOnModelUpdated('reorderedCurves')
+        self.triggerOnModelUpdated('reorderedCurves', ids)
     
     def getById(self, mid):
         for model in self._curves:
