@@ -333,7 +333,6 @@ class InkController(Emitter):
         else:
             inkId = None
         self.triggerOnChangedInkSelection(inkId)
-        print 'selected is', inkId
     
     def toggleVisibilityHandler(self, inkControlPanel, path):
         model = self.getInkByPath(path)
@@ -760,6 +759,7 @@ class InkSetup(object):
     """
     def __init__(self, model):
         self.model = model
+        model.add(self)
         self.gtk = Gtk.Frame()
         self.gtk.set_label(_('Ink Setup'))
         
@@ -769,49 +769,85 @@ class InkSetup(object):
         
         self._inkOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.gtk.add(self._inkOptionsBox)
-        
+        self._currentInkId = None
+        # events show() connected to
         self._connected = [];
+        self._widgets = {}
         self.show();
+    
+    def onModelUpdated(self, model, event, *args):
+        if event != 'curveUpdate':
+            return
+        ink = args[0]
+        inkEvent = args[1]
+        if self._currentInkId != ink.id:
+            return
+        # note that all gtk handlers are blocked during setting the values
+        # this prevents the loop where the model is updated with the very
+        # same changes it just triggert
+        if inkEvent == 'nameChanged':
+            widget, handler_id = self._widgets['name']
+            widget.handler_block(handler_id)
+            widget.set_text(ink.name)
+            widget.handler_unblock(handler_id)
+        elif inkEvent == 'cmykChanged':
+            for attr in ('c', 'm', 'y', 'k'):
+                widget, handler_id = self._widgets[attr]
+                widget.handler_block(handler_id)
+                adjustment = widget.get_adjustment().set_value(getattr(ink, attr))
+                widget.handler_unblock(handler_id)
+        elif inkEvent == 'interpolationChanged':
+            widget, handler_id = self._widgets['curveType']
+            widget.handler_block(handler_id)
+            widget.set_active_id(ink.interpolation)
+            widget.handler_unblock(handler_id)
     
     def show(self, inkId=None):
         if inkId is None:
             self._inkOptionsBox.set_sensitive(False)
             # just disable, this prevents the size of the box from changing
-            # and it tells the ui story right
+            # and it tells the ui story somehow right, or?
         else:
+            self._currentInkId = inkId
             ink = self.model.getById(inkId)
             # the 'value-changed' Signal of Gtk.SpinButton fired on calling
             # its destroy method when it had focus (cursor blinking inside
             # the textbox) with a value of 0 and so deleted the actual value
-            for widget, handler_id in self._connected:
+            for widget, handler_id in self._widgets.values():
                 widget.disconnect(handler_id)
-            self._connected = []
+            
+            self._widgets = {}
+            widgets = self._widgets
             
             self._inkOptionsBox.foreach(lambda x, _: x.destroy(), None)
             self._inkOptionsBox.set_sensitive(True)
             inkId = ink.id
             
-            widget_name = Gtk.Entry()
-            widget_name.set_text(ink.name)
-            widget_name.connect('changed', self.onNameChange, inkId);
+            # make the name widget
+            widget = Gtk.Entry()
+            widget.set_text(ink.name)
+            handler_id = widget.connect('changed', self.onNameChange, inkId);
+            widgets['name'] = (widget, handler_id)
             
-            widget_curveType = Gtk.ComboBoxText.new()
-            widget_curveType.set_model(self._interpolations)
-            widget_curveType.set_id_column(1)
-            widget_curveType.set_active_id(ink.interpolation)
-            widget_curveType.connect('changed', self.onCurveTypeChange, inkId);
+            # make the interpolation type widget
+            widget = Gtk.ComboBoxText.new()
+            widget.set_model(self._interpolations)
+            widget.set_id_column(1)
+            widget.set_active_id(ink.interpolation)
+            handler_id = widget.connect('changed', self.onCurveTypeChange, inkId);
+            widgets['curveType'] = (widget, handler_id)
             
+            # insert the name and the interpolation type widget with labels
             ws = [
-                Gtk.Label(_('Name')), widget_name,
-                Gtk.Label(_('Curve Type')), widget_curveType,
+                Gtk.Label(_('Name')), widgets['name'][0],
+                Gtk.Label(_('Curve Type')), widgets['curveType'][0],
             ]
-            
-            
             for i, w in enumerate(ws):
                 hi = i % 2
                 self._inkOptionsBox.attach(w, hi, (i-hi)/2, 1, 1)
                 w.set_halign(Gtk.Align.FILL if hi else Gtk.Align.START)
             
+            # make and insert the cmyk widgets
             offset = len(ws)
             for i, (colorAttr, label) in enumerate([('c',_('C')),('m',_('M')),('y',_('Y')),('k', _('K'))]):
                 w = Gtk.Label(label)
@@ -826,12 +862,11 @@ class InkSetup(object):
                 # page_size : The page size of the adjustment.
                 value = getattr(ink, colorAttr)
                 adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.0)
-                entry = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
-                entry.set_halign(Gtk.Align.FILL)
-                handler_id = entry.connect('value-changed', self.onCMYKValueChange, inkId, colorAttr)
-                self._connected.append((entry, handler_id))
-                self._inkOptionsBox.attach(entry, 1, i+offset, 1, 1)
-                
+                widget = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
+                widget.set_halign(Gtk.Align.FILL)
+                handler_id = widget.connect('value-changed', self.onCMYKValueChange, inkId, colorAttr)
+                self._inkOptionsBox.attach(widget, 1, i+offset, 1, 1)
+                widgets[colorAttr] = (widget, handler_id)
         self._inkOptionsBox.show_all()
     
     def onCurveTypeChange(self, widget, inkId):
