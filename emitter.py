@@ -15,18 +15,29 @@ class Emitter(object):
         to unsubscribe use emitterObj.remove or emitterObj.discard or
            delete all references to the subscriber
     """
-    def __init__(self):
-        self.__subscriptions = WeakSet()
-    
-    def __iter__(self):
-        for item in self.__subscriptions:
-            yield item
+    @property
+    def _subscriptions(self):
+        if not hasattr(self, '_Emitter__subscriptions'):
+            self.__subscriptions = WeakSet()
+        return self.__subscriptions
     
     def add(self, thing):
-        self.__subscriptions.add(thing)
+        self._subscriptions.add(thing)
     
     def discard(self, thing):
-        self.__subscriptions.discard(thing)
+        self._subscriptions.discard(thing)
     
     def remove(self, thing):
-        self.__subscriptions.remove(thing)
+        self._subscriptions.remove(thing)
+    
+    def _getstate(self, state):
+        # this is what the __ makes with atrribute names : _{0}{1}.format(ClassName, MethodName)
+        if '_Emitter__subscriptions' in state:
+            del state['_Emitter__subscriptions'] # remove the WeakSet
+    
+    def __getstate__(self):
+        state = self.__dict__.copy() # copy the dict since we change it
+        return self._getstate(_getstate)
+    
+    # no need for since this Class can handle a missing _Emitter__subscriptions
+    # def __setstate__():
