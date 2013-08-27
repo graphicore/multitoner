@@ -366,7 +366,8 @@ class InkController(Emitter):
         dialog.run()
         color = dialog.get_rgba()
         rgb = (color.red, color.green, color.blue)
-        model.displayColor = rgb
+        if rgb != model.displayColor:
+            model.displayColor = rgb
         dialog.destroy()
     
     def reorderHandler(self, inkControlPanel, sourcePath, targetPath, before):
@@ -773,36 +774,53 @@ class InkSetup(object):
         # events show() connected to
         self._connected = [];
         self._widgets = {}
+        # there seems no way to detect when a widget gets ready to emmit
+        # 'change' signals i.E. a 'focus' signal or something
+        # this is used to detect whether a widget had a change directly before
+        self._lastCmd = None
         self.show();
     
     def onModelUpdated(self, model, event, *args):
         if event != 'curveUpdate':
+            self._lastCmd = None
             return
         ink = args[0]
         inkEvent = args[1]
         if self._currentInkId != ink.id:
+            self._lastCmd = None
             return
         # note that all gtk handlers are blocked during setting the values
         # this prevents the loop where the model is updated with the very
         # same changes it just triggert
         if inkEvent == 'nameChanged':
             widget, handler_id = self._widgets['name']
-            widget.handler_block(handler_id)
-            widget.set_text(ink.name)
-            widget.handler_unblock(handler_id)
+            if widget.get_text() != ink.name:
+                self._lastCmd = None
+                widget.handler_block(handler_id)
+                widget.set_text(ink.name)
+                widget.handler_unblock(handler_id)
         elif inkEvent == 'cmykChanged':
             for attr in ('c', 'm', 'y', 'k'):
                 widget, handler_id = self._widgets[attr]
+                adjustment = widget.get_adjustment()
+                value = getattr(ink, attr)
+                if adjustment.get_value() == value:
+                    continue
+                self._lastCmd = None
                 widget.handler_block(handler_id)
-                adjustment = widget.get_adjustment().set_value(getattr(ink, attr))
+                adjustment.set_value(value)
                 widget.handler_unblock(handler_id)
         elif inkEvent == 'interpolationChanged':
+            self._lastCmd = None
             widget, handler_id = self._widgets['curveType']
             widget.handler_block(handler_id)
             widget.set_active_id(ink.interpolation)
             widget.handler_unblock(handler_id)
+        else:
+            self._lastCmd = None
     
     def show(self, inkId=None):
+        self._lastCmd = None
         if inkId is None:
             self._inkOptionsBox.set_sensitive(False)
             # just disable, this prevents the size of the box from changing
@@ -868,17 +886,30 @@ class InkSetup(object):
                 self._inkOptionsBox.attach(widget, 1, i+offset, 1, 1)
                 widgets[colorAttr] = (widget, handler_id)
         self._inkOptionsBox.show_all()
+        
     
     def onCurveTypeChange(self, widget, inkId):
+        ink = self.model.getById(inkId)
+        self._lastCmd = None
         interpolation = widget.get_active_id()
-        self.model.getById(inkId).interpolation = interpolation
+        ink.interpolation = interpolation
     
     def onNameChange(self, widget, inkId):
+        ink = self.model.getById(inkId)
+        currentCmd = (inkId, 'name')
+        if self._lastCmd != currentCmd:
+            self._lastCmd = currentCmd
+            ink.registerConsecutiveCommand()
         name = widget.get_text()
-        self.model.getById(inkId).name = name
+        ink.name = name
     
     def onCMYKValueChange(self, widget, inkId, colorAttr):
         ink = self.model.getById(inkId)
+        currentCmd = (inkId, colorAttr)
+        if self._lastCmd != currentCmd:
+            self._lastCmd = currentCmd
+            ink.registerConsecutiveCommand()
+            print 'registered consecutive', currentCmd
         value = widget.get_adjustment().get_value()
         setattr(ink, colorAttr,  value)
 
