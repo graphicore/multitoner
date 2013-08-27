@@ -31,7 +31,7 @@ class Scale(Emitter):
         return self._wh
     
     def triggerOnChange(self):
-        for item in self:
+        for item in self._subscriptions:
             item.onScaleChange(self)
     
     def toScreen(self, point):
@@ -76,7 +76,7 @@ class ControlPoint(Emitter):
         return self.xy < other.xy
     
     def triggerOnPointDelete(self):
-        for item in self:
+        for item in self._subscriptions:
             item.onPointDelete(self)
     
     def onModelUpdated(self, model):
@@ -549,7 +549,7 @@ if __name__ == '__main__':
     m = ModelCurves()
     points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
     for interpolation, _ in interpolationStrategies:
-        m.appendCurve(points=points, interpolation=interpolation)
+        m.appendCurve({'points':points, interpolation:'interpolation'})
     
     a = CurveEditor.new(m)
     w.add(a)
