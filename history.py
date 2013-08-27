@@ -9,7 +9,7 @@ from warnings import warn
 from model import *
 
 def getSetterCommand(name, value):
-    pickledValue = pickle.dumps(value)
+    pickledValue = pickle.dumps(value, -1)
     def cmd(obj):
         value = pickle.loads(pickledValue)
         setattr(obj, name, value)
@@ -19,13 +19,11 @@ def getSetterCommand(name, value):
     cmd.__name__= 'set__{0}__'.format(name)
     return cmd
 
-def getCallingCommand(method, *args, **kwds):
-    pickledArgs = pickle.dumps(args)
-    pickledKwds = pickle.dumps(kwds)
+def getCallingCommand(method, *args):
+    pickledArgs = pickle.dumps(args, -1)
     def cmd(obj):
         args = pickle.loads(pickledArgs)
-        kwds = pickle.loads(pickledKwds)
-        getattr(obj, method)(*args, **kwds)
+        getattr(obj, method)(*args)
     cmd.__doc__ = 'calling {0}'.format(method)
     # name is used to distinguish between different commands on the same
     # model it is important detect consecutive commands
@@ -51,6 +49,16 @@ def historize(fn):
     return wrapper
 
 class ModelHistoryApi(object):
+    def _getstate(self, state):
+        if '_historyAPI' in state:
+            del state['_historyAPI'] # remove the WeakRef
+    def __getstate__(self):
+        state = self.__dict__.copy() # copy the dict since we change it
+        return self._getstate(_getstate)
+    
+    # no need for since this Class can handle a missing _historyAPI
+    # def __setstate__():
+    
     @property
     def historyAPI(self):
         weakRef = getattr(self, '_historyAPI', None)
