@@ -21,23 +21,33 @@ class ModelException(Exception):
     pass
 
 class Model(ModelHistoryApi, Emitter):
-    def __init__(self, _id=None):
+    def __init__(self):
         super(Model, self).__init__()
-        if _id is None:
-            _id = getUniqueId()
+        _id = getUniqueId()
         self._id = _id
+    
+    def __getstate__(self):
+        state = self.__dict__.copy() # copy the dict since we change it
+        ModelHistoryApi._getstate(self, state)
+        Emitter._getstate(self, state)
+        return state
     
     @property
     def id(self):
         return self._id
     
+    def _connect(self, *children):
+        for child in children:
+            child.add(self) # subscribe
+            child.historyAPI = self # for undo/redo
+    
     def triggerOnModelUpdated(self, *args):
-        for item in self:
+        for item in self._subscriptions:
             item.onModelUpdated(self, *args)
 
 class ModelControlPoint(Model):
-    def __init__(self, xy, _id=None):
-        super(ModelControlPoint, self).__init__(_id=_id)
+    def __init__(self, xy):
+        super(ModelControlPoint, self).__init__()
         self.xy = xy
     
     @property
@@ -56,13 +66,18 @@ class ModelControlPoint(Model):
             self.triggerOnModelUpdated()
 
 class ModelCurve(Model):
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0), locked=False, visible=True, _id=None):
-        super(ModelCurve, self).__init__(_id=_id)
+    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0), locked=False, visible=True):
+        super(ModelCurve, self).__init__()
         self.interpolation = interpolation
         self.points = points
         self.displayColor = displayColor
         self.locked = locked
         self.visible = visible
+    
+    def __setstate__(self, state):
+        """ for the pickle protocol """
+        self.__dict__.update(state)
+        self._connect(*self._points)
     
     def getArgs(self):
         return {
@@ -71,7 +86,6 @@ class ModelCurve(Model):
             'displayColor': self.displayColor,
             'locked': self.locked,
             'visible': self.visible,
-            '_id': self.id
         }
     
     def getById(self, mid):
@@ -83,15 +97,17 @@ class ModelCurve(Model):
     def onModelUpdated(self, cp_model, *args):
         self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
     
-    def _addPoint(self, point, _id=None):
-        model = ModelControlPoint(point, _id=_id)
-        model.add(self) # subscribe
-        model.historyAPI = self # for undo/redo
+    def _addPoint(self, point):
+        if not isinstance(point, ModelControlPoint):
+            model = ModelControlPoint(point)
+        else:
+            model = point
+        self._connect(model)
         self._points.append(model)
         return model
     
-    def addPoint(self, point, _id=None):
-        model = self._addPoint(point, _id=_id)
+    def addPoint(self, point):
+        model = self._addPoint(point)
         
         undo = getCallingCommand('removePointById', model.id)
         self.addHistory(undo)
@@ -107,7 +123,7 @@ class ModelCurve(Model):
             return
         position = self._points.index(model)
         
-        undo = getCallingCommand('addPoint', model.xy, _id=model.id)
+        undo = getCallingCommand('addPoint', model)
         self.addHistory(undo)
         
         self._points.pop(position)
@@ -178,10 +194,15 @@ class ModelCurve(Model):
         self.triggerOnModelUpdated('visibleChanged')
     
 class ModelCurves(Model):
-    def __init__(self, curves=[], ChildModel = ModelCurve,  _id=None):
-        super(ModelCurves, self).__init__( _id=_id)
+    def __init__(self, curves=[], ChildModel = ModelCurve):
+        super(ModelCurves, self).__init__()
         self.ChildModel = ChildModel
         self.curves = curves
+    
+    def __setstate__(self, state):
+        """ for the pickle protocol """
+        self.__dict__.update(state)
+        self._connect(*self._curves)
     
     @property
     def curves(self):
@@ -193,7 +214,7 @@ class ModelCurves(Model):
         self._curves = []
         for curve in curves:
             # -1 appends
-            self._insertCurve(-1, **curve)
+            self._insertCurve(-1, curve)
         self.triggerOnModelUpdated('setCurves')
     
     @property
@@ -246,18 +267,21 @@ class ModelCurves(Model):
     def onModelUpdated(self, curveModel, *args):
         self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
     
-    def _insertCurve(self, position, **kwds):
-        model = self.ChildModel(**kwds)
-        model.add(self) # subscribe
-        model.historyAPI = self # for undo/redo
+    def _insertCurve(self, position, curve):
+        try:
+            model = self.ChildModel(**curve)
+        except TypeError:
+            # so it better is already a ChildModel 
+            model = curve
+        self._connect(model)
         if position < 0:
             # this appends to the list
             position = len(self._curves)
         self._curves.insert(position, model)
         return model
     
-    def insertCurve(self, position, **args):
-        model = self._insertCurve(position, **args)
+    def insertCurve(self, position, curve):
+        model = self._insertCurve(position, curve)
         
         undo = getCallingCommand('removeCurveById', model.id)
         self.addHistory(undo)
@@ -266,14 +290,14 @@ class ModelCurves(Model):
         position = self._curves.index(model)
         self.triggerOnModelUpdated('insertCurve', model, position)
     
-    def appendCurve(self, **args):
-        """ this is a shortcut for self.insertCurve(-1, **args) """
-        self.insertCurve(-1, **args)
+    def appendCurve(self, curve):
+        """ this is a shortcut for self.insertCurve(-1, curve) """
+        self.insertCurve(-1, curve)
     
     def removeCurve(self, model):
         position = self._curves.index(model)
         
-        undo = getCallingCommand('insertCurve', position, **model.getArgs())
+        undo = getCallingCommand('insertCurve', position, model)
         self.addHistory(undo)
         
         self._curves.pop(position)
