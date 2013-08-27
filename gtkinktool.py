@@ -322,7 +322,7 @@ class InkController(Emitter):
         self.inks.add(self) #subscribe
     
     def triggerOnChangedInkSelection(self, *args):
-        for item in self:
+        for item in self._subscriptions:
             item.onChangedInkSelection(self, *args)
     
     def changedInkSelectionHandler(self, selection):
@@ -763,7 +763,14 @@ class InkSetup(object):
         model.add(self)
         self.gtk = Gtk.Frame()
         self.gtk.set_label(_('Ink Setup'))
-        
+        # this is about the focus-in-event
+        # From the docs:
+        # To receive this signal, the GdkWindow associated to the widget needs
+        # to enable the GDK_FOCUS_CHANGE_MASK mask. 
+        # This is done on init using self.gtk.add_events (0 | Gdk.EventMask.FOCUS_CHANGE_MASK)
+        # however, since it worked before I have no prove that this is done
+        # right, so when it breaks some day, look here
+        self.gtk.add_events (0 | Gdk.EventMask.FOCUS_CHANGE_MASK)
         self._interpolations = Gtk.ListStore(str, str)
         for key, item in interpolationStrategies:
             self._interpolations.append([item.name, key])
@@ -774,20 +781,14 @@ class InkSetup(object):
         # events show() connected to
         self._connected = [];
         self._widgets = {}
-        # there seems no way to detect when a widget gets ready to emmit
-        # 'change' signals i.E. a 'focus' signal or something
-        # this is used to detect whether a widget had a change directly before
-        self._lastCmd = None
         self.show();
     
     def onModelUpdated(self, model, event, *args):
         if event != 'curveUpdate':
-            self._lastCmd = None
             return
         ink = args[0]
         inkEvent = args[1]
         if self._currentInkId != ink.id:
-            self._lastCmd = None
             return
         # note that all gtk handlers are blocked during setting the values
         # this prevents the loop where the model is updated with the very
@@ -795,7 +796,6 @@ class InkSetup(object):
         if inkEvent == 'nameChanged':
             widget, handler_id = self._widgets['name']
             if widget.get_text() != ink.name:
-                self._lastCmd = None
                 widget.handler_block(handler_id)
                 widget.set_text(ink.name)
                 widget.handler_unblock(handler_id)
@@ -806,21 +806,16 @@ class InkSetup(object):
                 value = getattr(ink, attr)
                 if adjustment.get_value() == value:
                     continue
-                self._lastCmd = None
                 widget.handler_block(handler_id)
                 adjustment.set_value(value)
                 widget.handler_unblock(handler_id)
         elif inkEvent == 'interpolationChanged':
-            self._lastCmd = None
             widget, handler_id = self._widgets['curveType']
             widget.handler_block(handler_id)
             widget.set_active_id(ink.interpolation)
             widget.handler_unblock(handler_id)
-        else:
-            self._lastCmd = None
     
     def show(self, inkId=None):
-        self._lastCmd = None
         if inkId is None:
             self._inkOptionsBox.set_sensitive(False)
             # just disable, this prevents the size of the box from changing
@@ -845,6 +840,7 @@ class InkSetup(object):
             widget = Gtk.Entry()
             widget.set_text(ink.name)
             handler_id = widget.connect('changed', self.onNameChange, inkId);
+            widget.connect('focus-in-event', self.focusInHandler, inkId)
             widgets['name'] = (widget, handler_id)
             
             # make the interpolation type widget
@@ -883,33 +879,26 @@ class InkSetup(object):
                 widget = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
                 widget.set_halign(Gtk.Align.FILL)
                 handler_id = widget.connect('value-changed', self.onCMYKValueChange, inkId, colorAttr)
+                widget.connect('focus-in-event', self.focusInHandler, inkId)
                 self._inkOptionsBox.attach(widget, 1, i+offset, 1, 1)
                 widgets[colorAttr] = (widget, handler_id)
         self._inkOptionsBox.show_all()
         
+    def focusInHandler(self, widget, __, inkId):
+        self.model.getById(inkId).registerConsecutiveCommand()
     
     def onCurveTypeChange(self, widget, inkId):
         ink = self.model.getById(inkId)
-        self._lastCmd = None
         interpolation = widget.get_active_id()
         ink.interpolation = interpolation
     
     def onNameChange(self, widget, inkId):
         ink = self.model.getById(inkId)
-        currentCmd = (inkId, 'name')
-        if self._lastCmd != currentCmd:
-            self._lastCmd = currentCmd
-            ink.registerConsecutiveCommand()
         name = widget.get_text()
         ink.name = name
     
     def onCMYKValueChange(self, widget, inkId, colorAttr):
         ink = self.model.getById(inkId)
-        currentCmd = (inkId, colorAttr)
-        if self._lastCmd != currentCmd:
-            self._lastCmd = currentCmd
-            ink.registerConsecutiveCommand()
-            print 'registered consecutive', currentCmd
         value = widget.get_adjustment().get_value()
         setattr(ink, colorAttr,  value)
 
@@ -1081,7 +1070,7 @@ if __name__ == '__main__':
     ]
     
     for t in initInks:
-        model.appendCurve(**t)
+        model.appendCurve(t)
     
     window.show_all()
     Gtk.main()
