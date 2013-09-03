@@ -268,10 +268,9 @@ class ModelCurves(Model):
         self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
     
     def _insertCurve(self, position, curve):
-        try:
+        if not isinstance(curve, self.ChildModel):
             model = self.ChildModel(**curve)
-        except TypeError:
-            # so it better is already a ChildModel 
+        else:
             model = curve
         self._connect(model)
         if position < 0:
@@ -280,7 +279,9 @@ class ModelCurves(Model):
         self._curves.insert(position, model)
         return model
     
-    def insertCurve(self, position, curve):
+    def insertCurve(self, position, curve=None):
+        if curve is None:
+            curve = {}
         model = self._insertCurve(position, curve)
         
         undo = getCallingCommand('removeCurveById', model.id)
@@ -290,7 +291,7 @@ class ModelCurves(Model):
         position = self._curves.index(model)
         self.triggerOnModelUpdated('insertCurve', model, position)
     
-    def appendCurve(self, curve):
+    def appendCurve(self, curve=None):
         """ this is a shortcut for self.insertCurve(-1, curve) """
         self.insertCurve(-1, curve)
     
