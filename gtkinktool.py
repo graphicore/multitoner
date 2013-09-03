@@ -924,7 +924,10 @@ class InksEditor(Gtk.Grid):
         rightColumn.set_row_spacing(5)
         self.attach(rightColumn, 1, 0, 2, 2)
         
-        inkSetup = self.initInkSetup(model);
+        # its important to keep a reference of this, otherwise its __dict__
+        # gets lost and the InkSetup won't know its model anymore
+        # this is a phenomen with gtk
+        self.inkSetup = inkSetup = self.initInkSetup(model);
         # todo: the selection could and maybe should be part of the
         # model data. Then the inksetup could just subscribe to
         # onModelUpdated
@@ -959,6 +962,11 @@ class InksEditor(Gtk.Grid):
         curveEditor.set_vexpand(True)
         # min width is 256
         curveEditor.set_size_request(256, -1)
+        
+        self.add_events(Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.KEY_RELEASE_MASK)
+        self.connect('key-press-event'     , curveEditor.onKeyPress)
+        self.connect('key-release-event'   , curveEditor.onKeyRelease)
+        
         return curveEditor
     
     def initInkSetup(self, model):
@@ -1010,6 +1018,7 @@ if __name__ == '__main__':
     history = History(model)
     gradientWorker = GradientWorker()
     inksEditor = InksEditor(model, gradientWorker)
+    
     window.add(inksEditor)
     
     
