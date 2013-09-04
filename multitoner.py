@@ -24,6 +24,11 @@ UI_INFO = """
       <separator />
       <menuitem action='FileSaveDocument' />
       <menuitem action='FileSaveAsDocument' />
+      <menuitem action='FileSaveAll' />
+      <separator />
+      <menuitem action='FileClose' />
+      <menuitem action='FileCloseOther' />
+      <menuitem action='FileCloseAll' />
       <separator />
       <menuitem action='FileQuit' />
     </menu>
@@ -36,6 +41,9 @@ UI_INFO = """
   
 </ui>
 """
+
+
+               
 
 class Label(Gtk.Grid):
     __gsignals__ = {
@@ -162,8 +170,9 @@ class Multitoner(Gtk.Grid):
         self._notebook.connect('page-removed' , self.pageAddRemoveHandler)
         self._notebook.connect('page-added'   , self.pageAddRemoveHandler)
         
-        
         self.attach(self._notebook, 0, 1, 1, 1)
+        self._setActiveDocumentState()
+        self._setGlobalState()
     
     def switchPageHandler(self, widget, page, page_num):
         self.setCurrentPage(page_num)
@@ -187,21 +196,36 @@ class Multitoner(Gtk.Grid):
                 return doc
         return None
     
+    @property
+    def hasChangedDocuments(self):
+        for doc in self._documents.values():
+            if doc.hasChanges:
+                return True
+        return False
+    
+    def setActivePage(self, doc):
+        page = self._notebook.page_num(doc.widget)
+        self._notebook.set_current_page(page)
+    
     def onDocumentStateUpdate(self, doc, *args):
         if doc is self.activeDocument:
             self._setActiveDocumentState()
+        self._setGlobalState()
     
     def setCurrentPage(self, page=None):
         if page is None:
             page = self._notebook.get_current_page()
-        doc = self.getDocumentByPage(page)
         # activeDocument is either a Document or None
-        if self.activeDocument is not None and self.activeDocument is not doc:
-            self.activeDocument.remove(self) # unsubscribe
-        self.activeDocument = doc
-        if self.activeDocument is not None:
-            self.activeDocument.add(self) # subscribe
+        self.activeDocument = self.getDocumentByPage(page)
         self._setActiveDocumentState()
+        self._setGlobalState()
+    
+    def _setGlobalState(self):
+        actions = (
+              ('FileSaveAll', self.hasChangedDocuments)
+            , ('FileCloseAll', len(self._documents) > 0)
+        )
+        self._actionsSetSensitive(self._globalActions, *actions)
     
     def _setActiveDocumentState(self):
         if self.activeDocument is None:
@@ -216,13 +240,15 @@ class Multitoner(Gtk.Grid):
               ('FileSaveDocument', self.activeDocument.hasChanges)
             , ('EditUndo', undos > 0)
             , ('EditRedo', redos > 0)
+            , ('FileCloseOther', len(self._documents) > 1)
+            
         )
-        for actionName, sensitive in actions:
-            self._documentActionSetSensitive(actionName, sensitive)
+        self._actionsSetSensitive(self._documentActions, *actions)
     
-    def _documentActionSetSensitive(self, actionName, sensitive):
-        action = self._documentActions.get_action(actionName)
-        action.set_sensitive(sensitive)
+    def _actionsSetSensitive(self, actionGroup, *actionTuples):
+        for actionName, sensitive in actionTuples:
+            action = actionGroup.get_action(actionName)
+            action.set_sensitive(sensitive)
     
     def _initMenu(self):
         self.UIManager = uimanager = Gtk.UIManager()
@@ -246,6 +272,7 @@ class Multitoner(Gtk.Grid):
         #save realize_handler_id for the closure of onRealize 
         realize_handler_id = self.connect('realize' , onRealize)
         return menubar
+    
     def openRecentHandler(self, widget):
         item = widget.get_current_item()
         uri = item.get_uri()
@@ -260,14 +287,17 @@ class Multitoner(Gtk.Grid):
                None, None)
             , ('EditMenu', None, _('Edit'), None,
                None, None)
-            , ('FileNew', Gtk.STOCK_NEW, _('New …'), '<Ctrl>n',
+            , ('FileNew', Gtk.STOCK_NEW, _('New'), '<Ctrl>n',
                _('Start a new document.'), self.menuFileNewHandler)
             , ('FileQuit', Gtk.STOCK_QUIT, _('Quit'), '<ctrl>q',
                None, self.menuFileQuitHandler)
             , ('FileOpen', Gtk.STOCK_OPEN, _('Open'), '<Ctrl>o',
                _('Open a document.'), self.menuFileOpenHandler)
+            , ('FileSaveAll', Gtk.STOCK_SAVE, _('Save All'), '<Ctrl><Shift>s',
+               _('Save all documents.'), self.menuFileSaveAllHandler)
+            , ('FileCloseAll', Gtk.STOCK_CLOSE, _('Close All'), '<Ctrl><Shift>w',
+               _('Close all documents.'), self.menuFileCloseAllHandler)
             ])
-        
         # recent files chooser
         # does only .mtt files
         recentAction = Gtk.RecentAction.new_for_manager('FileOpenRecent',
@@ -290,18 +320,30 @@ class Multitoner(Gtk.Grid):
                None, self.menuFileSaveDocumentHandler)
             , ('FileSaveAsDocument', Gtk.STOCK_SAVE, _('Save As'), '<ctrl><alt>s',
                None, self.menuFileSaveDocumentAsHandler)
+            , ('FileClose', Gtk.STOCK_CLOSE, _('Close'), '<ctrl>w',
+               None, self.menuFileCloseHandler)
+            , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close Other Documents'), '<ctrl><alt>w',
+               None, self.menuFileCloseOtherHandler)
             ])
+        
         actionGroup.set_sensitive(False)
         return actionGroup
     
     def _registerDocument(self, doc):
         self._documents[doc.id] = doc
         doc.label.connect('close', self.closeDocumentHandler, doc.id)
+        doc.add(self)
         page = self._notebook.append_page(doc.widget, doc.label)
         self._notebook.set_tab_reorderable(doc.widget, True)
         doc.widget.show_all()
         self._notebook.set_current_page(page)
         return doc.id
+    
+    def _unregisterDocument(self, doc):
+        doc.remove(self)
+        del self._documents[doc.id]
+        page = self._notebook.page_num(doc.widget)
+        self._notebook.remove_page(page)
     
     def makeNewDocument(self):
         doc = Document(self._gradientWorker)
@@ -338,6 +380,7 @@ class Multitoner(Gtk.Grid):
         dialog.destroy()
     
     def openFileSaveAsDialog(self, doc):
+        self.setActivePage(doc)
         window = self.get_toplevel()
         dialog = Gtk.FileChooserDialog(title=_('Save File')
             , parent=window
@@ -358,6 +401,37 @@ class Multitoner(Gtk.Grid):
             doc.saveAs(filename)
         dialog.destroy()
     
+    def _askOkCancel(self, question, moreInfo=None):
+        window = self.get_toplevel()
+        dialog = Gtk.MessageDialog(window, 0, Gtk.MessageType.QUESTION,
+                                   Gtk.ButtonsType.OK_CANCEL, question)
+        if moreInfo is not None:
+            dialog.format_secondary_text(moreInfo)
+        response = dialog.run()
+        dialog.destroy()
+        if response == Gtk.ResponseType.OK:
+            return True
+        return False
+    
+    def closeDocument(self, doc):
+        ok = True
+        if doc.hasChanges:
+            self.setActivePage(doc)
+            ok = self._askOkCancel(
+                _('Close without Saving?'),
+                _('All changes to the document will be lost.')
+            )
+        
+        if not ok:
+            return
+        self._unregisterDocument(doc)
+    
+    def saveDocument(self, doc):
+        if doc.filename is None:
+            self.openFileSaveAsDialog(doc)
+        else:
+            doc.save()
+    
     # global action handlers
     def menuFileNewHandler(self, widget):
         self.makeNewDocument()
@@ -366,22 +440,63 @@ class Multitoner(Gtk.Grid):
         self.openFileOpenDialog()
     
     def closeDocumentHandler(self, widget, id, *data):
-        page = self._notebook.page_num(self._documents[id].widget)
-        self._notebook.remove_page(page)
-        print 'closeDocumentHandler Todo: ask when there are unsafed changes'
-        del self._documents[id]
-        
-    def menuFileQuitHandler(self, widget):
-        Gtk.main_quit()
+        doc = self._documents.get(id, None)
+        if doc is None:
+            return
+        self.closeDocument(doc)
     
+    def quit(self):
+        ok = True
+        if self.hasChangedDocuments:
+            ok = self._askOkCancel(
+                _('Quit without Saving?'),
+                _('There are documents with changes. All changes '
+                  'will be lost.')
+            )
+        if ok:
+            Gtk.main_quit()
+            return False
+        return True
+    
+    def quitHandler(self, *data):
+        return self.quit()
+    
+    menuFileQuitHandler = quitHandler
+    
+    def menuFileCloseAllHandler(self, widget):
+        active = self.activeDocument
+        for doc in self._documents.values():
+            self.closeDocument(doc)
+        if active is not None:
+            self.setActivePage(active)
+        
+    def menuFileSaveAllHandler(self, widget):
+        active = self.activeDocument
+        for doc in self._documents.values():
+            if doc.hasChanges:
+                self.saveDocument(doc)
+        if active is not None:
+            self.setActivePage(active)
+
     # document action handlers
+    def menuFileCloseHandler(self, widget):
+        if self.activeDocument is None:
+            return
+        self.closeDocument(self.activeDocument)
+    
+    def menuFileCloseOtherHandler(self, widget):
+        if self.activeDocument is None:
+            return
+        active = self.activeDocument
+        for doc in self._documents.values():
+            if doc is not active:
+                self.closeDocument(doc)
+        self.setActivePage(active)
+    
     def menuFileSaveDocumentHandler(self, widget):
         if self.activeDocument is None:
             return
-        if self.activeDocument.filename is None:
-            self.openFileSaveAsDialog(self.activeDocument)
-        else:
-            self.activeDocument.save()
+        self.saveDocument(self.activeDocument)
     
     def menuFileSaveDocumentAsHandler(self, widget):
         if self.activeDocument is None:
@@ -408,7 +523,6 @@ if __name__ == '__main__':
     window.set_has_resize_grip(True)
     # the theme should do so
     window.set_border_width(5)    
-    window.connect('destroy', Gtk.main_quit)
     
     cssProvider = Gtk.CssProvider()
     cssProvider.load_from_path('style.css')
@@ -417,7 +531,9 @@ if __name__ == '__main__':
     styleContext.add_provider_for_screen(screen, cssProvider,
         Gtk.STYLE_PROVIDER_PRIORITY_USER)
     multitoner = Multitoner()
+    window.connect('delete-event', multitoner.quitHandler)
     window.add(multitoner)
+    
     
     window.show_all()
     Gtk.main()
