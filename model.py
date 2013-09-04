@@ -204,6 +204,9 @@ class ModelCurves(Model):
         self.__dict__.update(state)
         self._connect(*self._curves)
     
+    def getArgs(self):
+        return {'curves': [curve.getArgs() for curve in self._curves]}
+    
     @property
     def curves(self):
         return tuple(self._curves)
