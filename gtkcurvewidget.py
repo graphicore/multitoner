@@ -297,13 +297,14 @@ class Curve(Emitter):
 class CurveEditor(Gtk.DrawingArea):
     background_color = (1,1,1)
     def __init__(self, model):
+        Gtk.DrawingArea.__init__(self)
+        
         self.cursorType = None
         self._ctrl = None
         self.scale = Scale()
         self.model = model
         model.add(self) # subscribe
         self._setCurves()
-        super(CurveEditor, self).__init__()
     
     @classmethod
     def new(Cls, model):
@@ -311,20 +312,16 @@ class CurveEditor(Gtk.DrawingArea):
         a factory to create a CurveEditor widget and connect all necessary events
         """
         widget = Cls(model)
-        
-        widget.add_events( 0
-            | Gdk.EventMask.BUTTON_PRESS_MASK
+        widget.add_events(
+              Gdk.EventMask.BUTTON_PRESS_MASK
             | Gdk.EventMask.BUTTON_RELEASE_MASK
             | Gdk.EventMask.BUTTON1_MOTION_MASK
             | Gdk.EventMask.POINTER_MOTION_MASK
             | Gdk.EventMask.POINTER_MOTION_HINT_MASK
+            
+        #    | Gdk.EventMask.KEY_PRESS_MASK
+        #    | Gdk.EventMask.KEY_RELEASE_MASK
         )
-        # To receive this signal, the GdkWindow associated to the widget
-        # needs to enable the GDK_KEY_RELEASE_MASK mask
-        # w.add_events( 0
-        #     | Gdk.EventMask.KEY_PRESS_MASK
-        #     | Gdk.EventMask.KEY_RELEASE_MASK
-        # )
         
         widget.connect('draw'                , widget.onDraw)
         widget.connect('button-press-event'  , widget.onButtonPress)
@@ -332,18 +329,9 @@ class CurveEditor(Gtk.DrawingArea):
         widget.connect('motion-notify-event' , widget.onMotionNotify)
         widget.connect('configure-event'     , widget.onConfigure)
         
-        # this removes the immediate dependency to window
-        def onRealize(widget, *args):
-            """ 
-            closure to connect to window when it establishes this widget
-            """
-            window = widget.get_toplevel()
-            window.connect('key-press-event'     , widget.onKeyPress)
-            window.connect('key-release-event'   , widget.onKeyRelease)
-            # connect just once ever
-            widget.disconnect(realize_handler_id)
-        #save realize_handler_id for the closure of onRealize 
-        realize_handler_id = widget.connect('realize' , onRealize)
+        # the widget needs to widget.grab_focus to receive these events
+        # widget.connect('key-press-event'     , widget.onKeyPress)
+        # widget.connect('key-release-event'   , widget.onKeyRelease)
         
         return widget
     
@@ -535,7 +523,7 @@ class CurveEditor(Gtk.DrawingArea):
                 self.setCursor(ctrl, alternate=True)
     
     def onKeyRelease(self, widget, event):
-        # print 'onKeyPress', Gdk.keyval_name(event.keyval)
+        # print 'onKeyRelease', Gdk.keyval_name(event.keyval)
         if self.keyIsAlternate(event):
             ctrl = self.getControl()
             if ctrl is not None:
@@ -549,11 +537,13 @@ if __name__ == '__main__':
     m = ModelCurves()
     points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
     for interpolation, _ in interpolationStrategies:
-        m.appendCurve({'points':points, interpolation:'interpolation'})
+        m.appendCurve({'points':points, 'interpolation': interpolation})
     
     a = CurveEditor.new(m)
     w.add(a)
-
+    
+    w.connect('key-press-event'     , a.onKeyPress)
+    w.connect('key-release-event'   , a.onKeyRelease)
     
     w.show_all()
     Gtk.main()
