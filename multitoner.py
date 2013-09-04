@@ -7,6 +7,7 @@ import os
 import json
 from gi.repository import Gtk, Gdk, GObject
 from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
+from emitter import Emitter
 
 # just a preparation for i18n
 def _(string):
@@ -70,26 +71,76 @@ class Label(Gtk.Grid):
     def setLabelText(self, text):
         self.label.set_text(text)
 
-class Document(object):
+class Document(Emitter):
     untitledName = _('untitled')
     
-    def __init__(self, gradientWorker, name=None, filename=None, data=None):
-        if name is None:
-            name=self.untitledName
+    def __init__(self, gradientWorker, filename=None, data=None):
         if data is None:
             data = {}
         self._gradientWorker = gradientWorker
         model = ModelCurves(ChildModel=ModelInk, **data)
+        model.add(self)
         history = History(model)
         inksEditor = InksEditor(model, self._gradientWorker)
         self.id = id(self)
-        label = Label(self.id, name)
-        
+        label = Label(self.id, self.untitledName)
         
         self.history = history
         self.model = model
         self.widget = inksEditor
         self.label = label
+        self.filename = filename
+    
+    @classmethod
+    def newFromFile(Cls, gradientWorker, filename):
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        return Cls(gradientWorker, filename, data)
+    
+    @property
+    def filename(self):
+        return getattr(self, '_filename', None)
+    
+    def triggerOnDocumentStateUpdate(self, *args):
+        for item in self._subscriptions:
+            item.onDocumentStateUpdate(self, *args)
+    
+    @property
+    def hasChanges(self):
+        return getattr(self, '_hasChanges', False)
+    
+    @hasChanges.setter
+    def hasChanges(self, value):
+        self._hasChanges = not not value
+        self.triggerOnDocumentStateUpdate() 
+    
+    def onModelUpdated(self, model, event, *args):
+        """ 
+        model updates are used as indicator that the history changed as well
+        """
+        self.hasChanges = True
+    
+    @filename.setter
+    def filename(self, value):
+        self._filename = value
+        if self._filename is None:
+            label = self.untitledName
+        else:
+            label = os.path.basename(self._filename)
+        self.label.setLabelText(label)
+    
+    def _save(self, filename):
+        data = self.model.getArgs()
+        data = json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
+        with open(filename, 'w') as f:
+            f.write(data)
+        self.hasChanges = False
+    
+    def save(self):
+        self._save(self.filename)
+    
+    def saveAs(self, filename):
+        self._save(filename)
         self.filename = filename
 
 class Multitoner(Gtk.Grid):
@@ -106,7 +157,6 @@ class Multitoner(Gtk.Grid):
         self.attach(menubar, 0, 0, 1, 1)
         self._notebook = Gtk.Notebook()
         self._notebook.set_scrollable(True)
-        
         
         self._notebook.connect('switch-page', self.switchPageHandler)
         self._notebook.connect('page-removed' , self.pageAddRemoveHandler)
@@ -137,17 +187,42 @@ class Multitoner(Gtk.Grid):
                 return doc
         return None
     
+    def onDocumentStateUpdate(self, doc, *args):
+        if doc is self.activeDocument:
+            self._setActiveDocumentState()
+    
     def setCurrentPage(self, page=None):
         if page is None:
             page = self._notebook.get_current_page()
         doc = self.getDocumentByPage(page)
-        if doc is None:
+        # activeDocument is either a Document or None
+        if self.activeDocument is not None and self.activeDocument is not doc:
+            self.activeDocument.remove(self) # unsubscribe
+        self.activeDocument = doc
+        if self.activeDocument is not None:
+            self.activeDocument.add(self) # subscribe
+        self._setActiveDocumentState()
+    
+    def _setActiveDocumentState(self):
+        if self.activeDocument is None:
             # there is no current page
             self._documentActions.set_sensitive(False)
+            return
         else:
             self._documentActions.set_sensitive(True)
-        # activeDocument is either a Document or None 
-        self.activeDocument = doc
+        
+        undos, redos = self.activeDocument.history.getCounts()
+        actions = (
+              ('FileSaveDocument', self.activeDocument.hasChanges)
+            , ('EditUndo', undos > 0)
+            , ('EditRedo', redos > 0)
+        )
+        for actionName, sensitive in actions:
+            self._documentActionSetSensitive(actionName, sensitive)
+    
+    def _documentActionSetSensitive(self, actionName, sensitive):
+        action = self._documentActions.get_action(actionName)
+        action.set_sensitive(sensitive)
     
     def _initMenu(self):
         self.UIManager = uimanager = Gtk.UIManager()
@@ -219,10 +294,8 @@ class Multitoner(Gtk.Grid):
         actionGroup.set_sensitive(False)
         return actionGroup
     
-    def makeDocument(self, name=None, filename=None, data=None):
-        doc = Document(self._gradientWorker, name, filename, data)
+    def _registerDocument(self, doc):
         self._documents[doc.id] = doc
-        
         doc.label.connect('close', self.closeDocumentHandler, doc.id)
         page = self._notebook.append_page(doc.widget, doc.label)
         self._notebook.set_tab_reorderable(doc.widget, True)
@@ -230,28 +303,22 @@ class Multitoner(Gtk.Grid):
         self._notebook.set_current_page(page)
         return doc.id
     
+    def makeNewDocument(self):
+        doc = Document(self._gradientWorker)
+        self._registerDocument(doc)
+    
+    def _openDocument(self, filename):
+        doc = Document.newFromFile(self._gradientWorker, filename)
+        self._registerDocument(doc)
+    
     def openDocument(self, filename):
         doc = self.getDocumentByFileName(filename)
         if doc:
-            page = self._notebook.page_num(doc['widget'])
+            page = self._notebook.page_num(doc.widget)
             self._notebook.set_current_page(page)
             return doc.id
         else:
-            name = os.path.basename(filename)
-            with open(filename, 'r') as f:
-                data = json.load(f)
-            return self.makeDocument(name, filename, data)
-    
-    def saveDocument(self, doc, filename):
-        data = doc.model.getArgs()
-        
-        
-        data = json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
-        with open(filename, 'w') as f:
-            f.write(data)
-        
-        doc.filename = filename
-        doc.label.setLabelText(os.path.basename(filename))
+            return self._openDocument(filename)
     
     def openFileOpenDialog(self):
         window = self.get_toplevel()
@@ -288,12 +355,12 @@ class Multitoner(Gtk.Grid):
             dialog.set_filename(doc.filename)
         if dialog.run() == Gtk.ResponseType.ACCEPT:
             filename = dialog.get_filename()
-            self.saveDocument(doc, filename)
+            doc.saveAs(filename)
         dialog.destroy()
     
     # global action handlers
     def menuFileNewHandler(self, widget):
-        self.makeDocument()
+        self.makeNewDocument()
     
     def menuFileOpenHandler(self, widget):
         self.openFileOpenDialog()
@@ -314,7 +381,7 @@ class Multitoner(Gtk.Grid):
         if self.activeDocument.filename is None:
             self.openFileSaveAsDialog(self.activeDocument)
         else:
-            self.saveDocument(self.activeDocument, self.activeDocument.filename)
+            self.activeDocument.save()
     
     def menuFileSaveDocumentAsHandler(self, widget):
         if self.activeDocument is None:
