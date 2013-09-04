@@ -78,6 +78,13 @@ class Label(Gtk.Grid):
     
     def setLabelText(self, text):
         self.label.set_text(text)
+    
+    def setChangedIndicator(self, hasChanges):
+        _class = 'has-changes'
+        if hasChanges:
+            self.get_style_context().add_class(_class)
+        else:
+            self.get_style_context().remove_class(_class)
 
 class Document(Emitter):
     untitledName = _('untitled')
@@ -119,7 +126,10 @@ class Document(Emitter):
     
     @hasChanges.setter
     def hasChanges(self, value):
+        old = self.hasChanges
         self._hasChanges = not not value
+        if old != self._hasChanges:
+            self.label.setChangedIndicator(self._hasChanges)
         self.triggerOnDocumentStateUpdate() 
     
     def onModelUpdated(self, model, event, *args):

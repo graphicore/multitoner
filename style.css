@@ -20,3 +20,6 @@ GtkNotebook tab GtkButton {
     border: none;
     background: none
 }
+GtkNotebook tab .has-changes{
+    color: red
+}
