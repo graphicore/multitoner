@@ -41,6 +41,7 @@ class CellRendererInk (Gtk.CellRendererText):
         self.width = width
         self.height = height
         self.state = {}
+        self._setCurves(model)
     
     def _init_ink(self, iid):
         """ init the state for a inkModel"""
@@ -50,6 +51,19 @@ class CellRendererInk (Gtk.CellRendererText):
             'waiting': False,
             'update_needed': None
         }
+    
+    def _setCurves(self, model):
+        inks = model.curves
+        ids = model.ids
+        # remove all missing inks
+        for iid in self.state.keys():
+            if iid not in ids:
+                del self.state[iid]
+        # add all new inks
+        for iid, inkModel in zip(ids, inks):
+            if iid not in self.state:
+                self._init_ink(iid)
+                self._requestNewSurface(inkModel)
     
     def onModelUpdated(self, model, event, *args):
         if event == 'curveUpdate':
@@ -61,17 +75,7 @@ class CellRendererInk (Gtk.CellRendererText):
                             'cmykChanged', 'nameChanged'):
                 self._requestNewSurface(inkModel)
         elif event == 'setCurves':
-            inks = model.curves
-            ids = inks.ids
-            # remove all missing inks
-            for iid in self.state.keys():
-                if iid not in ids:
-                    del self.state[iid]
-            # add all new inks
-            for iid, inkModel in zip(ids, inks):
-                if iid not in self.state:
-                    self._init_ink(iid)
-                    self._requestNewSurface(inkModel)
+            self._setCurves(model)
         elif event == 'insertCurve':
             inkModel = args[0]
             iid = inkModel.id
@@ -90,7 +94,7 @@ class CellRendererInk (Gtk.CellRendererText):
         """
         
         iid = inkModel.id
-        state =  self.state[iid]
+        state = self.state[iid]
         
         # reset the timeout
         if state['timeout'] is not None:
@@ -194,6 +198,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._update_needed = None
         self._noInks = False
         self.connect('draw' , self.onDraw)
+        self._requestNewSurface(model)
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
@@ -319,6 +324,7 @@ class InkController(Emitter):
         
         #id, name, interpolation Name (for display), locked, visible
         self.inkListStore = Gtk.ListStore(int, str, str, bool, bool)
+        self._setCurves(self.inks)
         self.inks.add(self) #subscribe
     
     def triggerOnChangedInkSelection(self, *args):
@@ -421,11 +427,14 @@ class InkController(Emitter):
         itr = self.inkListStore.get_iter(path)
         self.inkListStore.row_changed(path, itr)
     
+    def _setCurves(self, model):
+        self.inkListStore.clear()
+        for curveModel in model.curves:
+            self._appendToList(curveModel)
+    
     def onModelUpdated(self, model, event, *args):
         if event == 'setCurves':
-            self.inkListStore.clear()
-            for curveModel in model.curves:
-                self._appendToList(curveModel)
+            self._setCurves(model)
         elif event == 'reorderedCurves':
             modelOrder = args[0]
             oldPosLookup = {}
