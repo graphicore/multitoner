@@ -998,7 +998,7 @@ if __name__ == '__main__':
     styleContext = Gtk.StyleContext()
     styleContext.add_provider_for_screen(screen, cssProvider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     
-    window.set_title(_('Multitoner Tool'))
+    window.set_title(_('Ink Tool'))
     window.set_default_size(640, 480)
     window.set_has_resize_grip(True)
     # the theme should do so
