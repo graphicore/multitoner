@@ -183,3 +183,7 @@ class History(object):
         self._isRedo = True
         command(model)
         self._isRedo = False
+    
+    def getCounts(self):
+        return (len(self._undoCommands), len(self._redoCommands))
+    
