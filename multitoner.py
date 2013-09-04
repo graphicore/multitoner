@@ -82,10 +82,10 @@ class Document(object):
         model = ModelCurves(ChildModel=ModelInk, **data)
         history = History(model)
         inksEditor = InksEditor(model, self._gradientWorker)
-        widget_id = id(inksEditor)
-        label = Label(widget_id, name)
-        
         self.id = id(self)
+        label = Label(self.id, name)
+        
+        
         self.history = history
         self.model = model
         self.widget = inksEditor
@@ -118,7 +118,7 @@ class Multitoner(Gtk.Grid):
     def switchPageHandler(self, widget, page, page_num):
         self.setCurrentPage(page_num)
     
-    def pageAddRemoveHandler(self,*data):
+    def pageAddRemoveHandler(self, *data):
         self.setCurrentPage()
     
     def getDocumentByPage(self, page):
@@ -127,7 +127,7 @@ class Multitoner(Gtk.Grid):
     
     def getDocumentByWidget(self, widget):
         for doc in self._documents.values():
-            if doc.widget == widget:
+            if doc.widget is widget:
                 return doc
         return None
     
@@ -221,12 +221,13 @@ class Multitoner(Gtk.Grid):
     
     def makeDocument(self, name=None, filename=None, data=None):
         doc = Document(self._gradientWorker, name, filename, data)
+        self._documents[doc.id] = doc
+        
         doc.label.connect('close', self.closeDocumentHandler, doc.id)
         page = self._notebook.append_page(doc.widget, doc.label)
         self._notebook.set_tab_reorderable(doc.widget, True)
         doc.widget.show_all()
         self._notebook.set_current_page(page)
-        self._documents[doc.id] = doc
         return doc.id
     
     def openDocument(self, filename):
@@ -348,7 +349,6 @@ if __name__ == '__main__':
     styleContext = Gtk.StyleContext()
     styleContext.add_provider_for_screen(screen, cssProvider,
         Gtk.STYLE_PROVIDER_PRIORITY_USER)
-    
     multitoner = Multitoner()
     window.add(multitoner)
     
