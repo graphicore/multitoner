@@ -395,7 +395,7 @@ class InkController(Emitter):
         # make a treeview …
         inkControlPanel = InkControlPanel(
                           model=self.inkListStore, inkModel=self.inks)
-        inkControlPanel.set_valign(Gtk.Align.END)
+        # inkControlPanel.set_valign(Gtk.Align.END)
         treeSelection = inkControlPanel.get_selection()
         treeSelection.connect('changed', self.changedInkSelectionHandler)
         inkControlPanel.connect('toggle-visibility', self.toggleVisibilityHandler)
@@ -407,15 +407,15 @@ class InkController(Emitter):
     
     def initGradientView(self, gradientWorker, scale):
         gradientView = Gtk.TreeView(model=self.inkListStore)
-        gradientView.set_valign(Gtk.Align.END)
+        # gradientView.set_valign(Gtk.Align.END)
         
-        gradientView.set_property('headers-visible', False)
+        # gradientView.set_property('headers-visible', False)
         # the width value is just initial and will change when the scale of
         # the curveEditor changes
         renderer_ink = CellRendererInk(model=self.inks, gradientWorker=gradientWorker, width=256)
         renderer_ink.connect('received-surface', self.queueDrawRow)
         
-        column_ink = HScalingTreeColumnView(_('Ink'), renderer_ink, text=0)
+        column_ink = HScalingTreeColumnView(_('Single Ink Gradients'), renderer_ink, text=0)
         gradientView.append_column(column_ink)
         scale.add(column_ink)
         return gradientView
@@ -764,7 +764,7 @@ class InkControlPanel(Gtk.TreeView):
         renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
         column = Gtk.TreeViewColumn(_('Interpolation'), renderer, text=2)
         column.set_property('resizable', True)
-        column.set_property('min-width', 100)
+        column.set_property('min-width', 120)
         return column
 
 class InkSetup(object):
@@ -776,8 +776,16 @@ class InkSetup(object):
     def __init__(self, model):
         self.model = model
         model.add(self)
-        self.gtk = Gtk.Frame()
-        self.gtk.set_label(_('Ink Setup'))
+        
+        self.gtk = frame = Gtk.Box()
+        self._inkOptionsBox = Gtk.Grid()
+        self._inkOptionsBox.set_halign(Gtk.Align.FILL)
+        self._inkOptionsBox.set_hexpand(True)
+        self._inkOptionsBox.set_column_spacing(5)
+        self._inkOptionsBox.set_row_spacing(5)
+        
+        frame.add(self._inkOptionsBox)
+        frame.set_hexpand(False)
         # this is about the focus-in-event
         # From the docs:
         # To receive this signal, the GdkWindow associated to the widget needs
@@ -790,8 +798,6 @@ class InkSetup(object):
         for key, item in interpolationStrategies:
             self._interpolations.append([item.name, key])
         
-        self._inkOptionsBox = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
-        self.gtk.add(self._inkOptionsBox)
         self._currentInkId = None
         # events show() connected to
         self._connected = [];
@@ -832,9 +838,10 @@ class InkSetup(object):
     
     def show(self, inkId=None):
         if inkId is None:
-            self._inkOptionsBox.set_sensitive(False)
             # just disable, this prevents the size of the box from changing
             # and it tells the ui story somehow right, or?
+            # self._inkOptionsBox.set_sensitive(False)
+            self._inkOptionsBox.hide()
         else:
             self._currentInkId = inkId
             ink = self.model.getById(inkId)
@@ -851,6 +858,12 @@ class InkSetup(object):
             self._inkOptionsBox.set_sensitive(True)
             inkId = ink.id
             
+            label = Gtk.Label(_('Ink Setup'))
+            label.get_style_context().add_class('headline')
+            label.set_halign(Gtk.Align.START)
+            separator = Gtk.Separator()
+            self._inkOptionsBox.attach(separator, 0, -2, 2, 1)
+            self._inkOptionsBox.attach(label, 0, -1, 2, 1)
             # make the name widget
             widget = Gtk.Entry()
             widget.set_text(ink.name)
@@ -897,7 +910,9 @@ class InkSetup(object):
                 widget.connect('focus-in-event', self.focusInHandler, inkId)
                 self._inkOptionsBox.attach(widget, 1, i+offset, 1, 1)
                 widgets[colorAttr] = (widget, handler_id)
-        self._inkOptionsBox.show_all()
+            for widget, __ in widgets.values():
+                widget.set_hexpand(True)
+            self._inkOptionsBox.show_all()
         
     def focusInHandler(self, widget, __, inkId):
         self.model.getById(inkId).registerConsecutiveCommand()
@@ -929,15 +944,10 @@ class InksEditor(Gtk.Grid):
         self.inkController = InkController(model)
         
         curveEditor = self.initCurveEditor(model)
-        # left : the column number to attach the left side of child to
-        # top : the row number to attach the top side of child to
-        # width : the number of columns that child will span
-        # height : the number of rows that child will span
-        self.attach(curveEditor, 0, 0, 1, 1)
         
-        rightColumn = Gtk.Grid()
-        rightColumn.set_row_spacing(5)
-        self.attach(rightColumn, 1, 0, 2, 2)
+        toolColumn = Gtk.Grid()
+        toolColumn.set_row_spacing(5)
+        
         
         # its important to keep a reference of this, otherwise its __dict__
         # gets lost and the InkSetup won't know its model anymore
@@ -951,24 +961,33 @@ class InksEditor(Gtk.Grid):
             inkSetup.show(inkId)
         inkSetup.onChangedInkSelection = onChangedInkSelection
         self.inkController.add(inkSetup) # subscribe
-        rightColumn.attach(inkSetup.gtk, 0, 0, 1, 1)
         
         inkControlPanel = self.inkController.initControlPanel()
-        rightColumn.attach(inkControlPanel, 0, 1, 1, 1)
         
         # scales to the width of curveEditor.scale
         gradientView = self.inkController.initGradientView(
                        gradientWorker, curveEditor.scale)
-        self.attach(gradientView, 0, 1, 1, 1)
         
         colorPreviewWidget = self.initColorPreviewWidget(model, gradientWorker)
-        self.attach(colorPreviewWidget, 0, 2, 1, 1)
         
         colorPreviewLabel = self.initColorPreviewLabel()
-        self.attach(colorPreviewLabel, 1, 2, 1, 1)
         
         addInkButton = self.initAddInkButton(model)
-        self.attach(addInkButton, 2, 2, 1, 1)
+        
+        # left : the column number to attach the left side of child to
+        # top : the row number to attach the top side of child to
+        # width : the number of columns that child will span
+        # height : the number of rows that child will span
+        self.attach(toolColumn, 0, 0, 1, 3)
+        
+        self.attach(curveEditor,        2, 2, 1, 1)
+        self.attach(gradientView,       2, 0, 1, 1)
+        self.attach(colorPreviewWidget, 2, 1, 1, 1)
+        
+        toolColumn.attach(inkSetup.gtk,      0, 2, 1, 1)
+        toolColumn.attach(inkControlPanel,   0, 0, 1, 1)
+        toolColumn.attach(colorPreviewLabel, 0, 1, 1, 1)
+        toolColumn.attach(addInkButton,      0, 1, 1, 1)
         
     def initCurveEditor(self, model):
         curveEditor = CurveEditor.new(model)
@@ -999,13 +1018,13 @@ class InksEditor(Gtk.Grid):
         return widget
     
     def initColorPreviewLabel(self):
-        label = Gtk.Label(_('Result'))
-        label.set_halign(Gtk.Align.START)
+        label = Gtk.Label(_('Result:'))
+        label.set_halign(Gtk.Align.END)
         return label
     
     def initAddInkButton(self, model):
         button = AddInkButton(model, Gtk.STOCK_ADD, _('Add a new ink'))
-        button.set_halign(Gtk.Align.END)
+        button.set_halign(Gtk.Align.START)
         return button
 
 if __name__ == '__main__':
