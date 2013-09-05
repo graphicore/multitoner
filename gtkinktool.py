@@ -4,7 +4,7 @@
 from __future__ import division
 import os
 import sys
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf
+from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, Pango
 import cairo
 from weakref import ref as Weakref
 
@@ -753,12 +753,18 @@ class InkControlPanel(Gtk.TreeView):
     
     def _initColumnName(self):
         renderer = Gtk.CellRendererText()
+        renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
         column = Gtk.TreeViewColumn(_('Name'), renderer, text=1)
+        column.set_property('resizable', True)
+        column.set_property('min-width', 120)
         return column
         
     def _initColumnCurveType(self):
         renderer = Gtk.CellRendererText()
+        renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
         column = Gtk.TreeViewColumn(_('Interpolation'), renderer, text=2)
+        column.set_property('resizable', True)
+        column.set_property('min-width', 100)
         return column
 
 class InkSetup(object):
