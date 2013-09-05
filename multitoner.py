@@ -146,6 +146,7 @@ class Document(Emitter):
         else:
             label = os.path.basename(self._filename)
         self.label.setLabelText(label)
+        self.label.set_tooltip_text(self._filename or '')
     
     def _save(self, filename):
         data = self.model.getArgs()
