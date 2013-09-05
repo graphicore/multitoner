@@ -361,8 +361,27 @@ class Multitoner(Gtk.Grid):
         self._registerDocument(doc)
     
     def _openDocument(self, filename):
-        doc = Document.newFromFile(self._gradientWorker, filename)
-        self._registerDocument(doc)
+        try:
+            doc = Document.newFromFile(self._gradientWorker, filename)
+        except Exception as e:
+            error = 'Error opening the file "{0}": {2} {1}'.format(
+                filename, type(e), e)
+            window = self.get_toplevel()
+            dialog = Gtk.MessageDialog(
+                window
+                , Gtk.DialogFlags.DESTROY_WITH_PARENT
+                , Gtk.MessageType.ERROR
+                , Gtk.ButtonsType.CLOSE
+                , error
+            )
+            # Destroy the dialog when the user responds to it
+            # (e.g. clicks a button)
+            def destroy(*args):
+                dialog.destroy()
+            dialog.connect('response', destroy)
+            dialog.show()
+        else:
+            self._registerDocument(doc)
     
     def openDocument(self, filename):
         doc = self.getDocumentByFileName(filename)
