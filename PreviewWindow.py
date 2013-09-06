@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from __future__ import division, print_function
+from __future__ import division, print_function, unicode_literals
 
 from gi.repository import Gtk, GObject
 import cairo
@@ -41,17 +41,18 @@ def work(filename, inks):
         imageName = filename
         epsTool = EPSTool()
         im = Image.open(imageName)
-        print ('image mode', im.mode)
+        print ('image mode', im.mode, 'epsTool.setImageData ...')
         epsTool.setImageData(im.tostring(), im.size)
+        print ('epsTool.setImageData ... DONE!')
     
-    print (inks)
+    print ('work with', inks)
     inks = [ModelInk(**t) for t in inks]
     
     epsTool.setColorData(*inks)
     eps = epsTool.create()
-    # eps = open(imageName + '.eps').read()
-    with open(imageName + '.tst.eps', 'w') as f:
+    with open(imageName + '.tsst.eps', 'w') as f:
         f.write(eps)
+    print ('gs.run.eps')
     r = gs.run(eps)
     # need to transport the result as a string
     result = r[0], r[1], r[2].raw
@@ -77,17 +78,19 @@ class PreviewWorker(object):
         inks = [t.getArgs() for t in inks]
         self.pool.apply_async(work, args=(imageName, inks), callback=cb)
 
-class PreviewDrawinArea(Gtk.DrawingArea):
+class PreviewDrawinArea(Gtk.Layout):
     def __init__(self):
-        Gtk.DrawingArea.__init__(self)
+        Gtk.Layout.__init__(self)
         self.surface = None
         self.connect('draw' , self.onDraw)
     @staticmethod
     def onDraw(self, cr):
         cairo_surface = self.surface
-        print ('draw', cairo_surface)
+        h = self.get_hadjustment().get_value()
+        v = self.get_vadjustment().get_value()
+        print ('draw', cairo_surface, h, v)
         if cairo_surface is not None:
-            cr.set_source_surface(cairo_surface, 0 , 0)
+            cr.set_source_surface(cairo_surface, -h , -v)
         cr.paint()
         return True
         
@@ -108,8 +111,11 @@ class PreviewWindow(Gtk.Window):
         self._noInks = False
         
         self.da = PreviewDrawinArea()
-        self.add(self.da)
+        self.scrolled = Gtk.ScrolledWindow()
+        self.scrolled.add(self.da)
+        self.add(self.scrolled)
         self._previewWorker = PreviewWorker()
+        self._requestNewSurface(inksModel)
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
@@ -164,7 +170,7 @@ class PreviewWindow(Gtk.Window):
     
     def _receiveSurface(self, w, h, buf):
         print ('_receiveSurface')
-        self.da.set_size_request(w, h)
+        self.da.set_size(w, h)
         if self._noInks:
             # this may receive a surface after all inks are invisible
             cairo_surface = None
