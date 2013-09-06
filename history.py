@@ -1,22 +1,27 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
-import cPickle as pickle
+from __future__ import division, print_function, unicode_literals
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 from weakref import ref as Weakref
 from functools import wraps
 from warnings import warn
 from model import *
+from compatibility import encode
 
 def getSetterCommand(name, value):
     pickledValue = pickle.dumps(value, -1)
     def cmd(obj):
         value = pickle.loads(pickledValue)
         setattr(obj, name, value)
-    cmd.__doc__ = 'setting {0}'.format(name)
+    cmd.__doc__ = encode('setting {0}'.format(name))
     # name is used to distinguish between different commands on the same model
     # model it is important detect consecutive commands
-    cmd.__name__= 'set__{0}__'.format(name)
+    cmd.__name__= encode('set__{0}__'.format(name))
     return cmd
 
 def getCallingCommand(method, *args):
@@ -24,10 +29,10 @@ def getCallingCommand(method, *args):
     def cmd(obj):
         args = pickle.loads(pickledArgs)
         getattr(obj, method)(*args)
-    cmd.__doc__ = 'calling {0}'.format(method)
+    cmd.__doc__ = encode('calling {0}'.format(method))
     # name is used to distinguish between different commands on the same
     # model it is important detect consecutive commands
-    cmd.__name__= 'call__{0}__'.format(method)
+    cmd.__name__= encode('call__{0}__'.format(method))
     return cmd
 
 
@@ -76,7 +81,7 @@ class ModelHistoryApi(object):
     def addHistory(self, command, path=None):
         if path is None:
             path = []
-            # print 'add history: ', self.__class__.__name__, command.__doc__
+            # print('add history: ', self.__class__.__name__, command.__doc__)
         path.append(self.id)
             
         historyAPI = self.historyAPI

@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function, unicode_literals
+
 from emitter import Emitter
 from history import getSetterCommand, getCallingCommand, historize, ModelHistoryApi
 
@@ -255,7 +256,7 @@ class ModelCurves(Model):
             seen.add(mid)
             try:
                 currentPos = currentOrder.index(mid)
-            except ValueError, e:
+            except ValueError as e:
                 raise ModelException('Model not found by id {0}'.format(mid))
             newOrder.append(self._curves[currentPos])
         self._curves = newOrder

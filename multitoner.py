@@ -1,13 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function, unicode_literals
+
 import sys
 import os
 import json
 from gi.repository import Gtk, Gdk, GObject
 from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
 from emitter import Emitter
+from compatibility import repair_gsignals
 
 # just a preparation for i18n
 def _(string):
@@ -42,21 +44,17 @@ UI_INFO = """
 </ui>
 """
 
-
-               
-
 class Label(Gtk.Grid):
-    __gsignals__ = {
+    __gsignals__ = repair_gsignals({
         'close': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
                   # id
                   GObject.TYPE_INT, ))
-    }
+    })
     def __init__(self, id, text):
         Gtk.Grid.__init__(self)
         self.set_orientation(Gtk.Orientation.HORIZONTAL)
         self.set_column_spacing(5)
         #self.set_row_spacing(5)
-        
         
         # icon
         icon = Gtk.Image.new_from_stock(Gtk.STOCK_FILE, Gtk.IconSize.MENU)
@@ -110,6 +108,7 @@ class Document(Emitter):
     def newFromFile(Cls, gradientWorker, filename):
         with open(filename, 'r') as f:
             data = json.load(f)
+        print ('opened', data)
         return Cls(gradientWorker, filename, data)
     
     @property
@@ -150,6 +149,7 @@ class Document(Emitter):
     
     def _save(self, filename):
         data = self.model.getArgs()
+        print ('_save', data)
         data = json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
         with open(filename, 'w') as f:
             f.write(data)

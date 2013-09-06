@@ -5,6 +5,7 @@ from epstool import EPSTool
 from array import array
 from multiprocessing import Pool, cpu_count
 import ctypes as c
+from compatibility import range
 
 gs = None
 def initializer(*args):
@@ -31,7 +32,7 @@ class GradientWorker(object):
         self.pool = Pool(initializer=initializer)
         
         self._epsTool = EPSTool()
-        gradientBin = array('B', xrange(0, 256))
+        gradientBin = array('B', range(0, 256))
         # FIXME: there seems to be a problem wit a 0 byte at the beginning
         # this must be in the ascii85 representation i suppose
         # gradientBin.reverse()

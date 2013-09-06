@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function, unicode_literals
+
 import numpy as np
 # http://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
 from scipy import interpolate 
@@ -29,7 +30,10 @@ class InterpolationStrategy(object):
     def setPoints(self, points):
         if len(points) < 2:
             raise CurveException('Need at least two points');
-        pts = zip(*points)
+        pts = list(zip(*points))
+        # in python3 pts needs the conversion to list because in python3
+        # zip returns iterators resulting in:
+        # TypeError: 'zip' object is not subscriptable
         self._x = np.array(pts[0], dtype=float)
         self._y = np.array(pts[1], dtype=float)
     

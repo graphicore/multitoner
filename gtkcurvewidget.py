@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function, unicode_literals
+
 from weakref import ref as weakRef
 import warnings
 from math import pi
@@ -359,7 +360,7 @@ class CurveEditor(Gtk.DrawingArea):
     # discarded by using @staticmethod
     @staticmethod
     def onConfigure(self, event):
-        # print 'on configure'
+        # print('on configure')
         # set the scale to show the data in visible sizes
         newscale = (event.width, event.height)
         # if scale changed it will trigger the onScaleCange callbacks
@@ -503,7 +504,7 @@ class CurveEditor(Gtk.DrawingArea):
         # that are lagging behind the actual mouse movement
         # its required that Gdk.EventMask.POINTER_MOTION_HINT_MASK was specified
         (x, y), alternate = self.getPointer()
-        # print 'onMotionNotify', x, y
+        # print('onMotionNotify', x, y)
         ctrl = self.findControl(x, y)
         if ctrl is not None and ctrl.active:
             ctrl.onMotionNotify(x, y)
@@ -516,14 +517,14 @@ class CurveEditor(Gtk.DrawingArea):
         return not not (state & Gdk.ModifierType.CONTROL_MASK)
     
     def onKeyPress(self, widget, event):
-        # print 'onKeyPress', Gdk.keyval_name(event.keyval)
+        # print('onKeyPress', Gdk.keyval_name(event.keyval))
         if self.keyIsAlternate(event):
             ctrl = self.getControl()
             if ctrl is not None:
                 self.setCursor(ctrl, alternate=True)
     
     def onKeyRelease(self, widget, event):
-        # print 'onKeyRelease', Gdk.keyval_name(event.keyval)
+        # print('onKeyRelease', Gdk.keyval_name(event.keyval))
         if self.keyIsAlternate(event):
             ctrl = self.getControl()
             if ctrl is not None:

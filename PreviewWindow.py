@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from __future__ import division
+from __future__ import division, print_function
 
 from gi.repository import Gtk, GObject
 import cairo
@@ -41,10 +41,10 @@ def work(filename, inks):
         imageName = filename
         epsTool = EPSTool()
         im = Image.open(imageName)
-        print 'image mode', im.mode
+        print ('image mode', im.mode)
         epsTool.setImageData(im.tostring(), im.size)
     
-    print inks
+    print (inks)
     inks = [ModelInk(**t) for t in inks]
     
     epsTool.setColorData(*inks)
@@ -73,7 +73,7 @@ class PreviewWorker(object):
     def addJob(self, callback, imageName, *inks):
         cb = lambda result: self.callback(callback, result)
         
-        print inks
+        print (inks)
         inks = [t.getArgs() for t in inks]
         self.pool.apply_async(work, args=(imageName, inks), callback=cb)
 
@@ -85,7 +85,7 @@ class PreviewDrawinArea(Gtk.DrawingArea):
     @staticmethod
     def onDraw(self, cr):
         cairo_surface = self.surface
-        print 'draw', cairo_surface
+        print ('draw', cairo_surface)
         if cairo_surface is not None:
             cr.set_source_surface(cairo_surface, 0 , 0)
         cr.paint()
@@ -163,7 +163,7 @@ class PreviewWindow(Gtk.Window):
         return False
     
     def _receiveSurface(self, w, h, buf):
-        print '_receiveSurface'
+        print ('_receiveSurface')
         self.da.set_size_request(w, h)
         if self._noInks:
             # this may receive a surface after all inks are invisible

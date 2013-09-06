@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function, unicode_literals
+
 import os
 import sys
 from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, Pango
@@ -15,6 +16,7 @@ from model import ModelCurves, ModelInk
 from GradientWorker import GradientWorker
 from PreviewWindow import PreviewWindow
 from history import History
+from compatibility import repair_gsignals, encode, decode, range
 # just a preparation for i18n
 def _(string):
     return string
@@ -30,9 +32,9 @@ class CellRendererInk (Gtk.CellRendererText):
        the "text" property to get the ink id
     for anything else, this could be a Gtk.GtkCellRenderer without objections
     """
-    __gsignals__ = {
+    __gsignals__ = repair_gsignals({
         'received-surface': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_INT, ))
-    }
+    })
     
     def __init__(self, model, gradientWorker, width=-1, height=-1):
         Gtk.CellRendererText.__init__(self)
@@ -127,10 +129,11 @@ class CellRendererInk (Gtk.CellRendererText):
         if iid not in self.state:
             return
         state = self.state[iid]
+        
         cairo_surface = cairo.ImageSurface.create_for_data(
             buf, cairo.FORMAT_RGB24, w, h, w * 4
         )
-        
+        state['__keep'] = buf
         state['surface'] = cairo_surface
         state['waiting'] = False
         if state['update_needed'] is not None:
@@ -152,7 +155,7 @@ class CellRendererInk (Gtk.CellRendererText):
         cell_area : area normally rendered by a cell renderer
         flags : flags that affect rendering
         """
-        # print 'cellRendererInk', cell_area.width, cell_area.height, cell_area.x, cell_area.y
+        # print ('cellRendererInk', cell_area.width, cell_area.height, cell_area.x, cell_area.y)
         iidHash = self.get_property('text')
         iid = int(iidHash)
         cairo_surface = None
@@ -170,7 +173,7 @@ class CellRendererInk (Gtk.CellRendererText):
             ctm = cr.get_matrix()
             cr.translate(width, 0)
             cr.scale(-(width/256), 1)
-            for y in xrange(0+y, height+y):
+            for y in range(0+y, height+y):
                 cr.set_source_surface(cairo_surface, x , y)
                 cr.paint()
             cr.set_matrix(ctm)
@@ -282,7 +285,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
             ctm = cr.get_matrix()
             cr.translate(width, 0)
             cr.scale(-(width/256), 1)
-            for y in xrange(0+y, height+y):
+            for y in range(0+y, height+y):
                 cr.set_source_surface(cairo_surface, x , y)
                 cr.paint()
             cr.set_matrix(ctm)
@@ -528,9 +531,9 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
     used to render a button in a cell using a Gtk.CellRendererPixbuf
     and emits a "clicked" signal
     """
-    __gsignals__ = {
+    __gsignals__ = repair_gsignals({
         'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
-    }
+    })
 
     def __init__(self):
         Gtk.CellRendererPixbuf.__init__(self)
@@ -576,9 +579,9 @@ class CellRendererToggle(Gtk.CellRenderer):
     """
     A cell renderer that renders and can toggle a  property called "active"
     """
-    __gsignals__ = {
+    __gsignals__ = repair_gsignals({
         'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
-    }
+    })
     
     #active property
     active = GObject.property(type=bool, default=False)
@@ -622,7 +625,7 @@ class InkControlPanel(Gtk.TreeView):
     delete button and the editor color chooser. Furthermore this can be
     used to reorder the inks with drag and drop.
     """
-    __gsignals__ = {
+    __gsignals__ = repair_gsignals({
           'toggle-visibility': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
                             # path
                             GObject.TYPE_STRING, ))
@@ -639,7 +642,7 @@ class InkControlPanel(Gtk.TreeView):
                             # source_path, target_path, before/after
                             GObject.TYPE_STRING, GObject.TYPE_STRING,
                             GObject.TYPE_BOOLEAN))
-    }
+    })
     
     def __init__(self, inkModel, model, **args):
         Gtk.TreeView.__init__(self, model=model, **args)
@@ -703,7 +706,7 @@ class InkControlPanel(Gtk.TreeView):
     def _initToggle(self, icons, callback, *data):
         setup = {}
         for key, fileName in icons.items():
-            iconPath = os.path.join(os.path.dirname(__file__), 'icons', fileName)
+            iconPath = os.path.join(os.path.dirname(__file__), encode('icons'), encode(fileName))
             setup[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(iconPath, 16, 16)
         toggle = CellRendererToggle(**setup)
         toggle.set_fixed_size (16, 16)
@@ -816,7 +819,7 @@ class InkSetup(object):
         # same changes it just triggert
         if inkEvent == 'nameChanged':
             widget, handler_id = self._widgets['name']
-            if widget.get_text() != ink.name:
+            if decode(widget.get_text()) != ink.name:
                 widget.handler_block(handler_id)
                 widget.set_text(ink.name)
                 widget.handler_unblock(handler_id)
@@ -924,7 +927,7 @@ class InkSetup(object):
     
     def onNameChange(self, widget, inkId):
         ink = self.model.getById(inkId)
-        name = widget.get_text()
+        name = decode(widget.get_text())
         ink.name = name
     
     def onCMYKValueChange(self, widget, inkId, colorAttr):

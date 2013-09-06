@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+from __future__ import unicode_literals, print_function
+
 from string import Template
 import mom.codec as codec
 from interpolation import interpolationStrategiesDict
@@ -219,6 +221,8 @@ def junked(string, chunkLen):
 
 def getImageBinary(string):
     string = codec.base85_encode(string, codec.B85_ASCII)
+    if bytes is not str:
+        string = string.decode('utf-8')
     string = junked(string, 65)
     string = '\n'.join(string)
     string = ('\nbeginimage\n{0}~>'.format(string))
@@ -252,6 +256,8 @@ def getDeviceNLuT(*inks):
         .T \
         .tostring()
     table = binascii.hexlify(table).upper()
+    if bytes is not str:
+        table = table.decode('utf-8')
     return '\n  '.join(junked(table, 66))
 
 
@@ -381,7 +387,7 @@ class EPSTool(object):
             raise Exception('Image data is missing, use setImageData')
         
         self._mapping['CreationDate'] = datetime.now().ctime()
-        return epsTemplate.substitute(self._mapping)
+        return epsTemplate.substitute(self._mapping).encode('utf-8')
 
 if __name__== '__main__':
     import sys
@@ -389,13 +395,13 @@ if __name__== '__main__':
     import PIL.Image as Image
     
     curvesModel = ModelCurves(ChildModel=ModelInk)
-    curvesModel.appendCurve(name='Black', cmyk=(0.0, 0.0, 0.0, 1))
+    curvesModel.appendCurve({'name':'Black', 'cmyk':(0.0, 0.0, 0.0, 1)})
     
-    curvesModel.appendCurve(name='PANTONE Greeen', cmyk=(0.0800, 0.0020, 0.9, 0)
-        ,interpolation='linear' )
+    curvesModel.appendCurve({'name':'PANTONE Greeen', 'cmyk':(0.0800, 0.0020, 0.9, 0)
+        ,'interpolation':'linear'})
     
-    curvesModel.appendCurve(name='Orange', cmyk=(0.0, 0.1, 0.0002, 0.0040)
-        ,interpolation='linear' )
+    curvesModel.appendCurve({'name':'Orange', 'cmyk':(0.0, 0.1, 0.0002, 0.0040)
+        ,'interpolation':'linear'})
     
     filename = sys.argv[1]
     im = Image.open(filename)
@@ -403,4 +409,4 @@ if __name__== '__main__':
     epsTool = EPSTool();
     epsTool.setColorData(*curvesModel.curves)
     epsTool.setImageData(im.tostring(), im.size)
-    print epsTool.create()
+    print (epsTool.create())
