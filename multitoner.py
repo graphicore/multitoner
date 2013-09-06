@@ -364,22 +364,9 @@ class Multitoner(Gtk.Grid):
         try:
             doc = Document.newFromFile(self._gradientWorker, filename)
         except Exception as e:
-            error = 'Error opening the file "{0}": {2} {1}'.format(
-                filename, type(e), e)
-            window = self.get_toplevel()
-            dialog = Gtk.MessageDialog(
-                window
-                , Gtk.DialogFlags.DESTROY_WITH_PARENT
-                , Gtk.MessageType.ERROR
-                , Gtk.ButtonsType.CLOSE
-                , error
-            )
-            # Destroy the dialog when the user responds to it
-            # (e.g. clicks a button)
-            def destroy(*args):
-                dialog.destroy()
-            dialog.connect('response', destroy)
-            dialog.show()
+            error = 'Error opening the file "{0}"'.format(filename)
+            detail = '{1} {0}'.format(type(e), e)
+            self._announceError(error, detail)
         else:
             self._registerDocument(doc)
     
@@ -430,6 +417,25 @@ class Multitoner(Gtk.Grid):
             filename = dialog.get_filename()
             doc.saveAs(filename)
         dialog.destroy()
+    
+    def _announceError(self, error, moreInfo=None):
+            window = self.get_toplevel()
+            dialog = Gtk.MessageDialog(
+                window
+                , Gtk.DialogFlags.DESTROY_WITH_PARENT
+                , Gtk.MessageType.ERROR
+                , Gtk.ButtonsType.CLOSE
+                , error
+            )
+            if moreInfo is not None:
+                dialog.format_secondary_text(moreInfo)
+            
+            # Destroy the dialog when the user responds to it
+            # (e.g. clicks a button)
+            def destroy(*args):
+                dialog.destroy()
+            dialog.connect('response', destroy)
+            dialog.show()
     
     def _askOkCancel(self, question, moreInfo=None):
         window = self.get_toplevel()
