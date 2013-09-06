@@ -1,11 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function, unicode_literals
+
 import sys
 import ghostscript._gsprint as gs
 import ctypes as c
-from cStringIO import StringIO
-
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import BytesIO as StringIO
 
 class GhostScriptRunner(object):
     def __init__(self):
@@ -36,7 +40,6 @@ class GhostScriptRunner(object):
             )
         }
         
-        self._references['display']
         gs.set_stdio(self.instance, self._references['stdin'],
             self._references['stdout'], self._references['stderr'])
         gs.set_display_callback(self.instance, c.byref(self._references['display']))
@@ -74,13 +77,19 @@ class GhostScriptRunner(object):
                 c.memmove(dest, c.c_char_p(data), count)
         return count
     
-    def _gsdll_stdout(self, instance, str, length):
-        sys.stdout.write(str[:length])
+    def _gsdll_stdout(self, instance, data, length):
+        message = data[:length]
+        if str is not bytes:
+            message = message.decode('utf-8')
+        sys.stdout.write(message)
         sys.stdout.flush()
         return length
     
-    def _gsdll_stderr(self,instance, str, length):
-        sys.stderr.write(str[:length])
+    def _gsdll_stderr(self,instance, data, length):
+        message = data[:length]
+        if str is not bytes:
+            message = message.decode('utf-8')
+        sys.stderr.write(message)
         sys.stderr.flush()
         return length
     
