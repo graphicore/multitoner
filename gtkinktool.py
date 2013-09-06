@@ -1074,7 +1074,7 @@ if __name__ == '__main__':
     redoButton.connect('clicked', ctrlHistory, 'redo')
     
     inksEditor.attach(undoButton, 0, -1, 1, 1)
-    inksEditor.attach(redoButton, 1, -1, 1, 1)
+    inksEditor.attach(redoButton, 2, -1, 1, 1)
     ####
     
     # preview Window
