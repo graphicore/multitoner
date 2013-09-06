@@ -4,7 +4,7 @@
 from __future__ import unicode_literals, print_function
 
 from string import Template
-import mom.codec as codec
+import binascii
 from interpolation import interpolationStrategiesDict
 import numpy as np
 import binascii
@@ -147,45 +147,36 @@ setcolorspace
 
 
 %note: this is all about the reading of the image data
-%%+ to be continued
 
-
+%note: creates a string of length width int, each of whose elements is
+%%+ initialized with the integer 0
 /picstr1 $width string def
-/_rowpadstr $width string def
 /rawreaddata
 {
   hasDecodeFile 0 eq
   {
-    /decodeFile currentfile /ASCII85Decode filter def
+    /decodeFile
+      %note: These filters can be chained togerther, so if data would be
+      %%+ zlib compressed and then saved as ascii85 string then the
+      %%+ encoding would be:
+      %%+ currentfile /ASCII85Decode filter /FlateDecode filter
+      %%+ where:
+      %%+ /ASCII85Decode filter decodes ascii85 encoded data and
+      %%+ /FlateDecode filter decodes zlib compressed data
+      currentfile
+      /ASCIIHexDecode filter % decodes hex encoded data (0-0A-F)
+    def
     /hasDecodeFile 1 def
   } if
   decodeFile exch readstring pop
 } def
 
-/padreaddata
-{
-  _topPad 0 gt
-  {
-    /_topPad _topPad 1 sub def
-    pop
-    _rowpadstr
-  }
-  {
-    _subImageRows 0 gt
-    {
-      /_subImageRows _subImageRows 1 sub def
-      dup _leftPad _picsubstr rawreaddata puinkerval
-    }
-    { pop _rowpadstr }
-    ifelse
-  }
-  ifelse
-} def
-
+%note: beginimage will be put on the stack at the ImageBinary placeholder
 /beginimage /image load def
 /hasDecodeFile 0 def
 /readdata /rawreaddata load bind def
 
+%note: this is the argument dict for the image procedure
 12 dict begin
 /ImageType 1 def
 /Width cols def
@@ -205,7 +196,7 @@ setcolorspace
 /Decode [0 255] def  % this is typical for the INDEXED color space 
 /DataSource {picstr1 readdata} def
 currentdict end
-
+%note: inject the beginimage procedure here
 $ImageBinary
 
 grestore % matches Image Header gsave Image Trailer grestore
@@ -219,15 +210,33 @@ grestore % matches EPS gsave
 def junked(string, chunkLen):
     return [string[i:i+chunkLen] for i in range(0, len(string), chunkLen)]
 
-def getImageBinary(string):
-    string = codec.base85_encode(string, codec.B85_ASCII)
+# This is to remember how encoding the data with ASCII85 was done
+# that encoding was much slower than hex but did use less space.
+# For the saving of eps-files this might become interesting again, because
+# speed of encoding is not so important in that case.
+# import mom.codec as codec
+# def getImageBinary(string):
+#     string = codec.base85_encode(string, codec.B85_ASCII)
+#     if bytes is not str:
+#         string = string.decode('utf-8')
+#     string = junked(string, 65)
+#     string = '\n'.join(string)
+#     string = ('\nbeginimage\n{0}~>'.format(string))
+#     length = len(string)
+#     return '%%BeginBinary: {0}{1}\n%%EndBinary'.format(len(string), string)
+
+def getImageBinary(binary):
+    ascii = binascii.hexlify(binary)
+    del binary
     if bytes is not str:
-        string = string.decode('utf-8')
-    string = junked(string, 65)
-    string = '\n'.join(string)
-    string = ('\nbeginimage\n{0}~>'.format(string))
-    length = len(string)
-    return '%%BeginBinary: {0}{1}\n%%EndBinary'.format(len(string), string)
+        ascii = ascii.decode('utf-8')
+    ascii = junked(ascii, 65)
+    ascii = '\n'.join(ascii)
+    # the beginimage must be within the begin binary, so a document manager can
+    # skip this part. the beginimage counts into the part that can be skipped
+    ascii = ('\nbeginimage\n{0}>'.format(ascii))
+    length = len(ascii)
+    return '%%BeginData: {0} Hex Bytes{1}\n%%EndData'.format(len(ascii), ascii)
 
 def getDeviceNLuT(*inks):
     """
@@ -375,9 +384,9 @@ class EPSTool(object):
         self._mapping['DuotoneCMYKValues'] = getDuotoneCMYKValues(*curves)
     
     def setImageData(self, imageBin, size):
-        self._gotImage = True
         self._mapping['ImageBinary'] = getImageBinary(imageBin)
         self._mapping['width'], self._mapping['height'] = size
+        self._gotImage = True
     
     def create(self):
         if not self._gotColor:
