@@ -11,7 +11,6 @@ if sys.version_info < (3,0):
     def repair_gsignals(gsignals):
         new = {}
         for k,v in gsignals.items():
-            print (k, type(k))
             new[k.encode("utf-8")] = v
         return new
     
