@@ -50,8 +50,8 @@ def work(filename, inks):
     
     epsTool.setColorData(*inks)
     eps = epsTool.create()
-    with open(imageName + '.tsst.eps', 'w') as f:
-        f.write(eps)
+    # with open(imageName + '.tsst.eps', 'w') as f:
+    #     f.write(eps)
     print ('gs.run.eps')
     r = gs.run(eps)
     # need to transport the result as a string
