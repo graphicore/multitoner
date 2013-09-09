@@ -12,6 +12,7 @@ from weakref import ref as Weakref
 from multiprocessing import Pool
 import ctypes as c
 from model import ModelInk
+import math
 
 # just a preparation for i18n
 def _(string):
@@ -78,22 +79,51 @@ class PreviewWorker(object):
         inks = [t.getArgs() for t in inks]
         self.pool.apply_async(work, args=(imageName, inks), callback=cb)
 
-class PreviewDrawinArea(Gtk.Layout):
-    def __init__(self):
-        Gtk.Layout.__init__(self)
-        self.surface = None
-        self.connect('draw' , self.onDraw)
-    @staticmethod
-    def onDraw(self, cr):
-        cairo_surface = self.surface
-        h = self.get_hadjustment().get_value()
-        v = self.get_vadjustment().get_value()
-        print ('draw', cairo_surface, h, v)
-        if cairo_surface is not None:
-            cr.set_source_surface(cairo_surface, -h , -v)
-        cr.paint()
-        return True
+
+class Canvas(Gtk.Viewport):
+    def __init__(self, *args):
+        Gtk.Viewport.__init__(self, *args)
         
+        self.scale = 1
+        
+        self.surface = None
+        self.widh = 0
+        self.height = 0
+        
+        self.da = Gtk.DrawingArea()
+        self.add(self.da)
+        self.da.connect('draw' , self.onDraw)
+    
+    def receiveSurface(self, surface, width, height):
+        self.surface = surface
+        self.width = width
+        self.height = height
+        self._resize()
+    
+    def _resize(self):
+        self.da.set_size_request(
+            math.ceil(self.width * self.scale),
+            math.ceil(self.height * self.scale)
+        )
+        # self.da.queue_draw() # seems to happen anyway
+    
+    def onDraw(self, da, cr):
+        width = self.get_allocated_width()
+        height =  self.get_allocated_height()
+        left = math.floor(self.get_hadjustment().get_value())
+        top = math.floor(self.get_vadjustment().get_value())
+        surface = self.surface
+        if surface is not None:
+            pattern = cairo.SurfacePattern(surface)
+            matrix = cairo.Matrix()
+            matrix.scale(self.scale, self.scale)
+            matrix.invert()
+            pattern.set_matrix(matrix)
+            cr.set_source(pattern)
+            # draws just the visible area
+            cr.rectangle(left, top, width, height)
+            cr.fill()
+
 class PreviewWindow(Gtk.Window):
     def __init__(self, inksModel, imageName):
         Gtk.Window.__init__(self)
@@ -110,17 +140,23 @@ class PreviewWindow(Gtk.Window):
         self._update_needed = None
         self._noInks = False
         
-        self.da = PreviewDrawinArea()
         self.scrolled = Gtk.ScrolledWindow()
-        self.scrolled.add(self.da)
+        adjustments = (self.scrolled.get_hadjustment(),
+                       self.scrolled.get_vadjustment())
+        
+        self.canvas = Canvas(*adjustments)
+        self.canvas.set_halign(Gtk.Align.CENTER)
+        self.canvas.set_valign(Gtk.Align.CENTER)
+        
+        self.scrolled.add(self.canvas)
+        
         self.add(self.scrolled)
         self._previewWorker = PreviewWorker()
         self._requestNewSurface(inksModel)
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
-            self.da.surface = None
-            self.da.queue_draw()
+            self.canvas.receiveSurface(None, 0, 0)
             self._noInks = True
             return
         self._noInks = False
@@ -170,7 +206,6 @@ class PreviewWindow(Gtk.Window):
     
     def _receiveSurface(self, w, h, buf):
         print ('_receiveSurface')
-        self.da.set_size(w, h)
         if self._noInks:
             # this may receive a surface after all inks are invisible
             cairo_surface = None
@@ -178,7 +213,7 @@ class PreviewWindow(Gtk.Window):
             cairo_surface = cairo.ImageSurface.create_for_data(
                 buf, cairo.FORMAT_RGB24, w, h, w * 4
             )
-        
+        print ('_receiveSurface >>>> ', cairo_surface)
         self._waiting = False
         if self._update_needed is not None:
             # while we where waiting another update became due
@@ -187,5 +222,5 @@ class PreviewWindow(Gtk.Window):
             if inksModel is not None:
                 self._requestNewSurface(inksModel)
         
-        self.da.surface = cairo_surface
-        self.da.queue_draw()
+        scale = self.canvas.scale = 1
+        self.canvas.receiveSurface(cairo_surface, w, h)
