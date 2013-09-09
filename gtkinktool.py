@@ -177,15 +177,6 @@ class CellRendererInk (Gtk.CellRendererText):
                 cr.set_source_surface(cairo_surface, x , y)
                 cr.paint()
             cr.set_matrix(ctm)
-    
-    #def do_get_size(self, widget, cell_area):
-    #    return (0, 0, self.width, self.height)
-    def do_get_preferred_size(self, widget):
-        
-        return (
-            Gtk.Requisition(self.width, self.height),
-            Gtk.Requisition(self.width, self.height)
-        )
 
 class ColorPreviewWidget(Gtk.DrawingArea):
     """
