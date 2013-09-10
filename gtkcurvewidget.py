@@ -319,6 +319,7 @@ class CurveEditor(Gtk.DrawingArea):
             | Gdk.EventMask.BUTTON1_MOTION_MASK
             | Gdk.EventMask.POINTER_MOTION_MASK
             | Gdk.EventMask.POINTER_MOTION_HINT_MASK
+            | Gdk.EventMask.STRUCTURE_MASK
             
         #    | Gdk.EventMask.KEY_PRESS_MASK
         #    | Gdk.EventMask.KEY_RELEASE_MASK
