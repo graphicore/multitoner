@@ -85,8 +85,8 @@ class Label(Gtk.Grid):
             self.get_style_context().remove_class(_class)
 
 class Document(Emitter):
+    fileExtension = '.mtt' # .m(ulti)t(oner)t(ool)
     untitledName = _('untitled')
-    
     def __init__(self, gradientWorker, filename=None, data=None):
         if data is None:
             data = {}
@@ -163,7 +163,6 @@ class Document(Emitter):
         self.filename = filename
 
 class Multitoner(Gtk.Grid):
-    fileExtension = '.mtt' # .m(ulti)t(oner)t(ool)
     def __init__(self):
         Gtk.Grid.__init__(self)
         self._gradientWorker = GradientWorker()
@@ -314,7 +313,7 @@ class Multitoner(Gtk.Grid):
         recentAction = Gtk.RecentAction.new_for_manager('FileOpenRecent',
             _('Recent Files'), None, None, None)
         recentFilter= Gtk.RecentFilter()
-        recentFilter.add_pattern ("*" + self.fileExtension);
+        recentFilter.add_pattern ("*" + Document.fileExtension);
         recentAction.add_filter(recentFilter)
         recentAction.connect('item-activated', self.openRecentHandler)
         actionGroup.add_action(recentAction)
@@ -410,7 +409,7 @@ class Multitoner(Gtk.Grid):
         )
         dialog.set_do_overwrite_confirmation(True);
         if doc.filename is None:
-            dialog.set_current_name(doc.untitledName + self.fileExtension)
+            dialog.set_current_name(doc.untitledName + Document.fileExtension)
         else:
             dialog.set_filename(doc.filename)
         if dialog.run() == Gtk.ResponseType.ACCEPT:
