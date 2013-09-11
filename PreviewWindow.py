@@ -21,12 +21,14 @@ UI_INFO = """
       <menuitem action='ZoomIn' />
       <menuitem action='ZoomOut' />
       <menuitem action='ZoomUnit' />
+      <menuitem action='ZoomFit' />
     </menu>
   </menubar>
   <toolbar name="ToolBar">
       <toolitem action='ZoomIn' />
       <toolitem action='ZoomOut' />
       <toolitem action='ZoomUnit' />
+      <toolitem action='ZoomFit' />
   </toolbar>
 </ui>
 """
@@ -35,11 +37,9 @@ class Canvas(Gtk.Viewport):
     def __init__(self, *args):
         Gtk.Viewport.__init__(self, *args)
         
-        self.surface = None
-        self.width = 0
-        self.height = 0
+        self._transformedPatternCache = (None, None)
         
-        self.scaleToFit = False
+        self.sourceSurface = None
         
         self._center = None
         self._restoringCenter = False
@@ -81,12 +81,9 @@ class Canvas(Gtk.Viewport):
         # save realize_handler_id for the closure of onRealize 
         realize_handler_id = self.connect('realize' , onRealize)
     
-    def receiveSurface(self, surface, width, height):
-        self.surface = surface
-        self.width = width
-        self.height = height
-        
-        if not hasattr(self, '_scale'):
+    def receiveSurface(self, surface):
+        self.sourceSurface = surface
+        if not hasattr(self, '_scale') or self.scaleToFit:
             parent_allocation = self.get_parent().get_allocation()
             self._scaleToFit(parent_allocation.width, parent_allocation.height)
         else:
@@ -94,11 +91,10 @@ class Canvas(Gtk.Viewport):
         self.da.queue_draw()
     
     def _resize(self):
-        print ('resize')
-        self.da.set_size_request(
-            math.ceil(self.width * self.scale),
-            math.ceil(self.height * self.scale)
-        )
+        # needs bounding box width and height after all transformations
+        matrix = self._getScaledMatrix()
+        w, h, _, _ = self._getSurfaceExtents(matrix, self.sourceSurface)
+        self.da.set_size_request(w, h)
     
     def configureHandler(self, widget, event):
         """
@@ -112,8 +108,8 @@ class Canvas(Gtk.Viewport):
     toplevelConfigureHandler = configureHandler
     
     def parentSizeAllocateHandler(self, parent, allocation):
-        if self.scaleToFit:
-            self._scheduleScaleToFit(allocation.width, allocation.height)
+        if self.scaleToFit and self.sourceSurface is not None:
+            self._scaleToFit(allocation.width, allocation.height)
     
     def adjustmentValueChangedHandler(self, adjustment):
         self._saveCenter()
@@ -145,12 +141,8 @@ class Canvas(Gtk.Viewport):
         finally:
             self._restoringCenter = False
     
-    @property
-    def scale(self):
-        return getattr(self, '_scale', 1)
-    
-    @scale.setter
-    def scale(self, value):
+    def _setScale(self, value):
+        """ will set the new scale"""
         if self.scale == value:
             return
         self._scale = value
@@ -158,32 +150,179 @@ class Canvas(Gtk.Viewport):
         self._resize()
         self.da.queue_draw()
     
-    def _schedule(self, callback, time, *args, **kwds):
-        timer = self._timers.get(callback, None)
-        if timer is not None:
-            # remove the old timer
-            GObject.source_remove(timer)
-        # schedule a new execution
-        timer = GObject.timeout_add(time, callback, *args, **kwds)
-        # remember the new timer
-        self._timers[callback] = timer
+    @property
+    def rotation(self):
+        return getattr(self, '_rotation', 0)
     
-    def _scheduleScaleToFit(self, width, height):
-        self._schedule(self._scaleToFit, 300, width, height)
+    @rotation.setter
+    def rotation(self, value):
+        """ between 0 and 2 will be multiplied with PI => radians """
+        self._rotation = value % 2
+        self._resize()
+        self.da.queue_draw()
+    
+    def addRotation(self, value):
+        self.rotation += value
+    
+    @property
+    def scale(self):
+        return getattr(self, '_scale', 1.0)
+    
+    @scale.setter
+    def scale(self, value):
+        """ will turn off scale to fit and set the new scale"""
+        self.scaleToFit = False
+        self._setScale(value)
+    
+    @property
+    def scaleToFit(self):
+        return getattr(self, '_scaleToFitFlag', True)
+    
+    @scaleToFit.setter
+    def scaleToFit(self, value):
+        self._scaleToFitFlag = not not value
+        if self._scaleToFitFlag and self.sourceSurface is not None:
+            parent_allocation = self.get_parent().get_allocation()
+            self._scaleToFit(parent_allocation.width, parent_allocation.height)
     
     def _scaleToFit(self, available_width, available_height):
+        """
+        set the scale to a value that makes the image fit exactly into
+        available_width and available_height
+        """
+        # needs unscaled width and unscaled height, so the matrix must not
+        # be scaled, the rotation however is needed
+        matrix = self._getRotatedMatrix()
+        source_width, source_height, _, _ = self._getSurfaceExtents(matrix, self.sourceSurface)
         try:
-            aspect_ratio = self.width / self.height
+            aspect_ratio = source_width / source_height
             available_aspect_ratio = available_width / available_height
         except ZeroDivisionError:
-            self.scale = 1
+            self._setScale(1)
         else:
             if aspect_ratio > available_aspect_ratio:
                 # fit to width
-                self.scale = available_width/self.width
+                self._setScale(available_width / source_width)
             else: 
                 # fit to height
-                self.scale = available_height/self.height
+                self._setScale(available_height / source_height)
+    
+    def _getBBox(self, matrix, x1, y1, x2, y2):
+        """
+        transform the rectangle defined by x1, y1, x2, y2 and return
+        the bounding box of the result rectangle
+        """
+        in_points = ( (x1, y1)
+                    , (x1, y2)
+                    , (x2, y1)
+                    , (x2, y2)
+                    )
+        out_points = [matrix.transform_point(x, y) for x, y in in_points]
+        
+        xs, ys = zip(*out_points)
+        
+        max_x = max(*xs)
+        max_y = max(*ys)
+        
+        min_x = min(*xs)
+        min_y = min(*ys)
+        
+        return min_x, min_y, max_x, max_y
+    
+    def _getBBOxExtents(self, matrix, x1, y1, x2, y2):
+        """
+        apply matrix to the rectangle defined by x1, y1, x2, y2
+        returns width, height, offset_x, offset_y of the bounding box
+        this is used to determine the space needed to draw the surface
+        and to move the contents back into view using the offsets
+        """
+        x1, y1, x2, y2 = self._getBBox(matrix, x1, y1, x2, y2)
+        w = int(math.ceil(x2-x1))
+        h = int(math.ceil(y2-y1))
+        offset_x, offset_y = x1, y1
+        return w, h, offset_x, offset_y
+    
+    def _getSurfaceExtents(self, matrix, surface):
+        """
+        get the extents and offsets of surface after the application
+        of matrix
+        """
+        x1, y1, x2, y2 = 0, 0, surface.get_width(), surface.get_height()
+        return self._getBBOxExtents(matrix, x1, y1, x2, y2)
+    
+    def _getRotatedMatrix(self):
+        """ matrix with rotation but without scale"""
+        matrix = cairo.Matrix()
+        matrix.rotate(self.rotation * math.pi)
+        # rotate?
+        return matrix
+    
+    def _getScaledMatrix(self):
+        """ matrix with rotation and scale"""
+        matrix = self._getRotatedMatrix()
+        matrix.scale(self.scale, self.scale)
+        return matrix
+    
+    def _createTransformedPattern(self, sourceSurface, cache=True):
+        """
+        returns cairo pattern to set as source of a cairo context
+        
+        When cache is False the returned pattern will have all necessary
+        translations applied to its affine transformation matrix its source,
+        however will be the original sourceSurface. So drawing that pattern
+        will apply all transformations then, this can result in a lot of
+        cpu work when the pattern is drawn multiple times.
+        
+        When cache is True, the returned pattern will be a pattern with no
+        special transformations applied. Instead its surface will hold the
+        image data after all transformations have been applied to it.
+        """
+        # calculate width and height using the new matrix
+        matrix = self._getScaledMatrix()
+        w, h, offset_x, offset_y = self._getSurfaceExtents(matrix, sourceSurface)
+        
+        # finish the transformation matrix by translating the pattern
+        # back into view using the offsets the transformation created.
+        # IMPORTANT: the normal translate method of a cairo.Matrix applies
+        # before all other transformations. Here we need it to be applied
+        # after all transformations, hence the usage of multiply
+        translate_matrix = cairo.Matrix()
+        translate_matrix.translate(-offset_x, -offset_y)
+        matrix = matrix.multiply(translate_matrix)
+        
+        source_pattern = cairo.SurfacePattern(sourceSurface)
+        # cairo.SurfacePattern uses inverted matrices, see the docs for pattern
+        matrix.invert()
+        source_pattern.set_matrix(matrix)
+        if not cache:
+            return source_pattern
+        # the result of this can be cached and will speedup the display
+        # fo large images alot, because all transformations will be applied
+        # just once not on every onDraw event
+        target_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+        # the context to draw on the new surface
+        co = cairo.Context(target_surface)
+        # draw to target_surface
+        co.set_source(source_pattern)
+        # create a pattern with the cached transformation
+        co.paint()
+        
+        target_pattern = cairo.SurfacePattern(target_surface)
+        return target_pattern
+    
+    def _getSourcePattern(self):
+        if self.sourceSurface is None:
+            self._transformedPatternCache = (None, None)
+            return None
+        sourceSurface = self.sourceSurface
+        new_check = (id(sourceSurface), self.scale, self.rotation)
+        check, transformed_pattern = self._transformedPatternCache
+        # see if the cache is invalid
+        if new_check != check:
+            transformed_pattern = self._createTransformedPattern(sourceSurface, True)
+            # cache the results
+            self._transformedPatternCache = (new_check, transformed_pattern)
+        return transformed_pattern
     
     def onDraw(self, da, cr):
         print ('onDraw', self.drawCounter)
@@ -193,13 +332,9 @@ class Canvas(Gtk.Viewport):
         height =  self.get_allocated_height()
         left = math.floor(self.get_hadjustment().get_value())
         top = math.floor(self.get_vadjustment().get_value())
-        surface = self.surface
-        if surface is not None:
-            pattern = cairo.SurfacePattern(surface)
-            matrix = cairo.Matrix()
-            matrix.scale(self.scale, self.scale)
-            matrix.invert()
-            pattern.set_matrix(matrix)
+        
+        pattern = self._getSourcePattern()
+        if pattern is not None:
             cr.set_source(pattern)
             # draws just the visible area
             cr.rectangle(left, top, width, height)
@@ -229,7 +364,9 @@ class CanvasControls(Emitter):
         self.canvas.scale = 1
     
     def zoomFit(self):
-        pass
+        """ toggles scale to filt"""
+        self.canvas.scaleToFit = not self.canvas.scaleToFit
+        self.canvas.addRotation(0.5)
 
 class PreviewWindow(Gtk.Window):
     def __init__(self, inksModel, imageName):
@@ -266,18 +403,8 @@ class PreviewWindow(Gtk.Window):
         
         self.menubar, self.toolbar = self._initMenu()
         
-        scaler = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.05, 16.0, 0.05)
-        scaler.set_digits(2)
-        scaler.set_draw_value(True)
-        scaler.set_value(1)
-        def setScale(*args):
-            self.canvas.scale = scaler.get_value()
-        scaler.connect('value-changed', setScale)
-        
         self.grid.attach(self.menubar, 0, 0, 1, 1)
         self.grid.attach(self.toolbar, 0, 1, 1, 1)
-        self.grid.attach(scaler,  0, 2, 1, 1)
-        scaler.set_halign(Gtk.Align.FILL)
         
         self.grid.attach(self.scrolled, 0, 3, 1, 1)
         
@@ -289,13 +416,14 @@ class PreviewWindow(Gtk.Window):
         actionGroup.add_actions([
               ('EditMenu', None, _('Edit'), None,
                None, None)
-            , ('ZoomIn', Gtk.STOCK_ZOOM_IN, _('Zoom In'),  '<Ctrl>plus',
+            , ('ZoomIn', Gtk.STOCK_ZOOM_IN, None,  'plus',
                None, self.actionZoomInHandler)
-            , ('ZoomOut', Gtk.STOCK_ZOOM_OUT, _('Zoom Out'), '<Ctrl>minus',
+            , ('ZoomOut', Gtk.STOCK_ZOOM_OUT, None, 'minus',
                None, self.actionZoomOutHandler)
-            , ('ZoomUnit', Gtk.STOCK_ZOOM_100, _('Zoom 100%'), '<Ctrl>minus',
+            , ('ZoomUnit', Gtk.STOCK_ZOOM_100, None, '0',
                None, self.actionZoomUnitHandler)
-               # missing: Gtk.STOCK_ZOOM_100, Gtk.STOCK_ZOOM_FIT
+            , ('ZoomFit', Gtk.STOCK_ZOOM_FIT, None, 'F',
+               None, self.actionZoomFitHandler)
             ])
         return actionGroup
     
@@ -315,7 +443,7 @@ class PreviewWindow(Gtk.Window):
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
-            self.canvas.receiveSurface(None, 0, 0)
+            self.canvas.receiveSurface(None)
             self._noInks = True
             return
         self._noInks = False
@@ -364,7 +492,6 @@ class PreviewWindow(Gtk.Window):
         return False
     
     def _receiveSurface(self, w, h, buf):
-        print ('_receiveSurface')
         if self._noInks:
             # this may receive a surface after all inks are invisible
             cairo_surface = None
@@ -381,7 +508,7 @@ class PreviewWindow(Gtk.Window):
             if inksModel is not None:
                 self._requestNewSurface(inksModel)
         
-        self.canvas.receiveSurface(cairo_surface, w, h)
+        self.canvas.receiveSurface(cairo_surface)
     
     # actions
     def actionZoomInHandler(self, widget):
@@ -392,3 +519,6 @@ class PreviewWindow(Gtk.Window):
     
     def actionZoomUnitHandler(self, widget):
         self.canvasCtrl.zoomUnit()
+    
+    def actionZoomFitHandler(self, widget):
+        self.canvasCtrl.zoomFit()
