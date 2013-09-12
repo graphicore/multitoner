@@ -22,6 +22,9 @@ UI_INFO = """
       <menuitem action='ZoomOut' />
       <menuitem action='ZoomUnit' />
       <menuitem action='ZoomFit' />
+      <separator />
+      <menuitem action='RotateRight' />
+      <menuitem action='RotateLeft' />
     </menu>
   </menubar>
   <toolbar name="ToolBar">
@@ -29,6 +32,9 @@ UI_INFO = """
       <toolitem action='ZoomOut' />
       <toolitem action='ZoomUnit' />
       <toolitem action='ZoomFit' />
+      <separator />
+      <toolitem action='RotateRight' />
+      <toolitem action='RotateLeft' />
   </toolbar>
 </ui>
 """
@@ -84,8 +90,7 @@ class Canvas(Gtk.Viewport):
     def receiveSurface(self, surface):
         self.sourceSurface = surface
         if not hasattr(self, '_scale') or self.scaleToFit:
-            parent_allocation = self.get_parent().get_allocation()
-            self._scaleToFit(parent_allocation.width, parent_allocation.height)
+            self.setFittingScale()
         else:
             self._resize()
         self.da.queue_draw()
@@ -108,8 +113,8 @@ class Canvas(Gtk.Viewport):
     toplevelConfigureHandler = configureHandler
     
     def parentSizeAllocateHandler(self, parent, allocation):
-        if self.scaleToFit and self.sourceSurface is not None:
-            self._scaleToFit(allocation.width, allocation.height)
+        if self.scaleToFit:
+            self._setFittingScale(allocation.width, allocation.height)
     
     def adjustmentValueChangedHandler(self, adjustment):
         self._saveCenter()
@@ -158,6 +163,8 @@ class Canvas(Gtk.Viewport):
     def rotation(self, value):
         """ between 0 and 2 will be multiplied with PI => radians """
         self._rotation = value % 2
+        if self.scaleToFit:
+            self.setFittingScale()
         self._resize()
         self.da.queue_draw()
     
@@ -176,20 +183,25 @@ class Canvas(Gtk.Viewport):
     
     @property
     def scaleToFit(self):
-        return getattr(self, '_scaleToFitFlag', True)
+        return getattr(self, '_scaleToFit', True)
     
     @scaleToFit.setter
     def scaleToFit(self, value):
-        self._scaleToFitFlag = not not value
-        if self._scaleToFitFlag and self.sourceSurface is not None:
-            parent_allocation = self.get_parent().get_allocation()
-            self._scaleToFit(parent_allocation.width, parent_allocation.height)
+        self._scaleToFit = not not value
+        if self._scaleToFit:
+            self.setFittingScale()
     
-    def _scaleToFit(self, available_width, available_height):
+    def setFittingScale(self):
+        parent_allocation = self.get_parent().get_allocation()
+        self._setFittingScale(parent_allocation.width, parent_allocation.height)
+    
+    def _setFittingScale(self, available_width, available_height):
         """
         set the scale to a value that makes the image fit exactly into
         available_width and available_height
         """
+        if self.sourceSurface is None:
+            return
         # needs unscaled width and unscaled height, so the matrix must not
         # be scaled, the rotation however is needed
         matrix = self._getRotatedMatrix()
@@ -263,19 +275,20 @@ class Canvas(Gtk.Viewport):
         matrix.scale(self.scale, self.scale)
         return matrix
     
-    def _createTransformedPattern(self, sourceSurface, cache=True):
+    def _createTransformedPattern(self, sourceSurface, transform_buffer=True):
         """
         returns cairo pattern to set as source of a cairo context
         
-        When cache is False the returned pattern will have all necessary
-        translations applied to its affine transformation matrix its source,
-        however will be the original sourceSurface. So drawing that pattern
-        will apply all transformations then, this can result in a lot of
-        cpu work when the pattern is drawn multiple times.
+        When transform_buffer is False the returned pattern will have all
+        necessary transformations applied to its affine transformation
+        matrix. The source buffer, however will be the original sourceSurface.
+        So drawing that pattern will apply all transformations life, this
+        can result in a lot of cpu work when the pattern is drawn multiple
+        times.
         
-        When cache is True, the returned pattern will be a pattern with no
-        special transformations applied. Instead its surface will hold the
-        image data after all transformations have been applied to it.
+        When transform_buffer is True, the returned pattern will be a
+        pattern with no extra transformations applied. Instead its surface
+        will hold the image data after all transformations have been applied.
         """
         # calculate width and height using the new matrix
         matrix = self._getScaledMatrix()
@@ -294,19 +307,17 @@ class Canvas(Gtk.Viewport):
         # cairo.SurfacePattern uses inverted matrices, see the docs for pattern
         matrix.invert()
         source_pattern.set_matrix(matrix)
-        if not cache:
+        if not transform_buffer:
             return source_pattern
         # the result of this can be cached and will speedup the display
-        # fo large images alot, because all transformations will be applied
+        # for large images alot, because all transformations will be applied
         # just once not on every onDraw event
         target_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
         # the context to draw on the new surface
         co = cairo.Context(target_surface)
         # draw to target_surface
         co.set_source(source_pattern)
-        # create a pattern with the cached transformation
         co.paint()
-        
         target_pattern = cairo.SurfacePattern(target_surface)
         return target_pattern
     
@@ -315,11 +326,17 @@ class Canvas(Gtk.Viewport):
             self._transformedPatternCache = (None, None)
             return None
         sourceSurface = self.sourceSurface
+        
         new_check = (id(sourceSurface), self.scale, self.rotation)
         check, transformed_pattern = self._transformedPatternCache
         # see if the cache is invalid
         if new_check != check:
-            transformed_pattern = self._createTransformedPattern(sourceSurface, True)
+            # seems like a good rule of thumb to transform the buffer and
+            # use the result as surface for scales lower than 1 but for
+            # scales bigger than one the life transformation is fast enough
+            # this is likely not the best behavior in all scenarios
+            transform_buffer = self.scale < 1
+            transformed_pattern = self._createTransformedPattern(sourceSurface, transform_buffer)
             # cache the results
             self._transformedPatternCache = (new_check, transformed_pattern)
         return transformed_pattern
@@ -366,7 +383,12 @@ class CanvasControls(Emitter):
     def zoomFit(self):
         """ toggles scale to filt"""
         self.canvas.scaleToFit = not self.canvas.scaleToFit
+    
+    def rotateRight(self):
         self.canvas.addRotation(0.5)
+    
+    def rotateLeft(self):
+        self.canvas.addRotation(-0.5)
 
 class PreviewWindow(Gtk.Window):
     def __init__(self, inksModel, imageName):
@@ -411,20 +433,56 @@ class PreviewWindow(Gtk.Window):
         self._previewWorker = PreviewWorker()
         self._requestNewSurface(inksModel)
     
+    @staticmethod
+    def _addIconActionToActionGroup(action_group, name , label=None, tooltip=None,
+                                    icon_name=None, callback=None, accelerator=None,
+                                    stock_id=None, type=None):
+        if type is None:
+            type = Gtk.Action
+        action = type(name, label, tooltip, stock_id)
+        if icon_name is not None:
+            action.set_icon_name(icon_name)
+        if callback is not None:
+            action.connect('activate', callback)
+        
+        if accelerator is not None:
+            action_group.add_action_with_accel(action, accelerator)
+        else:
+            action_group.add_action(action)
+    
     def _makeDocumentActions(self):
         actionGroup = Gtk.ActionGroup('document_actions')
         actionGroup.add_actions([
               ('EditMenu', None, _('Edit'), None,
                None, None)
             , ('ZoomIn', Gtk.STOCK_ZOOM_IN, None,  'plus',
-               None, self.actionZoomInHandler)
+               _('Zoom In'), self.actionZoomInHandler)
             , ('ZoomOut', Gtk.STOCK_ZOOM_OUT, None, 'minus',
-               None, self.actionZoomOutHandler)
+               _('Zoom Out'), self.actionZoomOutHandler)
             , ('ZoomUnit', Gtk.STOCK_ZOOM_100, None, '0',
-               None, self.actionZoomUnitHandler)
-            , ('ZoomFit', Gtk.STOCK_ZOOM_FIT, None, 'F',
-               None, self.actionZoomFitHandler)
+               _('Zoom to Normal Size'), self.actionZoomUnitHandler)
             ])
+        
+        iconActions = (
+              ('ZoomFit', None, _('Zoom To Fit Image To Windowsize'),
+                None, self.actionZoomFitHandler, 'F', Gtk.STOCK_ZOOM_FIT,
+                Gtk.ToggleAction)
+            , ('RotateRight',  _('Rotate Clockwise'), _('Rotate Clockwise'),
+              'object-rotate-right', self.actionRotateRightHandler, 'R')
+            , ('RotateLeft', _('Rotate Counterclockwise'), _('Rotate Counterclockwise'),
+              'object-rotate-left', self.actionRotateLeftHandler, 'L'
+            )
+        ) 
+        for setup in iconActions:
+            action = self._addIconActionToActionGroup(actionGroup, *setup)
+        
+        # zoom to fit is initially active in Canvas this is a simple
+        # approach to sync that on initialization without listening to
+        # the state of Canvas
+        zoomFitAction = actionGroup.get_action('ZoomFit')
+        zoomFitAction.handler_block_by_func(self.actionZoomFitHandler)
+        zoomFitAction.set_active(True)
+        zoomFitAction.handler_unblock_by_func(self.actionZoomFitHandler)
         return actionGroup
     
     def _initMenu(self):
@@ -522,3 +580,9 @@ class PreviewWindow(Gtk.Window):
     
     def actionZoomFitHandler(self, widget):
         self.canvasCtrl.zoomFit()
+    
+    def actionRotateRightHandler(self, widget):
+        self.canvasCtrl.rotateRight()
+    
+    def actionRotateLeftHandler(self, widget):
+        self.canvasCtrl.rotateLeft()
