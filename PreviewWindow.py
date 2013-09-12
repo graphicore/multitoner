@@ -9,6 +9,7 @@ from PreviewWorker import PreviewWorker
 from emitter import Emitter
 from weakref import ref as Weakref
 import math
+from compatibility import repair_gsignals
 
 # just a preparation for i18n
 def _(string):
@@ -40,6 +41,13 @@ UI_INFO = """
 """
 
 class Canvas(Gtk.Viewport):
+    __gsignals__ = repair_gsignals({
+        'scale-to-fit-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
+                                 # the value of scaleToFit
+                                 GObject.TYPE_BOOLEAN, ))
+    })
+    
+    
     def __init__(self, *args):
         Gtk.Viewport.__init__(self, *args)
         
@@ -187,7 +195,10 @@ class Canvas(Gtk.Viewport):
     
     @scaleToFit.setter
     def scaleToFit(self, value):
+        old = self.scaleToFit
         self._scaleToFit = not not value
+        if self._scaleToFit != old:
+            self.emit('scale-to-fit-changed', self._scaleToFit)
         if self._scaleToFit:
             self.setFittingScale()
     
@@ -390,6 +401,72 @@ class CanvasControls(Emitter):
     def rotateLeft(self):
         self.canvas.addRotation(-0.5)
 
+class ScrollByHandTool(Gtk.EventBox):
+    def __init__(self, hadjustment, vadjustment):
+        Gtk.EventBox.__init__(self)
+        self.add_events(
+              Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+            | Gdk.EventMask.BUTTON1_MOTION_MASK # receive motion events only when button1 is pressed
+            | Gdk.EventMask.POINTER_MOTION_HINT_MASK
+        )
+        
+        self.hadjustment = hadjustment
+        self.vadjustment = vadjustment
+        
+        vadjustment.connect('value-changed', self.adjustmentValueChangedHandler)
+        hadjustment.connect('value-changed', self.adjustmentValueChangedHandler)
+        
+        
+        self.connect('button-press-event'  , self.buttonPressHandler)
+        self.connect('button-release-event', self.buttonReleaseHandler)
+        self.connect('motion-notify-event' , self.motionNotifyHandler)
+        self._scrollBase = None
+        self._canScroll = False
+    
+    def adjustmentValueChangedHandler(self, *args):
+        h = self.hadjustment
+        v = self.vadjustment
+        # "value" field represents the position of the scrollbar, which must
+        # be between the "lower" field and "upper - page_size." 
+        can_scroll_x = 0 < h.get_upper() - h.get_lower() - h.get_page_size()
+        can_scroll_y = 0 < v.get_upper() - v.get_lower() - v.get_page_size()
+        
+        self._canScroll = can_scroll_x or can_scroll_y
+        if self._canScroll:
+            cursor = Gdk.Cursor.new(Gdk.CursorType.FLEUR)
+            self.get_window().set_cursor(cursor)
+        else:
+            cursor = Gdk.Cursor.new(Gdk.CursorType.ARROW)
+            self.get_window().set_cursor(cursor)
+            # stop scrolling if doing so
+            self._scrollBase = None
+        
+    def buttonPressHandler(self, canvas, event):
+        if not self._canScroll:
+            #no need to scroll
+            self._scrollBase = None
+            return
+        original_x = self.hadjustment.get_value()
+        original_y = self.vadjustment.get_value()
+        self._scrollBase = event.x, event.y, original_x, original_y
+    
+    def motionNotifyHandler(self, canvas, event):
+        if self._scrollBase is None:
+            return
+        start_x, start_y, original_x, original_y = self._scrollBase
+        now_x, now_y = event.x, event.y
+        
+        delta_x = now_x - start_x
+        delta_y = now_y - start_y
+        
+        self.hadjustment.set_value(original_x - delta_x)
+        self.vadjustment.set_value(original_y - delta_y)
+    
+    def buttonReleaseHandler(self, canvas, event):
+        self._scrollBase = None
+
+
 class PreviewWindow(Gtk.Window):
     def __init__(self, inksModel, imageName):
         Gtk.Window.__init__(self)
@@ -399,7 +476,6 @@ class PreviewWindow(Gtk.Window):
         self.set_title(_('Multitoner Tool preview: {filename}').format(filename=imageName))
         self.set_default_size(640, 480)
         self.set_has_resize_grip(True)
-        
         
         self._timeout = None
         self._waiting = False
@@ -423,12 +499,18 @@ class PreviewWindow(Gtk.Window):
         self.scrolled.set_hexpand(True)
         self.scrolled.set_vexpand(True)
         
+        scrollByHand = ScrollByHandTool(*adjustments)
+        scrollByHand.add(self.scrolled)
+        
         self.menubar, self.toolbar = self._initMenu()
+        # synchronize the zoom to fit value
+        self._setZoomFitActionActiveValue(self.canvas.scaleToFit)
+        self.canvas.connect('scale-to-fit-changed', self.scaleToFitChangedHandler)
         
         self.grid.attach(self.menubar, 0, 0, 1, 1)
         self.grid.attach(self.toolbar, 0, 1, 1, 1)
         
-        self.grid.attach(self.scrolled, 0, 3, 1, 1)
+        self.grid.attach(scrollByHand, 0, 3, 1, 1)
         
         self._previewWorker = PreviewWorker()
         self._requestNewSurface(inksModel)
@@ -476,14 +558,13 @@ class PreviewWindow(Gtk.Window):
         for setup in iconActions:
             action = self._addIconActionToActionGroup(actionGroup, *setup)
         
-        # zoom to fit is initially active in Canvas this is a simple
-        # approach to sync that on initialization without listening to
-        # the state of Canvas
-        zoomFitAction = actionGroup.get_action('ZoomFit')
-        zoomFitAction.handler_block_by_func(self.actionZoomFitHandler)
-        zoomFitAction.set_active(True)
-        zoomFitAction.handler_unblock_by_func(self.actionZoomFitHandler)
         return actionGroup
+    
+    def _setZoomFitActionActiveValue(self, value):
+        zoomFitAction = self._documentActions.get_action('ZoomFit')
+        zoomFitAction.handler_block_by_func(self.actionZoomFitHandler)
+        zoomFitAction.set_active(value)
+        zoomFitAction.handler_unblock_by_func(self.actionZoomFitHandler)
     
     def _initMenu(self):
         self._documentActions = self._makeDocumentActions()
@@ -586,3 +667,7 @@ class PreviewWindow(Gtk.Window):
     
     def actionRotateLeftHandler(self, widget):
         self.canvasCtrl.rotateLeft()
+    
+    def scaleToFitChangedHandler(self, widget, scaleToFit):
+        self._setZoomFitActionActiveValue(scaleToFit)
+        
