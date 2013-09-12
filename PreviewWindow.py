@@ -541,7 +541,7 @@ class PreviewWindow(Gtk.Window):
                _('Zoom In'), self.actionZoomInHandler)
             , ('ZoomOut', Gtk.STOCK_ZOOM_OUT, None, 'minus',
                _('Zoom Out'), self.actionZoomOutHandler)
-            , ('ZoomUnit', Gtk.STOCK_ZOOM_100, None, '0',
+            , ('ZoomUnit', Gtk.STOCK_ZOOM_100, None, '1',
                _('Zoom to Normal Size'), self.actionZoomUnitHandler)
             ])
         
