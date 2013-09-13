@@ -105,8 +105,11 @@ class Canvas(Gtk.Viewport):
     
     def _resize(self):
         # needs bounding box width and height after all transformations
-        matrix = self._getScaledMatrix()
-        w, h, _, _ = self._getSurfaceExtents(matrix, self.sourceSurface)
+        if self.sourceSurface is not None:
+            matrix = self._getScaledMatrix()
+            w, h, _, _ = self._getSurfaceExtents(matrix, self.sourceSurface)
+        else:
+            w = h = 0
         self.da.set_size_request(w, h)
     
     def configureHandler(self, widget, event):
@@ -353,8 +356,10 @@ class Canvas(Gtk.Viewport):
         return transformed_pattern
     
     def onDraw(self, da, cr):
-        print ('onDraw', self.drawCounter)
-        self.drawCounter+=1
+        # if not hasattr(self, '_draw_counter')
+        #     self._draw_counter = 0
+        # print ('onDraw', self._draw_counter)
+        # self._draw_counter += 1
         
         width = self.get_allocated_width()
         height =  self.get_allocated_height()
@@ -507,7 +512,7 @@ class PreviewWindow(Gtk.Window):
         self._setZoomFitActionActiveValue(self.canvas.scaleToFit)
         self.canvas.connect('scale-to-fit-changed', self.scaleToFitChangedHandler)
         
-        self.grid.attach(self.menubar, 0, 0, 1, 1)
+        # self.grid.attach(self.menubar, 0, 0, 1, 1)
         self.grid.attach(self.toolbar, 0, 1, 1, 1)
         
         self.grid.attach(scrollByHand, 0, 3, 1, 1)
@@ -601,7 +606,6 @@ class PreviewWindow(Gtk.Window):
         preview can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
         """
-        
         # reset the timeout
         if self._timeout is not None:
             GObject.source_remove(self._timeout)
@@ -638,7 +642,7 @@ class PreviewWindow(Gtk.Window):
             cairo_surface = cairo.ImageSurface.create_for_data(
                 buf, cairo.FORMAT_RGB24, w, h, w * 4
             )
-        print ('_receiveSurface >>>> ', cairo_surface)
+        # print ('_receiveSurface >>>> ', cairo_surface)
         self._waiting = False
         if self._update_needed is not None:
             # while we where waiting another update became due
@@ -670,4 +674,24 @@ class PreviewWindow(Gtk.Window):
     
     def scaleToFitChangedHandler(self, widget, scaleToFit):
         self._setZoomFitActionActiveValue(scaleToFit)
-        
+
+if __name__ == '__main__':
+    import sys
+    import json
+    from model import ModelCurves, ModelInk
+    
+    GObject.threads_init()
+    
+    if len(sys.argv) > 2:
+        mttFile = sys.argv[1]
+        imageName = sys.argv[-1]
+        print (imageName, mttFile)
+        with open(mttFile) as f:
+            data = json.load(f)
+        model = ModelCurves(ChildModel=ModelInk, **data)
+        previewWindow = PreviewWindow(model, imageName)
+        previewWindow.connect('destroy', Gtk.main_quit)
+        previewWindow.show_all()
+        Gtk.main()
+    else:
+        print (_('Need a .mtt file as last argument and a grayscale imagefile as last argument.'))
