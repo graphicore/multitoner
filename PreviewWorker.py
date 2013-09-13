@@ -32,12 +32,19 @@ def work(filename, inks):
     if filename != imageName:
         imageName = filename
         epsTool = EPSTool()
+        from time import sleep
         im = Image.open(imageName)
-        print ('image mode', im.mode, 'epsTool.setImageData ...')
+        if im.mode != 'L':
+            # TODO: This is used to display a message in the ui process.
+            # It  should warn that reproducing the result relies on the method
+            # used to convert here. It's better to have grayscale as input.
+            message = 'info', 'converted', im.mode
+            im = im.convert('L')
+            print ('image mode was ', message[2])
+        print('epsTool.setImageData ...')
         epsTool.setImageData(im.tostring(), im.size)
-        print ('epsTool.setImageData ... DONE!')
+        im = None
     
-    print ('work with', inks)
     inks = [ModelInk(**t) for t in inks]
     
     epsTool.setColorData(*inks)
@@ -64,6 +71,7 @@ class PreviewWorker(object):
         callback[0](*args)
     
     def addJob(self, callback, imageName, *inks):
-        cb = lambda result: self.callback(callback, result)
+        def cb(result):
+            self.callback(callback, result)
         inks = [t.getArgs() for t in inks]
         self.pool.apply_async(work, args=(imageName, inks), callback=cb)
