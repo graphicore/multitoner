@@ -206,7 +206,10 @@ class Canvas(Gtk.Viewport):
             self.setFittingScale()
     
     def setFittingScale(self):
-        parent_allocation = self.get_parent().get_allocation()
+        parent = self.get_parent()
+        if parent is None:
+            return
+        parent_allocation = parent.get_allocation()
         self._setFittingScale(parent_allocation.width, parent_allocation.height)
     
     def _setFittingScale(self, available_width, available_height):
@@ -473,10 +476,11 @@ class ScrollByHandTool(Gtk.EventBox):
 
 
 class PreviewWindow(Gtk.Window):
-    def __init__(self, inksModel, imageName):
+    def __init__(self, inksModel, imageName=None):
         Gtk.Window.__init__(self)
         inksModel.add(self) #subscribe
         self.imageName = imageName
+        self.inksModel = Weakref(inksModel)
         
         self.set_title(_('Multitoner Tool preview: {filename}').format(filename=imageName))
         self.set_default_size(640, 480)
@@ -518,7 +522,6 @@ class PreviewWindow(Gtk.Window):
         self.grid.attach(scrollByHand, 0, 3, 1, 1)
         
         self._previewWorker = PreviewWorker()
-        self._requestNewSurface(inksModel)
     
     @staticmethod
     def _addIconActionToActionGroup(action_group, name , label=None, tooltip=None,
@@ -601,7 +604,7 @@ class PreviewWindow(Gtk.Window):
                 return
         self._requestNewSurface(inksModel)
     
-    def _requestNewSurface(self, inksModel):
+    def _requestNewSurface(self):
         """ this will be called very frequently, because generating the
         preview can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
@@ -682,9 +685,11 @@ if __name__ == '__main__':
     
     GObject.threads_init()
     
-    if len(sys.argv) > 2:
+    if len(sys.argv) > 1:
         mttFile = sys.argv[1]
-        imageName = sys.argv[-1]
+        imageName = None
+        if len(sys.argv) > 2:
+            imageName = sys.argv[-1]
         print (imageName, mttFile)
         with open(mttFile) as f:
             data = json.load(f)
@@ -694,4 +699,4 @@ if __name__ == '__main__':
         previewWindow.show_all()
         Gtk.main()
     else:
-        print (_('Need a .mtt file as last argument and a grayscale imagefile as last argument.'))
+        print (_('Need a .mtt file as first argument and optionally a grayscale imagefile as last argument.'))
