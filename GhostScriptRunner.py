@@ -11,12 +11,15 @@ try:
 except ImportError:
     from io import BytesIO as StringIO
 
+GhostscriptError = gs.GhostscriptError
+
 class GhostScriptRunner(object):
     def __init__(self):
         self.args = None
         self._args = ['-dEPSCrop']
         self.instance = gs.new_instance()
-        self.stdin = self.width = self.height = self.rgbbuf = self.buf = None
+        self.stdin = self.width = self.height = self.rgbbuf = self.result \
+            = self.buf = None
         # need to keep a reference of this stuff around
         self._references = {
             'stdin': gs.c_stdstream_call_t(self._gsdll_stdin),
@@ -44,6 +47,10 @@ class GhostScriptRunner(object):
             self._references['stdout'], self._references['stderr'])
         gs.set_display_callback(self.instance, c.byref(self._references['display']))
     
+    def cleanup(self):
+        gs.delete_instance(self.instance)
+        self.instance = None
+    
     def run(self, eps):
         CAIRO_FORMAT_RGB24  = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | \
                               gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
@@ -57,8 +64,13 @@ class GhostScriptRunner(object):
         args = ['-ignored-', dformat, '-sDEVICE=display', '-r72x72', '-q'] \
                + userArgs + ['-_']
         
-        gs.init_with_args(self.instance, args)
-        gs.exit(self.instance)
+        try:
+            gs.init_with_args(self.instance, args)
+        except:
+            # re-raise always
+            raise
+        finally:
+            gs.exit(self.instance)
         
         result = self.result
         self.stdin = self.width = self.height = self.result = self.buf = None
