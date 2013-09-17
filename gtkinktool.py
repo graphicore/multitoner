@@ -1023,7 +1023,7 @@ class InksEditor(Gtk.Grid):
 
 if __name__ == '__main__':
     import sys
-    
+    from PreviewWorker import PreviewWorker
     GObject.threads_init()
     use_gui, __ = Gtk.init_check(sys.argv)
     window = Gtk.Window()
@@ -1071,7 +1071,8 @@ if __name__ == '__main__':
     # preview Window
     if len(sys.argv) > 1:
         imageName = sys.argv[1]
-        previewWindow = PreviewWindow(model, imageName)
+        previewWorker = PreviewWorker()
+        previewWindow = PreviewWindow(previewWorker, model, imageName)
         previewWindow.connect('destroy', Gtk.main_quit)
         previewWindow.show_all()
     
