@@ -37,16 +37,17 @@ class GradientWorker(object):
         # we don't need more data and scale this on display
         self._epsTool.setImageData(gradientBin.tostring(), (256, 1))
     
-    def callback(self, callback, result):
+    def callback(self, callback, user_data, result):
         """
         this restores the buffer data from string and runs the callback
         """
         buf = c.create_string_buffer(result[2])
-        args = callback[1:] + (result[0], result[1], buf)
-        callback[0](*args)
+        args = user_data + (result[0], result[1], buf)
+        callback(*args)
     
     def addJob(self, callback, *inks):
         self._epsTool.setColorData(*inks)
         eps = self._epsTool.create()
-        cb = lambda result: self.callback(callback, result)
+        def cb(result):
+            self.callback(callback[0], callback[1:], result)
         self.pool.apply_async(work, args=(eps, ), callback=cb)
