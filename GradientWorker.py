@@ -33,10 +33,6 @@ class GradientWorker(object):
         
         self._epsTool = EPSTool()
         gradientBin = array('B', range(0, 256))
-        # FIXME: there seems to be a problem wit a 0 byte at the beginning
-        # this must be in the ascii85 representation i suppose
-        # gradientBin.reverse()
-        
         # the input gradient is 256 pixels wide and 1 pixel height
         # we don't need more data and scale this on display
         self._epsTool.setImageData(gradientBin.tostring(), (256, 1))
