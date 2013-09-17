@@ -8,8 +8,11 @@ import os
 import json
 from gi.repository import Gtk, Gdk, GObject
 from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
+from PreviewWindow import PreviewWindow
+from PreviewWorker import PreviewWorker
 from emitter import Emitter
 from compatibility import repair_gsignals
+from dialogs import OpenImageDialog, showErrorDialog
 
 # just a preparation for i18n
 def _(string):
@@ -38,6 +41,7 @@ UI_INFO = """
       <menuitem action='EditUndo' />
       <menuitem action='EditRedo' />
       <separator />
+      <menuitem action='EditOpenPreview' />
     </menu>
   </menubar>
   
@@ -87,10 +91,12 @@ class Label(Gtk.Grid):
 class Document(Emitter):
     fileExtension = '.mtt' # .m(ulti)t(oner)t(ool)
     untitledName = _('untitled')
-    def __init__(self, gradientWorker, filename=None, data=None):
+    def __init__(self, gradientWorker, previewWorker, filename=None, data=None):
         if data is None:
             data = {}
         self._gradientWorker = gradientWorker
+        self._previewWorker = previewWorker
+        
         model = ModelCurves(ChildModel=ModelInk, **data)
         model.add(self)
         history = History(model)
@@ -103,13 +109,15 @@ class Document(Emitter):
         self.widget = inksEditor
         self.label = label
         self.filename = filename
+        
+        self._previewWindows = []
     
     @classmethod
-    def newFromFile(Cls, gradientWorker, filename):
+    def newFromFile(Cls, gradientWorker, previewWorker, filename):
         with open(filename, 'r') as f:
             data = json.load(f)
         print ('opened', data)
-        return Cls(gradientWorker, filename, data)
+        return Cls(gradientWorker, previewWorker, filename, data)
     
     @property
     def filename(self):
@@ -161,11 +169,32 @@ class Document(Emitter):
     def saveAs(self, filename):
         self._save(filename)
         self.filename = filename
+    
+    def destroy(self):
+        """ Closes Resources. Only Preview Windows right now. """
+        previews = tuple(self._previewWindows)
+        for preview in previews:
+            preview.destroy()
+    
+    def destroyPreviewHandler(self, widget):
+        try:
+            self._previewWindows.remove(widget)
+        except ValueError: # not in list
+            pass
+    
+    def openPreview(self):
+        preview = PreviewWindow(self._previewWorker, self.model)
+        preview.show_all()
+        preview.askForImage()
+        preview.connect('destroy', self.destroyPreviewHandler)
+        self._previewWindows.append(preview)
 
 class Multitoner(Gtk.Grid):
     def __init__(self):
         Gtk.Grid.__init__(self)
         self._gradientWorker = GradientWorker()
+        self._previewWorker = PreviewWorker(processes=None)
+        
         self._documents = {}
         self.activeDocument = None
         
@@ -334,6 +363,8 @@ class Multitoner(Gtk.Grid):
                None, self.menuFileCloseHandler)
             , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close Other Documents'), '<ctrl><alt>w',
                None, self.menuFileCloseOtherHandler)
+            , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open a Preview Window'), None,
+               None, self.menuOpenPrevieWindowHandler)
             ])
         
         actionGroup.set_sensitive(False)
@@ -356,15 +387,15 @@ class Multitoner(Gtk.Grid):
         self._notebook.remove_page(page)
     
     def makeNewDocument(self):
-        doc = Document(self._gradientWorker)
+        doc = Document(self._gradientWorker, self._previewWorker)
         self._registerDocument(doc)
     
     def _openDocument(self, filename):
         try:
-            doc = Document.newFromFile(self._gradientWorker, filename)
+            doc = Document.newFromFile(self._gradientWorker, self._previewWorker, filename)
         except Exception as e:
-            error = 'Error opening the file "{0}"'.format(filename)
-            detail = '{1} {0}'.format(type(e), e)
+            error = _('Error opening the file "{0}"').format(filename)
+            detail = _('Message: {0} {1}').format( e, type(e))
             self._announceError(error, detail)
         else:
             self._registerDocument(doc)
@@ -418,23 +449,8 @@ class Multitoner(Gtk.Grid):
         dialog.destroy()
     
     def _announceError(self, error, moreInfo=None):
-            window = self.get_toplevel()
-            dialog = Gtk.MessageDialog(
-                window
-                , Gtk.DialogFlags.DESTROY_WITH_PARENT
-                , Gtk.MessageType.ERROR
-                , Gtk.ButtonsType.CLOSE
-                , error
-            )
-            if moreInfo is not None:
-                dialog.format_secondary_text(moreInfo)
-            
-            # Destroy the dialog when the user responds to it
-            # (e.g. clicks a button)
-            def destroy(*args):
-                dialog.destroy()
-            dialog.connect('response', destroy)
-            dialog.show()
+        window = self.get_toplevel()
+        showErrorDialog(window, error, moreInfo)
     
     def _askOkCancel(self, question, moreInfo=None):
         window = self.get_toplevel()
@@ -459,7 +475,9 @@ class Multitoner(Gtk.Grid):
         
         if not ok:
             return
+        
         self._unregisterDocument(doc)
+        doc.destroy()
     
     def saveDocument(self, doc):
         if doc.filename is None:
@@ -548,7 +566,11 @@ class Multitoner(Gtk.Grid):
             return
         self.activeDocument.history.redo()
     
-    
+    def menuOpenPrevieWindowHandler(self, widget):
+        if self.activeDocument is None:
+            return
+        self.activeDocument.openPreview()
+
 if __name__ == '__main__':
     GObject.threads_init()
     use_gui, __ = Gtk.init_check(sys.argv)
@@ -557,7 +579,7 @@ if __name__ == '__main__':
     window.set_default_size(640, 480)
     window.set_has_resize_grip(True)
     # the theme should do so
-    window.set_border_width(5)    
+    window.set_border_width(5)
     
     cssProvider = Gtk.CssProvider()
     cssProvider.load_from_path('style.css')
@@ -568,7 +590,6 @@ if __name__ == '__main__':
     multitoner = Multitoner()
     window.connect('delete-event', multitoner.quitHandler)
     window.add(multitoner)
-    
     
     window.show_all()
     Gtk.main()
