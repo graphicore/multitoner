@@ -3,14 +3,13 @@
 
 from __future__ import division, print_function, unicode_literals
 
-from gi.repository import Gtk, GObject, Gdk
+from gi.repository import Gtk, GObject, Gdk, GLib
 import cairo
-from PreviewWorker import PreviewWorker
 from emitter import Emitter
 from weakref import ref as Weakref
 import math
 from compatibility import repair_gsignals
-
+from dialogs import OpenImageDialog, showErrorDialog, showNoticeDialog
 # just a preparation for i18n
 def _(string):
     return string
@@ -18,6 +17,13 @@ def _(string):
 UI_INFO = """
 <ui>
   <menubar name='MenuBar'>
+    <menu action="FileMenu">
+      <menuitem action='OpenImage' />
+      <separator />
+      <menuitem action='ExportImage' />
+      <separator />
+      <menuitem action='Quit' />
+    </menu>
     <menu action="EditMenu">
       <menuitem action='ZoomIn' />
       <menuitem action='ZoomOut' />
@@ -29,6 +35,10 @@ UI_INFO = """
     </menu>
   </menubar>
   <toolbar name="ToolBar">
+      <toolitem action='OpenImage' />
+      <separator />
+      <toolitem action='ExportImage' />
+      <separator />
       <toolitem action='ZoomIn' />
       <toolitem action='ZoomOut' />
       <toolitem action='ZoomUnit' />
@@ -36,6 +46,8 @@ UI_INFO = """
       <separator />
       <toolitem action='RotateRight' />
       <toolitem action='RotateLeft' />
+      <separator />
+      <toolitem action='Quit' />
   </toolbar>
 </ui>
 """
@@ -476,19 +488,19 @@ class ScrollByHandTool(Gtk.EventBox):
 
 
 class PreviewWindow(Gtk.Window):
-    def __init__(self, inksModel, imageName=None):
+    def __init__(self, previewWorker, inksModel, imageName=None):
         Gtk.Window.__init__(self)
         inksModel.add(self) #subscribe
-        self.imageName = imageName
+        self._previewWorker = previewWorker
         self.inksModel = Weakref(inksModel)
+        self.imageName = imageName
         
-        self.set_title(_('Multitoner Tool preview: {filename}').format(filename=imageName))
         self.set_default_size(640, 480)
         self.set_has_resize_grip(True)
         
         self._timeout = None
         self._waiting = False
-        self._update_needed = None
+        self._update_needed = False
         self._noInks = False
         
         self.grid = Gtk.Grid()
@@ -521,7 +533,24 @@ class PreviewWindow(Gtk.Window):
         
         self.grid.attach(scrollByHand, 0, 3, 1, 1)
         
-        self._previewWorker = PreviewWorker()
+        self._openImage(imageName)
+    
+    def _setTitle(self):
+        filename = self.imageName or _('(no image)')
+        self.set_title(_('Multitoner Tool Preview: {filename}').format(filename=filename))
+    
+    @property
+    def imageName(self):
+        if not hasattr(self, '_imageName'):
+            self._imageName = None
+        return self._imageName
+    
+    @imageName.setter
+    def imageName(self, value):
+        if value == self.imageName:
+            return
+        self._imageName = value
+        self._setTitle()
     
     @staticmethod
     def _addIconActionToActionGroup(action_group, name , label=None, tooltip=None,
@@ -539,6 +568,19 @@ class PreviewWindow(Gtk.Window):
             action_group.add_action_with_accel(action, accelerator)
         else:
             action_group.add_action(action)
+    
+    def _makeGlobalActions(self):
+        actionGroup = Gtk.ActionGroup('gloabl_actions')
+        
+        actionGroup.add_actions([
+              ('FileMenu', None, _('File'), None,
+               None, None)
+            , ('OpenImage', Gtk.STOCK_OPEN, _('Open Image'), 'o',
+               _('Open an image for preview'), self.actionOpenImageHandler)
+            , ('Quit', Gtk.STOCK_CLOSE, None, 'q',
+               _('Close Preview Window'), self.actionCloseHandler)
+        ])
+        return actionGroup
     
     def _makeDocumentActions(self):
         actionGroup = Gtk.ActionGroup('document_actions')
@@ -560,8 +602,9 @@ class PreviewWindow(Gtk.Window):
             , ('RotateRight',  _('Rotate Clockwise'), _('Rotate Clockwise'),
               'object-rotate-right', self.actionRotateRightHandler, 'R')
             , ('RotateLeft', _('Rotate Counterclockwise'), _('Rotate Counterclockwise'),
-              'object-rotate-left', self.actionRotateLeftHandler, 'L'
-            )
+              'object-rotate-left', self.actionRotateLeftHandler, 'L')
+            , ('ExportImage', _('Export Image'), _('Export Image as EPS file'),
+               'document-save', print, 'E')
         ) 
         for setup in iconActions:
             action = self._addIconActionToActionGroup(actionGroup, *setup)
@@ -575,10 +618,14 @@ class PreviewWindow(Gtk.Window):
         zoomFitAction.handler_unblock_by_func(self.actionZoomFitHandler)
     
     def _initMenu(self):
+        self._globalActions = self._makeGlobalActions()
         self._documentActions = self._makeDocumentActions()
+        self._documentActions.set_sensitive(False)
+        
         self.UIManager = uimanager = Gtk.UIManager()
         uimanager.add_ui_from_string(UI_INFO)
         uimanager.insert_action_group(self._documentActions)
+        uimanager.insert_action_group(self._globalActions)
         menubar = uimanager.get_widget("/MenuBar")
         toolbar = uimanager.get_widget("/ToolBar")
         
@@ -587,6 +634,16 @@ class PreviewWindow(Gtk.Window):
         self.add_accel_group(accelgroup)
         
         return menubar, toolbar
+    
+    def showDialog(self, type, message, moreInfo):
+        showDialog = {
+              'error': showErrorDialog
+            , 'notice': showNoticeDialog
+        }.get(type, None)
+        assert type is not None, 'There is no dialog for message type {0}'.format(type)
+        
+        window = self.get_toplevel()
+        showDialog(window, message, moreInfo)
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
@@ -602,7 +659,8 @@ class PreviewWindow(Gtk.Window):
                                 'visibleChanged', 'cmykChanged',
                                 'nameChanged'):
                 return
-        self._requestNewSurface(inksModel)
+        assert self.inksModel() is inksModel, 'A wrong inksModel instance publishes to this PreviewWindow'
+        self._requestNewSurface()
     
     def _requestNewSurface(self):
         """ this will be called very frequently, because generating the
@@ -613,48 +671,78 @@ class PreviewWindow(Gtk.Window):
         if self._timeout is not None:
             GObject.source_remove(self._timeout)
         # schedule a new execution
-        self._timeout = GObject.timeout_add(
-            300, self._updateSurface, Weakref(inksModel))
+        self._timeout = GObject.timeout_add(300, self._updateSurface)
     
-    def _updateSurface(self, weakrefModel):
-        inksModel = weakrefModel()
+    def _updateSurface(self):
+        inksModel = self.inksModel()
         # see if the model still exists
-        if inksModel is None or len(inksModel.visibleCurves) == 0:
+        if inksModel is None or len(inksModel.visibleCurves) == 0 or self.imageName is None:
             # need to return False, to cancel the timeout
             return False
         
         if self._waiting:
             # we are waiting for a job to finish, so we don't put another
             # job on the queue right now
-            self._update_needed = weakrefModel
+            self._update_needed = True
             return False
         
         self._waiting = True
         
-        callback = (self._receiveSurface, )
+        callback = (self._workerAnswerHandler, self.imageName)
         self._previewWorker.addJob(callback, self.imageName, *inksModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
-    def _receiveSurface(self, w, h, buf):
-        if self._noInks:
+    def _workerAnswerHandler(self, type, imageName, *args):
+        self._waiting = False
+        message = None
+        if type == 'result':
+            notice = args[-1]
+            if notice is not None:
+                GLib.idle_add(self.showDialog, 'notice', *notice)
+            cairo_surface = self._receiveSurface(imageName, *args[0:-1])
+        else:
+            if type == 'error':
+                self.imageName = None
+            GLib.idle_add(self.showDialog, type, *args)
+            cairo_surface = None
+        
+        if cairo_surface is not None:
+            self._documentActions.set_sensitive(True)
+        else:
+            self.imageName = None
+            self._documentActions.set_sensitive(False)
+        self.canvas.receiveSurface(cairo_surface)
+    
+    def _receiveSurface(self, imageName, w, h, buf):
+        if self._noInks or self.imageName != imageName:
             # this may receive a surface after all inks are invisible
+            # or after the image to display changed
             cairo_surface = None
         else:
             cairo_surface = cairo.ImageSurface.create_for_data(
                 buf, cairo.FORMAT_RGB24, w, h, w * 4
             )
-        # print ('_receiveSurface >>>> ', cairo_surface)
-        self._waiting = False
-        if self._update_needed is not None:
-            # while we where waiting another update became due
-            inksModel = self._update_needed() # its a weakref
-            self._update_needed = None
-            if inksModel is not None:
-                self._requestNewSurface(inksModel)
         
-        self.canvas.receiveSurface(cairo_surface)
+        # print ('_receiveSurface >>>> ', cairo_surface)
+        if self._update_needed:
+            # while we where waiting another update became due
+            self._update_needed = False
+            self._requestNewSurface()
+        return cairo_surface
+    
+    def _openImage(self, imageName):
+        if imageName is None:
+            return
+        self.imageName = imageName
+        self._requestNewSurface()
+    
+    def askForImage(self):
+        window = self.get_toplevel()
+        dialog = OpenImageDialog(window)
+        filename = dialog.execute()
+        self._openImage(filename)
     
     # actions
     def actionZoomInHandler(self, widget):
@@ -677,12 +765,18 @@ class PreviewWindow(Gtk.Window):
     
     def scaleToFitChangedHandler(self, widget, scaleToFit):
         self._setZoomFitActionActiveValue(scaleToFit)
+    
+    def actionOpenImageHandler(self, widget):
+        self.askForImage()
+
+    def actionCloseHandler(self, widget):
+        self.destroy()
 
 if __name__ == '__main__':
     import sys
     import json
     from model import ModelCurves, ModelInk
-    
+    from PreviewWorker import PreviewWorker
     GObject.threads_init()
     
     if len(sys.argv) > 1:
@@ -694,9 +788,10 @@ if __name__ == '__main__':
         with open(mttFile) as f:
             data = json.load(f)
         model = ModelCurves(ChildModel=ModelInk, **data)
-        previewWindow = PreviewWindow(model, imageName)
+        previewWorker = PreviewWorker(processes=1)
+        previewWindow = PreviewWindow(previewWorker, model, imageName)
         previewWindow.connect('destroy', Gtk.main_quit)
         previewWindow.show_all()
         Gtk.main()
     else:
-        print (_('Need a .mtt file as first argument and optionally a grayscale imagefile as last argument.'))
+        print (_('Need a .mtt file as first argument and optionally an image file as last argument.'))
