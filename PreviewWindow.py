@@ -492,6 +492,8 @@ class PreviewWindow(Gtk.Window):
         Gtk.Window.__init__(self)
         inksModel.add(self) #subscribe
         self._previewWorker = previewWorker
+        self.connect('destroy', previewWorker.removeClient, self.id)
+        
         self.inksModel = Weakref(inksModel)
         self.imageName = imageName
         
@@ -534,6 +536,10 @@ class PreviewWindow(Gtk.Window):
         self.grid.attach(scrollByHand, 0, 3, 1, 1)
         
         self._openImage(imageName)
+    
+    @property
+    def id(self):
+        return id(self)
     
     def _setTitle(self):
         filename = self.imageName or _('(no image)')
@@ -689,7 +695,7 @@ class PreviewWindow(Gtk.Window):
         self._waiting = True
         
         callback = (self._workerAnswerHandler, self.imageName)
-        self._previewWorker.addJob(callback, self.imageName, *inksModel.visibleCurves)
+        self._previewWorker.addJob(self.id, callback, self.imageName, *inksModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False

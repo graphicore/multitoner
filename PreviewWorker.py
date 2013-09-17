@@ -67,11 +67,11 @@ def _open_image(filename):
                 )
     else:
         if im.mode != 'L':
-            # TODO: This is used to display a message in the ui process.
-            # It  should warn that reproducing the result relies on the method
-            # used to convert here. It's better to have grayscale as input.
+            # Display a message in the ui process. Earn that reproducing
+            # the result relies on the method used to convert here. It's
+            # better to have a grayscale image as input.
             notice = (_('Converted image to grayscale')
-                     , _('From Python Imaging Library mode "{0}".').format(im.mode)
+                     , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
                      )
             im = im.convert('L')
         epsTool = EPSTool()
@@ -80,27 +80,11 @@ def _open_image(filename):
     return epsTool, notice, error
 
 @_catch_all
-def work(filename, inks):
+def work(eps):
     """
     This runs in its own process, ideally, then there is no threading
     problem with ghostscript
     """
-    global imageName, epsTool
-    notice = None
-    if filename != imageName:
-        # epsTool may use a lot of memory, so it's deleted it early
-        epsTool = imageName = None
-        epsTool, notice, error = _open_image(filename)
-        if error is not None:
-            return error
-        imageName = imageName
-    inks = [ModelInk(**t) for t in inks]
-    epsTool.setColorData(*inks)
-    eps = epsTool.create()
-    
-    # with open(imageName + '.tsst.eps', 'w') as f:
-    #     f.write(eps)
-    
     try:
         r = gs.run(eps)
     except GhostscriptError as e:
@@ -110,34 +94,63 @@ def work(filename, inks):
                  )
     else:
         # need to transport the result as a string
-        result = ('result', r[0], r[1], r[2].raw, notice)
+        result = ('result', r[0], r[1], r[2].raw)
+    return result
+
+def no_work(result):
+    """ stick to the asynchronous paradigma """
     return result
 
 # end in the process
-
 class PreviewWorker(object):
     def __init__(self, processes=1):
         self.pool = Pool(initializer=initializer, processes=processes)
+        self._data = {}
     
-    def callback(self, callback_data, result):
+    def removeClient(self, client_widget, client_id):
+        if client_id in self._data:
+            del self._data[client_id]
+    
+    def callback(self, callback, user_data, result, notice):
         """
         this restores the buffer data from string and runs the callback
         """
-        callback = callback_data[0]
-        user_data = callback_data[1:]
         type = result[0]
         if type == 'result':
-            buf = c.create_string_buffer(result[-2])
-            notice = result[-1]
-            result_data = result[1:-2]
+            buf = c.create_string_buffer(result[-1])
+            result_data = result[1:-1]
             args = (type, ) + user_data + result_data + (buf, notice)
         else:
             result_data = result[1:]
             args = (type, ) + user_data + result_data
         callback(*args)
     
-    def addJob(self, callback, imageName, *inks):
+    def addJob(self, client_id, callback_data, image_name, *inks):
+        notice = None
         def cb(result):
-            self.callback(callback, result)
-        inks = [t.getArgs() for t in inks]
-        self.pool.apply_async(work, args=(imageName, inks), callback=cb)
+            self.callback(callback_data[0], callback_data[1:], result, notice)
+        
+        if client_id not in self._data:
+            self._data[client_id] = {
+                'image_name': None,
+                'epstool': None
+            }
+        client_data = self._data[client_id]
+        error = None
+        if client_data['image_name'] != image_name:
+            # notice will be available in the cb closure
+            epsTool, notice, error = _open_image(image_name)
+            if error:
+                # call cb async
+                # cb(error)
+                return
+            client_data['image_name'] = image_name
+            client_data['epstool'] = epsTool
+        else:
+            epsTool = client_data['epstool']
+        if error is not None:
+            self.pool.apply_async(no_work, args=(error, ), callback=cb)
+        else:
+            epsTool.setColorData(*inks)
+            eps = epsTool.create()
+            self.pool.apply_async(work, args=(eps, ), callback=cb)
