@@ -4,6 +4,7 @@
 from __future__ import division, print_function, unicode_literals
 
 from gi.repository import Gtk, GObject, Gdk, GLib
+from gtk_extended import ActionGroup
 import cairo
 from emitter import Emitter
 from weakref import ref as Weakref
@@ -558,25 +559,8 @@ class PreviewWindow(Gtk.Window):
         self._imageName = value
         self._setTitle()
     
-    @staticmethod
-    def _addIconActionToActionGroup(action_group, name , label=None, tooltip=None,
-                                    icon_name=None, callback=None, accelerator=None,
-                                    stock_id=None, type=None):
-        if type is None:
-            type = Gtk.Action
-        action = type(name, label, tooltip, stock_id)
-        if icon_name is not None:
-            action.set_icon_name(icon_name)
-        if callback is not None:
-            action.connect('activate', callback)
-        
-        if accelerator is not None:
-            action_group.add_action_with_accel(action, accelerator)
-        else:
-            action_group.add_action(action)
-    
     def _makeGlobalActions(self):
-        actionGroup = Gtk.ActionGroup('gloabl_actions')
+        actionGroup = ActionGroup('gloabl_actions')
         
         actionGroup.add_actions([
               ('FileMenu', None, _('File'), None,
@@ -589,7 +573,7 @@ class PreviewWindow(Gtk.Window):
         return actionGroup
     
     def _makeDocumentActions(self):
-        actionGroup = Gtk.ActionGroup('document_actions')
+        actionGroup = ActionGroup('document_actions')
         actionGroup.add_actions([
               ('EditMenu', None, _('Edit'), None,
                None, None)
@@ -601,7 +585,7 @@ class PreviewWindow(Gtk.Window):
                _('Zoom to Normal Size'), self.actionZoomUnitHandler)
             ])
         
-        iconActions = (
+        actionGroup.add_icon_actions([
               ('ZoomFit', None, _('Zoom To Fit Image To Windowsize'),
                 None, self.actionZoomFitHandler, 'F', Gtk.STOCK_ZOOM_FIT,
                 Gtk.ToggleAction)
@@ -611,10 +595,7 @@ class PreviewWindow(Gtk.Window):
               'object-rotate-left', self.actionRotateLeftHandler, 'L')
             , ('ExportImage', _('Export Image'), _('Export Image as EPS file'),
                'document-save', print, 'E')
-        ) 
-        for setup in iconActions:
-            action = self._addIconActionToActionGroup(actionGroup, *setup)
-        
+            ])
         return actionGroup
     
     def _setZoomFitActionActiveValue(self, value):

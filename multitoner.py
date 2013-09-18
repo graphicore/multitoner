@@ -8,6 +8,7 @@ import os
 import json
 from gi.repository import Gtk, Gdk, GObject
 from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
+from gtk_extended import ActionGroup
 from ghostscript_workers import factory as gs_workers_factory
 from PreviewWindow import PreviewWindow
 from emitter import Emitter
@@ -30,6 +31,8 @@ UI_INFO = """
       <menuitem action='FileSaveDocument' />
       <menuitem action='FileSaveAsDocument' />
       <menuitem action='FileSaveAll' />
+      <separator />
+      <menuitem action='FileExportImage' />
       <separator />
       <menuitem action='FileClose' />
       <menuitem action='FileCloseOther' />
@@ -324,7 +327,7 @@ class Multitoner(Gtk.Grid):
             self.openDocument(filename)
     
     def _makeGlobalActions(self):
-        actionGroup = Gtk.ActionGroup('global_actions')
+        actionGroup = ActionGroup('global_actions')
         actionGroup.add_actions([
               ('FileMenu', None, _('File'), None,
                None, None)
@@ -353,7 +356,7 @@ class Multitoner(Gtk.Grid):
         return actionGroup
     
     def _makeDocumentActions(self):
-        actionGroup = Gtk.ActionGroup('document_actions')
+        actionGroup = ActionGroup('document_actions')
         actionGroup.add_actions([
               ('EditUndo', Gtk.STOCK_UNDO, _('Undo'),  '<Ctrl>z',
                None, self.menuEditUndoHandler)
@@ -369,6 +372,12 @@ class Multitoner(Gtk.Grid):
                None, self.menuFileCloseOtherHandler)
             , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open a Preview Window'), None,
                None, self.menuOpenPrevieWindowHandler)
+            ])
+        
+        actionGroup.add_icon_actions([
+              ('FileExportImage', _('Export Image'), _('Export Image as EPS file'),
+               'document-save', print, 'E')
+            # , ...
             ])
         
         actionGroup.set_sensitive(False)
