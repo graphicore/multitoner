@@ -101,6 +101,8 @@ class Document(Emitter):
         model.add(self)
         history = History(model)
         inksEditor = InksEditor(model, self._gradientWorker)
+        inksEditor.connect('open-preview', self.openPreviewHandler)
+        
         self.id = id(self)
         label = Label(self.id, self.untitledName)
         
@@ -188,6 +190,9 @@ class Document(Emitter):
         preview.askForImage()
         preview.connect('destroy', self.destroyPreviewHandler)
         self._previewWindows.append(preview)
+    
+    def openPreviewHandler(self, *args):
+        self.openPreview()
 
 class Multitoner(Gtk.Grid):
     def __init__(self):

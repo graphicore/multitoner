@@ -927,6 +927,13 @@ class InkSetup(object):
         setattr(ink, colorAttr,  value)
 
 class InksEditor(Gtk.Grid):
+    __gsignals__ = repair_gsignals({
+          'open-preview': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, 
+                            # nothing
+                            ())
+    })
+    
+    
     def __init__(self, model, gradientWorker):
         """
         gradientWorker: a initialized GradientWorker
@@ -965,7 +972,7 @@ class InksEditor(Gtk.Grid):
         colorPreviewWidget = self.initColorPreviewWidget(model, gradientWorker)
         
         colorPreviewLabel = self.initColorPreviewLabel()
-        
+        openPreviewButton = self.initOpenPreviewButton()
         addInkButton = self.initAddInkButton(model)
         
         # left : the column number to attach the left side of child to
@@ -980,8 +987,11 @@ class InksEditor(Gtk.Grid):
         
         toolColumn.attach(inkSetup.gtk,      0, 2, 1, 1)
         toolColumn.attach(inkControlPanel,   0, 0, 1, 1)
-        toolColumn.attach(colorPreviewLabel, 0, 1, 1, 1)
+        
+        
         toolColumn.attach(addInkButton,      0, 1, 1, 1)
+        toolColumn.attach(openPreviewButton, 0, 1, 1, 1)
+        toolColumn.attach(colorPreviewLabel, 0, 1, 1, 1)
         
     def initCurveEditor(self, model):
         curveEditor = CurveEditor.new(model)
@@ -1019,6 +1029,26 @@ class InksEditor(Gtk.Grid):
     def initAddInkButton(self, model):
         button = AddInkButton(model, Gtk.STOCK_ADD, _('Add a new ink'))
         button.set_halign(Gtk.Align.START)
+        return button
+    
+    def initOpenPreviewButton(self):
+        # label 
+        label = Gtk.Grid()
+        # label icon
+        icon = Gtk.Image.new_from_stock(Gtk.STOCK_PRINT_PREVIEW, Gtk.IconSize.BUTTON)
+        label.attach(icon, 0, 0, 1, 1)
+        # label text
+        text = Gtk.Label(' ' + _('Open Preview'))
+        label.attach_next_to(text, icon, Gtk.PositionType.RIGHT, 1, 1)
+        
+        button = Gtk.Button()
+        button.add(label)
+        button.set_tooltip_text(_('Open a Preview Window'))
+        
+        def clicked_handler(widget):
+            self.emit('open-preview')
+        button.connect('clicked', clicked_handler)
+        button.set_halign(Gtk.Align.CENTER)
         return button
 
 if __name__ == '__main__':
@@ -1065,15 +1095,27 @@ if __name__ == '__main__':
     
     inksEditor.attach(undoButton, 0, -1, 1, 1)
     inksEditor.attach(redoButton, 2, -1, 1, 1)
-    ####
     
-    # preview Window
+    ##### preview Window
+    previewWorker = None
+    def open_preview(imageName=None):
+        global previewWorker
+        if previewWorker is None:
+            previewWorker = PreviewWorker(gradientWorker.pool) # shares the pool
+        previewWindow = PreviewWindow(previewWorker, model, imageName)
+        previewWindow.show_all()
+        if imageName is None:
+            previewWindow.askForImage()
+    
+    def request_preview_handler(widget, *user_data):
+        open_preview()
+    
+    inksEditor.connect('open-preview', request_preview_handler)
+    
+    ##
     if len(sys.argv) > 1:
         imageName = sys.argv[1]
-        previewWorker = PreviewWorker(gradientWorker.pool) # shares the pool
-        previewWindow = PreviewWindow(previewWorker, model, imageName)
-        previewWindow.connect('destroy', Gtk.main_quit)
-        previewWindow.show_all()
+        open_preview(imageName)
     
     # fixture for development
     initInks = [
