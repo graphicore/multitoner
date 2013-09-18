@@ -1,0 +1,84 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+from __future__ import division, print_function, unicode_literals
+
+import sys
+import PIL.Image as Image
+import json
+
+from epstool import EPSTool
+from model import ModelCurves, ModelInk
+
+# just a preparation for i18n
+def _(string):
+    return string
+
+def _open_image(filename):
+    """ returns (epsTool, notice, error)
+    
+    epsTool: an instance of EPSTool loaded with the data of the image at filename
+    notice: a tuple with a notice for the user or None
+    error: None or if an error occured an error tuple to return with work,
+           then epstool and notice must not be used.
+    """
+    error = notice = epsTool = None
+    try:
+        im = Image.open(filename)
+    except IOError as e:
+        error = ('error'
+                , _('Can\'t open image for preview {0}.').format(filename)
+                , _('Message: {0} {1}').format(e, type(e))
+                )
+    else:
+        if im.mode != 'L':
+            # Display a message in the ui process. Earn that reproducing
+            # the result relies on the method used to convert here. It's
+            # better to have a grayscale image as input.
+            notice = (_('Converted image to grayscale')
+                     , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
+                     )
+            im = im.convert('L')
+        epsTool = EPSTool()
+        epsTool.setImageData(im.tostring(), im.size)
+        
+    return epsTool, notice, error
+
+def make_eps(inks, image_filename):
+    epsTool, notice, error = _open_image(image_filename)
+    epsTool.setColorData(*inks)
+    return epsTool.create(), notice, error
+
+def make_eps_from_model(model, image_filename):
+    return make_eps(model.visibleCurves, image_filename)
+    
+def open_mtt_file(mtt_filename):
+    with open(mtt_filename, 'r') as f:
+        data = json.load(f)
+    model = ModelCurves(ChildModel=ModelInk, **data)
+    return model
+
+def save_eps(filename, eps):
+    with open(filename, 'w') as f:
+        f.write(eps)
+
+def mtt2eps(mtt_filename, image_filename, eps_filename):
+    model = open_mtt_file(mtt_filename)
+    eps, notice, error = make_eps_from_model(model, image_filename)
+    if error is None:
+       save_eps(eps_filename, eps)
+       return True, notice
+    else:
+        return False, error
+
+if __name__ == '__main__':
+    if len(sys.argv) == 4:
+        result, message = mtt2eps(*sys.argv[1:])
+        if message is not None:
+            print(message[1].title() + ':', *message[1:])
+        if result:
+            print('Done!')
+        else:
+            print('Failed!')
+    else:
+        print(_('Give me three arguments: source mtt-filename, source image-filename, destination eps-filename'))
