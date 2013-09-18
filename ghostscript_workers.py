@@ -13,7 +13,7 @@ import PIL.Image as Image
 from epstool import EPSTool
 from model import ModelInk
 from GhostScriptRunner import GhostScriptRunner, GhostscriptError
-from compatibility import range
+from compatibility import range, encode
 
 # just a preparation for i18n
 def _(string):
@@ -110,7 +110,7 @@ class PreviewWorker(object):
         self._data = {}
     
     @classmethod
-    def new_with_pool(Cls, processes=None)
+    def new_with_pool(Cls, processes=None):
         pool = Pool(initializer=initializer, processes=processes)
         return Cls(pool)
     
@@ -171,13 +171,13 @@ class GradientWorker(object):
         self.pool = pool
         
         self._epsTool = EPSTool()
-        gradientBin = array('B', range(0, 256))
+        gradientBin = array(encode('B'), range(0, 256))
         # the input gradient is 256 pixels wide and 1 pixel height
         # we don't need more data and scale this on display
         self._epsTool.setImageData(gradientBin.tostring(), (256, 1))
     
     @classmethod
-    def new_with_pool(Cls)
+    def new_with_pool(Cls):
         pool = Pool(initializer=initializer)
         return Cls(pool)
     
@@ -201,6 +201,6 @@ class GradientWorker(object):
 def factory():
     processes = None
     pool = Pool(initializer=initializer, processes=processes)
-    gradientWorker = gradientWorker(pool)
+    gradientWorker = GradientWorker(pool)
     previewWorker = PreviewWorker(pool)
     return gradientWorker, previewWorker
