@@ -125,32 +125,36 @@ class PreviewWorker(object):
             args = (type, ) + user_data + result_data
         callback(*args)
     
-    def addJob(self, client_id, callback_data, image_name, *inks):
-        notice = None
-        def cb(result):
-            self.callback(callback_data[0], callback_data[1:], result, notice)
-        
+    def _getClientData(self, client_id, image_name):
         if client_id not in self._data:
             self._data[client_id] = {
                 'image_name': None,
                 'epstool': None
             }
         client_data = self._data[client_id]
-        error = None
         if client_data['image_name'] != image_name:
-            # notice will be available in the cb closure
             epsTool, notice, error = _open_image(image_name)
-            if error:
-                # call cb async
-                # cb(error)
-                return
             client_data['image_name'] = image_name
             client_data['epstool'] = epsTool
         else:
+            error = notice = None
             epsTool = client_data['epstool']
+        return epsTool, notice, error
+    
+    def addJob(self, client_id, callback_data, image_name, *inks):
+        # notice will be used in the cb closure
+        epsTool, notice, error = self._getClientData(client_id, image_name)
+        
         if error is not None:
-            self.pool.apply_async(no_work, args=(error, ), callback=cb)
+            args = (error, )
+            worker = no_work
         else:
             epsTool.setColorData(*inks)
             eps = epsTool.create()
-            self.pool.apply_async(work, args=(eps, ), callback=cb)
+            args = (eps, )
+            worker = work
+        
+        def cb(result):
+            self.callback(callback_data[0], callback_data[1:], result, notice)
+        
+        self.pool.apply_async(worker, args=args, callback=cb)
