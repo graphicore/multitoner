@@ -782,7 +782,7 @@ if __name__ == '__main__':
     import sys
     import json
     from model import ModelCurves, ModelInk
-    from PreviewWorker import PreviewWorker
+    from ghostscript_workers import PreviewWorker
     GObject.threads_init()
     
     if len(sys.argv) > 1:
@@ -794,7 +794,7 @@ if __name__ == '__main__':
         with open(mttFile) as f:
             data = json.load(f)
         model = ModelCurves(ChildModel=ModelInk, **data)
-        previewWorker = PreviewWorker(processes=1)
+        previewWorker = PreviewWorker.new_with_pool(processes=1)
         previewWindow = PreviewWindow(previewWorker, model, imageName)
         previewWindow.connect('destroy', Gtk.main_quit)
         previewWindow.show_all()

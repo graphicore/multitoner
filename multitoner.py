@@ -8,8 +8,8 @@ import os
 import json
 from gi.repository import Gtk, Gdk, GObject
 from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
+from ghostscript_workers import factory as gs_workers_factory
 from PreviewWindow import PreviewWindow
-from PreviewWorker import PreviewWorker
 from emitter import Emitter
 from compatibility import repair_gsignals
 from dialogs import OpenImageDialog, showErrorDialog
@@ -192,8 +192,7 @@ class Document(Emitter):
 class Multitoner(Gtk.Grid):
     def __init__(self):
         Gtk.Grid.__init__(self)
-        self._gradientWorker = GradientWorker()
-        self._previewWorker = PreviewWorker(processes=None)
+        self._gradientWorker, self._previewWorker = gs_workers_factory()
         
         self._documents = {}
         self.activeDocument = None

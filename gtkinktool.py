@@ -13,7 +13,7 @@ from gtkcurvewidget import CurveEditor
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from emitter import Emitter
 from model import ModelCurves, ModelInk
-from GradientWorker import GradientWorker
+from ghostscript_workers import GradientWorker, PreviewWorker
 from PreviewWindow import PreviewWindow
 from history import History
 from compatibility import repair_gsignals, encode, decode, range
@@ -1023,7 +1023,6 @@ class InksEditor(Gtk.Grid):
 
 if __name__ == '__main__':
     import sys
-    from PreviewWorker import PreviewWorker
     GObject.threads_init()
     use_gui, __ = Gtk.init_check(sys.argv)
     window = Gtk.Window()
@@ -1044,7 +1043,7 @@ if __name__ == '__main__':
     
     model = ModelCurves(ChildModel=ModelInk)
     history = History(model)
-    gradientWorker = GradientWorker()
+    gradientWorker = GradientWorker.new_with_pool()
     inksEditor = InksEditor(model, gradientWorker)
     
     window.add(inksEditor)
@@ -1071,7 +1070,7 @@ if __name__ == '__main__':
     # preview Window
     if len(sys.argv) > 1:
         imageName = sys.argv[1]
-        previewWorker = PreviewWorker()
+        previewWorker = PreviewWorker(gradientWorker.pool) # shares the pool
         previewWindow = PreviewWindow(previewWorker, model, imageName)
         previewWindow.connect('destroy', Gtk.main_quit)
         previewWindow.show_all()
