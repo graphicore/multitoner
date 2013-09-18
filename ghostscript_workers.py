@@ -6,12 +6,14 @@ from __future__ import division, print_function, unicode_literals
 import sys
 from multiprocessing import Pool
 import ctypes as c
+from array import array
 from functools import wraps
 import PIL.Image as Image
 
 from epstool import EPSTool
 from model import ModelInk
 from GhostScriptRunner import GhostScriptRunner, GhostscriptError
+from compatibility import range
 
 # just a preparation for i18n
 def _(string):
@@ -103,9 +105,14 @@ def no_work(result):
 
 # end in the process
 class PreviewWorker(object):
-    def __init__(self, processes=1):
-        self.pool = Pool(initializer=initializer, processes=processes)
+    def __init__(self, pool):
+        self.pool = pool
         self._data = {}
+    
+    @classmethod
+    def new_with_pool(Cls, processes=None)
+        pool = Pool(initializer=initializer, processes=processes)
+        return Cls(pool)
     
     def removeClient(self, client_widget, client_id):
         if client_id in self._data:
@@ -158,3 +165,42 @@ class PreviewWorker(object):
             self.callback(callback_data[0], callback_data[1:], result, notice)
         
         self.pool.apply_async(worker, args=args, callback=cb)
+    
+class GradientWorker(object):
+    def __init__(self, pool):
+        self.pool = pool
+        
+        self._epsTool = EPSTool()
+        gradientBin = array('B', range(0, 256))
+        # the input gradient is 256 pixels wide and 1 pixel height
+        # we don't need more data and scale this on display
+        self._epsTool.setImageData(gradientBin.tostring(), (256, 1))
+    
+    @classmethod
+    def new_with_pool(Cls)
+        pool = Pool(initializer=initializer)
+        return Cls(pool)
+    
+    def callback(self, callback, user_data, result):
+        """
+        this restores the buffer data from string and runs the callback
+        """
+        assert result[0] == 'result', 'Gradient rendering failed {0}, {1} {2}'.format(*result)
+        buf = c.create_string_buffer(result[-1])
+        result_data = result[1:-1]
+        args = user_data + result_data + (buf, )
+        callback(*args)
+    
+    def addJob(self, callback, *inks):
+        self._epsTool.setColorData(*inks)
+        eps = self._epsTool.create()
+        def cb(result):
+            self.callback(callback[0], callback[1:], result)
+        self.pool.apply_async(work, args=(eps, ), callback=cb)
+    
+def factory():
+    processes = None
+    pool = Pool(initializer=initializer, processes=processes)
+    gradientWorker = gradientWorker(pool)
+    previewWorker = PreviewWorker(pool)
+    return gradientWorker, previewWorker
