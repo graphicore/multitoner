@@ -10,7 +10,7 @@ from emitter import Emitter
 from weakref import ref as Weakref
 import math
 from compatibility import repair_gsignals
-from dialogs import OpenImageDialog, showErrorDialog, showNoticeDialog
+from dialogs import showOpenImageDialog, showMessage
 # just a preparation for i18n
 def _(string):
     return string
@@ -622,15 +622,9 @@ class PreviewWindow(Gtk.Window):
         
         return menubar, toolbar
     
-    def showDialog(self, type, message, moreInfo):
-        showDialog = {
-              'error': showErrorDialog
-            , 'notice': showNoticeDialog
-        }.get(type, None)
-        assert type is not None, 'There is no dialog for message type {0}'.format(type)
-        
+    def showMessage(self, *message):
         window = self.get_toplevel()
-        showDialog(window, message, moreInfo)
+        showMessage(window, *message)
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
@@ -683,16 +677,15 @@ class PreviewWindow(Gtk.Window):
     
     def _workerAnswerHandler(self, type, imageName, *args):
         self._waiting = False
-        message = None
         if type == 'result':
-            notice = args[-1]
-            if notice is not None:
-                GLib.idle_add(self.showDialog, 'notice', *notice)
+            message = args[-1]
+            if message is not None:
+                GLib.idle_add(self.showMessage, *message)
             cairo_surface = self._receiveSurface(imageName, *args[0:-1])
         else:
             if type == 'error':
                 self.imageName = None
-            GLib.idle_add(self.showDialog, type, *args)
+            GLib.idle_add(self.showMessage, type, *args)
             cairo_surface = None
         
         if cairo_surface is not None:
@@ -712,7 +705,7 @@ class PreviewWindow(Gtk.Window):
                 buf, cairo.FORMAT_RGB24, w, h, w * 4
             )
         
-        # print ('_receiveSurface >>>> ', cairo_surface)
+        # print ('_receiveSurface >>>> ', w, h)
         if self._update_needed:
             # while we where waiting another update became due
             self._update_needed = False
@@ -727,8 +720,7 @@ class PreviewWindow(Gtk.Window):
     
     def askForImage(self):
         window = self.get_toplevel()
-        dialog = OpenImageDialog(window)
-        filename = dialog.execute()
+        filename = showOpenImageDialog(window)
         self._openImage(filename)
     
     # actions
