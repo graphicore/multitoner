@@ -10,7 +10,9 @@ from emitter import Emitter
 from weakref import ref as Weakref
 import math
 from compatibility import repair_gsignals
-from dialogs import showOpenImageDialog, showMessage
+from dialogs import showOpenImageDialog, showMessage, showSaveAsEPSDialog
+from mtt2eps import model2eps
+
 # just a preparation for i18n
 def _(string):
     return string
@@ -566,7 +568,7 @@ class PreviewWindow(Gtk.Window):
               ('FileMenu', None, _('File'), None,
                None, None)
             , ('OpenImage', Gtk.STOCK_OPEN, _('Open Image'), 'o',
-               _('Open an image for preview'), self.actionOpenImageHandler)
+               _('Open An Image For Preview'), self.actionOpenImageHandler)
             , ('Quit', Gtk.STOCK_CLOSE, None, 'q',
                _('Close Preview Window'), self.actionCloseHandler)
         ])
@@ -594,7 +596,7 @@ class PreviewWindow(Gtk.Window):
             , ('RotateLeft', _('Rotate Counterclockwise'), _('Rotate Counterclockwise'),
               'object-rotate-left', self.actionRotateLeftHandler, 'L')
             , ('ExportImage', _('Export Image'), _('Export Image as EPS file'),
-               'document-save', print, 'E')
+               'document-save', self.actionExportImageHandler, 'E')
             ])
         return actionGroup
     
@@ -750,6 +752,24 @@ class PreviewWindow(Gtk.Window):
 
     def actionCloseHandler(self, widget):
         self.destroy()
+    
+    def actionExportImageHandler(self, widget):
+        inksModel = self.inksModel()
+        image_filename = self.imageName
+        if image_filename is None or inksModel is None:
+            return
+        
+        window = self.get_toplevel()
+        
+        eps_filename = showSaveAsEPSDialog(window, image_filename)
+        if eps_filename is None:
+            return
+        
+        result, message = model2eps(inksModel, image_filename, eps_filename)
+        
+        if message:
+            window = self.get_toplevel()
+            showMessage(window, *message)
 
 if __name__ == '__main__':
     import sys
