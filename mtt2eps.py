@@ -14,7 +14,7 @@ from model import ModelCurves, ModelInk
 def _(string):
     return string
 
-def _open_image(filename):
+def open_image(filename):
     """ returns (epsTool, notice, error)
     
     epsTool: an instance of EPSTool loaded with the data of the image at filename
@@ -35,7 +35,8 @@ def _open_image(filename):
             # Display a message in the ui process. Earn that reproducing
             # the result relies on the method used to convert here. It's
             # better to have a grayscale image as input.
-            notice = (_('Converted image to grayscale')
+            notice = ('notice'
+                     , _('Converted image to grayscale')
                      , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
                      )
             im = im.convert('L')
@@ -45,7 +46,7 @@ def _open_image(filename):
     return epsTool, notice, error
 
 def make_eps(inks, image_filename):
-    epsTool, notice, error = _open_image(image_filename)
+    epsTool, notice, error = open_image(image_filename)
     epsTool.setColorData(*inks)
     return epsTool.create(), notice, error
 
@@ -58,18 +59,18 @@ def open_mtt_file(mtt_filename):
     model = ModelCurves(ChildModel=ModelInk, **data)
     return model
 
-def save_eps(filename, eps):
-    with open(filename, 'w') as f:
-        f.write(eps)
+def model2eps(model, image_filename, eps_filename):
+    eps, notice, error = make_eps_from_model(model, image_filename)
+    if error is None:
+        with open(eps_filename, 'w') as f:
+            f.write(eps)
+        return True, notice
+    else:
+        return False, error
 
 def mtt2eps(mtt_filename, image_filename, eps_filename):
     model = open_mtt_file(mtt_filename)
-    eps, notice, error = make_eps_from_model(model, image_filename)
-    if error is None:
-       save_eps(eps_filename, eps)
-       return True, notice
-    else:
-        return False, error
+    return model2eps(model, image_filename, eps_filename)
 
 if __name__ == '__main__':
     if len(sys.argv) == 4:

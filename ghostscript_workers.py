@@ -11,6 +11,7 @@ from functools import wraps
 import PIL.Image as Image
 
 from epstool import EPSTool
+from mtt2eps import open_image
 from model import ModelInk
 from GhostScriptRunner import GhostScriptRunner, GhostscriptError
 from compatibility import range, encode
@@ -39,7 +40,12 @@ def initializer(*args):
     _init_ghostscript()
 
 def _catch_all(func):
-    """Catch all exceptions in the process and make an answer to display to the user."""
+    """
+    Catch all exceptions in the worker and return an answer to display to the user.
+    
+    The Worker Pool with callback doesn't propagate Exceptions in the
+    worke, instead the callback just never gets called.
+    """
     @wraps(func)
     def wrapper(*args):
         try:
@@ -50,36 +56,6 @@ def _catch_all(func):
                    , _('Message: {0} {1} {2}').format(e, type(e), traceback)
                    )
     return wrapper
-
-def _open_image(filename):
-    """ returns (epsTool, notice, error)
-    
-    epsTool: an instance of EPSTool loaded with the data of the image at filename
-    notice: a tuple with a notice for the user or None
-    error: None or if an error occured an error tuple to return with work,
-           then epstool and notice must not be used.
-    """
-    error = notice = epsTool = None
-    try:
-        im = Image.open(filename)
-    except IOError as e:
-        error = ('error'
-                , _('Can\'t open image for preview {0}.').format(filename)
-                , _('Message: {0} {1}').format(e, type(e))
-                )
-    else:
-        if im.mode != 'L':
-            # Display a message in the ui process. Earn that reproducing
-            # the result relies on the method used to convert here. It's
-            # better to have a grayscale image as input.
-            notice = (_('Converted image to grayscale')
-                     , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
-                     )
-            im = im.convert('L')
-        epsTool = EPSTool()
-        epsTool.setImageData(im.tostring(), im.size)
-    
-    return epsTool, notice, error
 
 @_catch_all
 def work(eps):
@@ -140,7 +116,7 @@ class PreviewWorker(object):
             }
         client_data = self._data[client_id]
         if client_data['image_name'] != image_name:
-            epsTool, notice, error = _open_image(image_name)
+            epsTool, notice, error = open_image(image_name)
             client_data['image_name'] = image_name
             client_data['epstool'] = epsTool
         else:
