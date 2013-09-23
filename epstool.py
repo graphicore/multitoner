@@ -7,7 +7,6 @@ from string import Template
 import binascii
 from interpolation import interpolationStrategiesDict
 import numpy as np
-import binascii
 from datetime import datetime
 
 # might be used one day
