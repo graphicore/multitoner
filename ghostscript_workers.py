@@ -72,7 +72,7 @@ def work(eps):
                  )
     else:
         # need to transport the result as a string
-        result = ('result', r[0], r[1], r[2].raw)
+        result = ('result', r[0], r[1], r[2], r[-1].raw)
     return result
 
 def no_work(result):

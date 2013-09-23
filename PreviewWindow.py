@@ -695,14 +695,14 @@ class PreviewWindow(Gtk.Window):
             self._documentActions.set_sensitive(False)
         self.canvas.receiveSurface(cairo_surface)
     
-    def _receiveSurface(self, imageName, w, h, buf):
+    def _receiveSurface(self, imageName, w, h, rowstride, buf):
         if self._noInks or self.imageName != imageName:
             # this may receive a surface after all inks are invisible
             # or after the image to display changed
             cairo_surface = None
         else:
             cairo_surface = cairo.ImageSurface.create_for_data(
-                buf, cairo.FORMAT_RGB24, w, h, w * 4
+                buf, cairo.FORMAT_RGB24, w, h, rowstride
             )
         
         # print ('_receiveSurface >>>> ', w, h)

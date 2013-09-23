@@ -19,7 +19,7 @@ class GhostScriptRunner(object):
         self._args = ['-dEPSCrop']
         self.instance = gs.new_instance()
         self.stdin = self.width = self.height = self.rgbbuf = self.result \
-            = self.buf = None
+                   = self.buf = self.rowstride = None
         # need to keep a reference of this stuff around
         self._references = {
             'stdin': gs.c_stdstream_call_t(self._gsdll_stdin),
@@ -52,8 +52,8 @@ class GhostScriptRunner(object):
         self.instance = None
     
     def run(self, eps):
-        CAIRO_FORMAT_RGB24  = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | \
-                              gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
+        CAIRO_FORMAT_RGB24 = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | \
+                             gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
         dformat = "-dDisplayFormat=%d" % \
                   ( CAIRO_FORMAT_RGB24 | gs.DISPLAY_TOPFIRST )
         
@@ -73,7 +73,8 @@ class GhostScriptRunner(object):
             gs.exit(self.instance)
         
         result = self.result
-        self.stdin = self.width = self.height = self.result = self.buf = None
+        self.stdin = self.width = self.height = self.result = self.buf \
+                   = self.rowstride = None
         return result
     
     def _gsdll_stdin(self, instance, dest, count):
@@ -120,6 +121,7 @@ class GhostScriptRunner(object):
     def display_size(self, handle, device, width, height, raster, format, pimage):
         self.width = width
         self.height = height
+        self.rowstride = raster
         self.buf = pimage
         return 0
     
@@ -127,8 +129,8 @@ class GhostScriptRunner(object):
         return 0
     
     def display_page(self, handle, device, copies, flush):
-        buffer_size = self.width * self.height * 4
+        buffer_size = self.rowstride * self.height
         rgbbuf = c.create_string_buffer(buffer_size)
         c.memmove(rgbbuf, self.buf, buffer_size)
-        self.result = (self.width, self.height, rgbbuf)
+        self.result = (self.width, self.height, self.rowstride, rgbbuf)
         return 0

@@ -125,13 +125,13 @@ class CellRendererInk (Gtk.CellRendererText):
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
-    def _receiveSurface(self, iid, w, h, buf):
+    def _receiveSurface(self, iid, w, h, rowstride, buf):
         if iid not in self.state:
             return
         state = self.state[iid]
         
         cairo_surface = cairo.ImageSurface.create_for_data(
-            buf, cairo.FORMAT_RGB24, w, h, w * 4
+            buf, cairo.FORMAT_RGB24, w, h, rowstride
         )
         state['__keep'] = buf
         state['surface'] = cairo_surface
@@ -245,13 +245,13 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
-    def _receiveSurface(self, w, h, buf):
+    def _receiveSurface(self, w, h, rowstride, buf):
         if self._noInks:
             # this may receive a surface after all inks are invisible
             cairo_surface = None
         else:
             cairo_surface = cairo.ImageSurface.create_for_data(
-                buf, cairo.FORMAT_RGB24, w, h, w * 4
+                buf, cairo.FORMAT_RGB24, w, h, rowstride
             )
         
         self._waiting = False
