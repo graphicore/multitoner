@@ -3,6 +3,7 @@
 
 from __future__ import division, print_function, unicode_literals
 
+import os
 from gi.repository import Gtk, GObject, Gdk
 
 # just a preparation for i18n
@@ -50,6 +51,15 @@ def showSaveAsDialog(window, filename=None, current_name=None):
         result = dialog.get_filename()
     dialog.destroy()
     return result
+
+def showSaveAsEPSDialog(window, source_filename):
+    last_dot = source_filename.rfind('.')
+    if last_dot == -1:
+        name_proposal = source_filename
+    else:
+        name_proposal = source_filename[0:source_filename.rfind('.')]
+    name_proposal = name_proposal + '.eps'
+    return showSaveAsDialog(window, name_proposal, os.path.basename(name_proposal))
 
 def _showMessageDialog(message_type, window, message, moreInfo=None):
     dialog = Gtk.MessageDialog(
