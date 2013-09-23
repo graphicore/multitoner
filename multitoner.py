@@ -13,7 +13,8 @@ from ghostscript_workers import factory as gs_workers_factory
 from PreviewWindow import PreviewWindow
 from emitter import Emitter
 from compatibility import repair_gsignals
-from dialogs import OpenImageDialog, showErrorDialog
+from dialogs import showOpenImageDialog, showMessage, showSaveAsDialog
+from mtt2eps import model2eps
 
 # just a preparation for i18n
 def _(string):
@@ -376,10 +377,9 @@ class Multitoner(Gtk.Grid):
         
         actionGroup.add_icon_actions([
               ('FileExportImage', _('Export Image'), _('Export Image as EPS file'),
-               'document-save', print, 'E')
+               'document-save', self.menuFileExportImage, 'E')
             # , ...
             ])
-        
         actionGroup.set_sensitive(False)
         return actionGroup
     
@@ -442,28 +442,14 @@ class Multitoner(Gtk.Grid):
     def openFileSaveAsDialog(self, doc):
         self.setActivePage(doc)
         window = self.get_toplevel()
-        dialog = Gtk.FileChooserDialog(title=_('Save File')
-            , parent=window
-            , action=Gtk.FileChooserAction.SAVE
-            , buttons=( Gtk.STOCK_CANCEL
-                      , Gtk.ResponseType.CANCEL
-                      , Gtk.STOCK_SAVE
-                      , Gtk.ResponseType.ACCEPT
-            )
-        )
-        dialog.set_do_overwrite_confirmation(True);
-        if doc.filename is None:
-            dialog.set_current_name(doc.untitledName + Document.fileExtension)
-        else:
-            dialog.set_filename(doc.filename)
-        if dialog.run() == Gtk.ResponseType.ACCEPT:
-            filename = dialog.get_filename()
+        filename = showSaveAsDialog(window, doc.filename,
+                                    doc.untitledName + Document.fileExtension)
+        if filename is not None:
             doc.saveAs(filename)
-        dialog.destroy()
     
     def _announceError(self, error, moreInfo=None):
         window = self.get_toplevel()
-        showErrorDialog(window, error, moreInfo)
+        showMessage(window, 'error', error, moreInfo)
     
     def _askOkCancel(self, question, moreInfo=None):
         window = self.get_toplevel()
@@ -583,7 +569,31 @@ class Multitoner(Gtk.Grid):
         if self.activeDocument is None:
             return
         self.activeDocument.openPreview()
-
+    
+    def menuFileExportImage(self, widget):
+        if self.activeDocument is None:
+            return
+        window = self.get_toplevel()
+        
+        image_filename = showOpenImageDialog(window)
+        if image_filename is None:
+            return
+        
+        last_dot = image_filename.rfind('.')
+        if last_dot == -1:
+            name_proposal = image_filename
+        else:
+            name_proposal = image_filename[0:image_filename.rfind('.')]
+        name_proposal = name_proposal + '.eps'
+        eps_filename = showSaveAsDialog(window, name_proposal, os.path.basename(name_proposal))
+        if eps_filename is None:
+            return
+        
+        result, message = model2eps(self.activeDocument.model, image_filename, eps_filename)
+        if message:
+            window = self.get_toplevel()
+            showMessage(window, *message)
+    
 if __name__ == '__main__':
     GObject.threads_init()
     use_gui, __ = Gtk.init_check(sys.argv)
