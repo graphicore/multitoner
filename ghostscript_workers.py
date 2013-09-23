@@ -13,7 +13,7 @@ import PIL.Image as Image
 from epstool import EPSTool
 from mtt2eps import open_image
 from model import ModelInk
-from GhostScriptRunner import GhostScriptRunner, GhostscriptError
+from ghostscript_runner import GhostScriptRunner, GhostscriptError
 from compatibility import range, encode
 
 # just a preparation for i18n
