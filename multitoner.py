@@ -13,7 +13,7 @@ from ghostscript_workers import factory as gs_workers_factory
 from PreviewWindow import PreviewWindow
 from emitter import Emitter
 from compatibility import repair_gsignals
-from dialogs import showOpenImageDialog, showMessage, showSaveAsDialog
+from dialogs import showOpenImageDialog, showMessage, showSaveAsDialog, showSaveAsEPSDialog
 from mtt2eps import model2eps
 
 # just a preparation for i18n
@@ -122,7 +122,6 @@ class Document(Emitter):
     def newFromFile(Cls, gradientWorker, previewWorker, filename):
         with open(filename, 'r') as f:
             data = json.load(f)
-        print ('opened', data)
         return Cls(gradientWorker, previewWorker, filename, data)
     
     @property
@@ -163,7 +162,6 @@ class Document(Emitter):
     
     def _save(self, filename):
         data = self.model.getArgs()
-        print ('_save', data)
         data = json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
         with open(filename, 'w') as f:
             f.write(data)
@@ -579,13 +577,7 @@ class Multitoner(Gtk.Grid):
         if image_filename is None:
             return
         
-        last_dot = image_filename.rfind('.')
-        if last_dot == -1:
-            name_proposal = image_filename
-        else:
-            name_proposal = image_filename[0:image_filename.rfind('.')]
-        name_proposal = name_proposal + '.eps'
-        eps_filename = showSaveAsDialog(window, name_proposal, os.path.basename(name_proposal))
+        eps_filename = showSaveAsEPSDialog(window, image_filename)
         if eps_filename is None:
             return
         
