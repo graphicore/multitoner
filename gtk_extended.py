@@ -8,15 +8,15 @@ from gi.repository import Gtk
 __all__ = ['ActionGroup']
 
 class ActionGroup(Gtk.ActionGroup):
-    def __init__(*args):
-        Gtk.ActionGroup.__init__(*args)
+    def __init__(self, *args):
+        Gtk.ActionGroup.__init__(self, *args)
 
     def add_icon_action(self, name , label=None, tooltip=None,
                         icon_name=None, callback=None, accelerator=None,
-                        stock_id=None, type=None):
-        if type is None:
-            type = Gtk.Action
-        action = type(name, label, tooltip, stock_id)
+                        stock_id=None, Type=None):
+        if Type is None:
+            Type = Gtk.Action
+        action = Type(name, label, tooltip, stock_id)
         if icon_name is not None:
             action.set_icon_name(icon_name)
         if callback is not None:
