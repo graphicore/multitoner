@@ -24,8 +24,6 @@ def _(string):
 
 # in the process
 gs = None
-imageName = None
-epsTool = None
 
 def _init_ghostscript():
     global gs
@@ -92,11 +90,12 @@ class PreviewWorker(object):
         pool = Pool(initializer=initializer, processes=processes)
         return Cls(pool)
     
-    def removeClient(self, client_widget, client_id):
+    def remove_client(self, client_widget, client_id):
         if client_id in self._data:
             del self._data[client_id]
+        return True
     
-    def callback(self, callback, user_data, result, notice):
+    def _callback(self, callback, user_data, result, notice):
         """
         this restores the buffer data from string and runs the callback
         """
@@ -110,37 +109,36 @@ class PreviewWorker(object):
             args = (type, ) + user_data + result_data
         callback(*args)
     
-    def _getClientData(self, client_id, image_name):
+    def _get_client_data(self, client_id, image_name):
         if client_id not in self._data:
             self._data[client_id] = {
                 'image_name': None,
-                'epstool': None
+                'eps_tool': None
             }
         client_data = self._data[client_id]
         if client_data['image_name'] != image_name:
-            epsTool, notice, error = open_image(image_name)
+            eps_tool, notice, error = open_image(image_name)
             client_data['image_name'] = image_name
-            client_data['epstool'] = epsTool
+            client_data['eps_tool'] = eps_tool
         else:
             error = notice = None
-            epsTool = client_data['epstool']
-        return epsTool, notice, error
+            eps_tool = client_data['eps_tool']
+        return eps_tool, notice, error
     
-    def addJob(self, client_id, callback_data, image_name, *inks):
+    def add_job(self, client_id, callback_data, image_name, *inks):
         # notice will be used in the cb closure
-        epsTool, notice, error = self._getClientData(client_id, image_name)
+        eps_tool, notice, error = self._get_client_data(client_id, image_name)
         
         if error is not None:
             args = (error, )
             worker = no_work
         else:
-            epsTool.set_color_data(*inks)
-            eps = epsTool.create()
+            eps_tool.set_color_data(*inks)
+            eps = eps_tool.create()
             args = (eps, )
             worker = work
-        
         def cb(result):
-            self.callback(callback_data[0], callback_data[1:], result, notice)
+            self._callback(callback_data[0], callback_data[1:], result, notice)
         
         self.pool.apply_async(worker, args=args, callback=cb)
     
@@ -148,18 +146,18 @@ class GradientWorker(object):
     def __init__(self, pool):
         self.pool = pool
         
-        self._epsTool = EPSTool()
-        gradientBin = array(encode('B'), range(0, 256))
+        self._eps_tool = EPSTool()
+        gradient_bin = array(encode('B'), range(0, 256))
         # the input gradient is 256 pixels wide and 1 pixel height
         # we don't need more data and scale this on display
-        self._epsTool.set_image_data(gradientBin.tostring(), (256, 1))
+        self._eps_tool.set_image_data(gradient_bin.tostring(), (256, 1))
     
     @classmethod
     def new_with_pool(Cls):
         pool = Pool(initializer=initializer)
         return Cls(pool)
     
-    def callback(self, callback, user_data, result):
+    def _callback(self, callback, user_data, result):
         """
         this restores the buffer data from string and runs the callback
         """
@@ -169,16 +167,16 @@ class GradientWorker(object):
         args = user_data + result_data + (buf, )
         callback(*args)
     
-    def addJob(self, callback, *inks):
-        self._epsTool.set_color_data(*inks)
-        eps = self._epsTool.create()
+    def add_job(self, callback, *inks):
+        self._eps_tool.set_color_data(*inks)
+        eps = self._eps_tool.create()
         def cb(result):
-            self.callback(callback[0], callback[1:], result)
+            self._callback(callback[0], callback[1:], result)
         self.pool.apply_async(work, args=(eps, ), callback=cb)
     
 def factory():
     processes = None
     pool = Pool(initializer=initializer, processes=processes)
-    gradientWorker = GradientWorker(pool)
-    previewWorker = PreviewWorker(pool)
-    return gradientWorker, previewWorker
+    gradient_worker = GradientWorker(pool)
+    preview_worker = PreviewWorker(pool)
+    return gradient_worker, preview_worker

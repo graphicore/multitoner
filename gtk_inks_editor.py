@@ -123,7 +123,7 @@ class CellRendererInk (Gtk.CellRendererText):
             return False
         state['waiting'] = True
         callback = (self._receiveSurface, iid)
-        self.gradientWorker.addJob(callback, inkModel)
+        self.gradientWorker.add_job(callback, inkModel)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
@@ -243,7 +243,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._waiting = True
         
         callback = (self._receiveSurface, )
-        self._gradientWorker.addJob(callback, *inksModel.visibleCurves)
+        self._gradientWorker.add_job(callback, *inksModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
