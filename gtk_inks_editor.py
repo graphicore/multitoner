@@ -289,14 +289,14 @@ class HScalingTreeColumnView (Gtk.TreeViewColumn):
         a Gtk.TreeViewColumn that scales its width according to the scale
         object it should to be subscribed to.
         
-        hookup the renderer to the scale objects onScaleChange:
+        hookup the renderer to the scale objects on_scale_change:
         scale.add(object of HScalingTreeColumnView)
     """
     def __init__(self, name, renderer, text):
         self.renderer = renderer
         Gtk.TreeViewColumn.__init__(self, name, renderer, text=text)
     
-    def onScaleChange(self, scale):
+    def on_scale_change(self, scale):
         """ be as wide as the curve widget """
         w, _ = scale()
         if w != self.renderer.width:
@@ -1005,8 +1005,8 @@ class InksEditor(Gtk.Grid):
         curveEditor.set_size_request(256, -1)
         
         self.add_events(Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.KEY_RELEASE_MASK)
-        self.connect('key-press-event'     , curveEditor.onKeyPress)
-        self.connect('key-release-event'   , curveEditor.onKeyRelease)
+        self.connect('key-press-event'     , curveEditor.key_press_handler)
+        self.connect('key-release-event'   , curveEditor.key_release_handler)
         
         return curveEditor
     
