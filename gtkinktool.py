@@ -9,7 +9,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, Pango
 import cairo
 from weakref import ref as Weakref
 
-from gtkcurvewidget import CurveEditor
+from gtk_curve_editor import CurveEditor
 from interpolation import interpolationStrategies, interpolationStrategiesDict
 from emitter import Emitter
 from model import ModelCurves, ModelInk
