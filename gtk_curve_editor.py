@@ -13,7 +13,7 @@ from interpolation import *
 from emitter import Emitter
 from model import ModelCurves
 
-
+__all__ = ['CurveEditor']
 
 # just a preparation for i18n
 def _(string):
