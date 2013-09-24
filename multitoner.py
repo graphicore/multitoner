@@ -382,7 +382,7 @@ class Multitoner(Gtk.Grid):
         
         actionGroup.add_icon_actions([
               ('FileExportImage', _('Export Image'), _('Export Image as EPS file'),
-               'document-save', self.menuFileExportImage, 'E')
+               'document-save', self.menuFileExportImage, '<ctrl>E')
             # , ...
             ])
         actionGroup.set_sensitive(False)
