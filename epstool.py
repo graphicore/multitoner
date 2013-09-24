@@ -363,7 +363,7 @@ def get_duotone_cmyk_values(*inks):
 
     CMYKValues = '\n'.join([
         cmyk_values_format.format(
-            *(processColors[ink.name] if is_process_color(ink) else ink.cmyk),
+            *(process_colors[ink.name] if is_process_color(ink) else ink.cmyk),
             name=ink.name
         ) for ink in inks
     ])
