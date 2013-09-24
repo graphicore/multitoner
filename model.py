@@ -4,7 +4,7 @@
 from __future__ import division, print_function, unicode_literals
 
 from emitter import Emitter
-from history import getSetterCommand, getCallingCommand, historize, ModelHistoryApi
+from history import get_calling_command, historize, ModelHistoryApi
 
 __all__ = ['ModelException', 'Model', 'ModelControlPoint', 'ModelCurve'
            'ModelCurves', 'ModelInk']
@@ -42,7 +42,7 @@ class Model(ModelHistoryApi, Emitter):
     def _connect(self, *children):
         for child in children:
             child.add(self) # subscribe
-            child.historyAPI = self # for undo/redo
+            child.history_api = self # for undo/redo
     
     def triggerOnModelUpdated(self, *args):
         for item in self._subscriptions:
@@ -112,8 +112,8 @@ class ModelCurve(Model):
     def addPoint(self, point):
         model = self._addPoint(point)
         
-        undo = getCallingCommand('removePointById', model.id)
-        self.addHistory(undo)
+        undo = get_calling_command('removePointById', model.id)
+        self.add_history(undo)
         
         self.triggerOnModelUpdated('addPoint', model)
     
@@ -126,8 +126,8 @@ class ModelCurve(Model):
             return
         position = self._points.index(model)
         
-        undo = getCallingCommand('addPoint', model)
-        self.addHistory(undo)
+        undo = get_calling_command('addPoint', model)
+        self.add_history(undo)
         
         self._points.pop(position)
         self.triggerOnModelUpdated('removePoint', model)
@@ -241,8 +241,8 @@ class ModelCurves(Model):
             # the same order was supplied
             return;
         
-        undo = getCallingCommand('reorderByIdList', currentOrder)
-        self.addHistory(undo)
+        undo = get_calling_command('reorderByIdList', currentOrder)
+        self.add_history(undo)
         
         idSet = set(ids)
         if len(idSet) != len(self._curves):
@@ -290,8 +290,8 @@ class ModelCurves(Model):
             curve = {}
         model = self._insertCurve(position, curve)
         
-        undo = getCallingCommand('removeCurveById', model.id)
-        self.addHistory(undo)
+        undo = get_calling_command('removeCurveById', model.id)
+        self.add_history(undo)
         
         # get the actual position the model has now
         position = self._curves.index(model)
@@ -304,8 +304,8 @@ class ModelCurves(Model):
     def removeCurve(self, model):
         position = self._curves.index(model)
         
-        undo = getCallingCommand('insertCurve', position, model)
-        self.addHistory(undo)
+        undo = get_calling_command('insertCurve', position, model)
+        self.add_history(undo)
         
         self._curves.pop(position)
         self.triggerOnModelUpdated('removeCurve', model)

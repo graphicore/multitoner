@@ -12,13 +12,13 @@ from functools import wraps
 from warnings import warn
 from compatibility import encode
 
-__all__ = ['History', 'getSetterCommand', 'getCallingCommand', 'historize',
+__all__ = ['History', 'get_setter_command', 'get_calling_command', 'historize',
            'ModelHistoryApi']
 
-def getSetterCommand(name, value):
-    pickledValue = pickle.dumps(value, -1)
+def get_setter_command(name, value):
+    pickled_value = pickle.dumps(value, -1)
     def cmd(obj):
-        value = pickle.loads(pickledValue)
+        value = pickle.loads(pickled_value)
         setattr(obj, name, value)
     cmd.__doc__ = encode('setting {0}'.format(name))
     # name is used to distinguish between different commands on the same model
@@ -26,10 +26,10 @@ def getSetterCommand(name, value):
     cmd.__name__= encode('set__{0}__'.format(name))
     return cmd
 
-def getCallingCommand(method, *args):
-    pickledArgs = pickle.dumps(args, -1)
+def get_calling_command(method, *args):
+    pickled_args = pickle.dumps(args, -1)
     def cmd(obj):
-        args = pickle.loads(pickledArgs)
+        args = pickle.loads(pickled_args)
         getattr(obj, method)(*args)
     cmd.__doc__ = encode('calling {0}'.format(method))
     # name is used to distinguish between different commands on the same
@@ -43,55 +43,55 @@ def historize(fn):
     def wrapper(*args, **kwds):
         name = fn.__name__
         obj = args[0]
-        gotValue = False
+        got_value = False
         try:
             value = getattr(obj, name)
-            gotValue = True
+            got_value = True
         except AttributeError:
             pass
-        if gotValue:
-            undo = getSetterCommand(name, value)
-            obj.addHistory(undo)
+        if got_value:
+            undo = get_setter_command(name, value)
+            obj.add_history(undo)
         return fn(*args, **kwds)
     return wrapper
 
 class ModelHistoryApi(object):
     def _getstate(self, state):
-        if '_historyAPI' in state:
-            del state['_historyAPI'] # remove the WeakRef
+        if '_history_api' in state:
+            del state['_history_api'] # remove the WeakRef
     def __getstate__(self):
         state = self.__dict__.copy() # copy the dict since we change it
         return self._getstate(_getstate)
     
-    # no need for since this Class can handle a missing _historyAPI
+    # no need for since this Class can handle a missing _history_api
     # def __setstate__():
     
     @property
-    def historyAPI(self):
-        weakRef = getattr(self, '_historyAPI', None)
-        historyAPI = None
-        if weakRef is not None:
-            historyAPI = weakRef()
-        if historyAPI is None:
+    def history_api(self):
+        weak_ref = getattr(self, '_history_api', None)
+        history_api = None
+        if weak_ref is not None:
+            history_api = weak_ref()
+        if history_api is None:
             warn('Missing History API for ' + str(self))
-        return historyAPI
+        return history_api
     
-    @historyAPI.setter
-    def historyAPI(self, api):
-        self._historyAPI = weakref(api)
+    @history_api.setter
+    def history_api(self, api):
+        self._history_api = weakref(api)
     
-    def addHistory(self, command, path=None):
+    def add_history(self, command, path=None):
         if path is None:
             path = []
             # print('add history: ', self.__class__.__name__, command.__doc__)
         path.append(self.id)
             
-        historyAPI = self.historyAPI
-        if historyAPI is None:
+        history_api = self.history_api
+        if history_api is None:
             return
-        historyAPI.addHistory(command, path)
+        history_api.add_history(command, path)
     
-    def registerConsecutiveCommand(self, path=None):
+    def register_consecutive_command(self, path=None):
         """
         The view is about to execute the same command with different values
         consecutively zero or more times. To make just one history entry
@@ -103,94 +103,93 @@ class ModelHistoryApi(object):
             path = []
         path.append(self.id)
         
-        historyAPI = self.historyAPI
-        if historyAPI is None:
+        history_api = self.history_api
+        if history_api is None:
             return
-        historyAPI.registerConsecutiveCommand(path)
+        history_api.register_consecutive_command(path)
 
 class History(object):
-    def __init__(self, rootModel):
-        self._undoCommands = []
-        self._redoCommands = []
-        self._isUndo = False
-        self._isRedo = False
+    def __init__(self, root_model):
+        self._undo_commands = []
+        self._redo_commands = []
+        self._is_undo = False
+        self._is_redo = False
         
         # (path, started, commandName)
-        self._conscecutiveCommand = (None, False, None)
+        self._conscecutive_command = (None, False, None)
         
-        rootModel.historyAPI = self
-        self._rootModel = rootModel;
+        root_model.history_api = self
+        self._root_model = root_model;
     
-    def resolvePath(self, path):
-        path = path[:-1] # we don't need the rootModel id
-        model = self._rootModel
+    def _resolve_path(self, path):
+        path = path[:-1] # we don't need the root_model id
+        model = self._root_model
         for mid in reversed(path):
             model = model.getById(mid)
         return model
     
-    def addHistory(self, command, path):
+    def add_history(self, command, path):
         path = tuple(path)
         entry = (path, command)
-        if self._isUndo:
-            self._endConsecutiveCommand()
-            self._redoCommands.append(entry)
+        if self._is_undo:
+            self._end_consecutive_command()
+            self._redo_commands.append(entry)
         else:
-            if not self._isRedo:
+            if not self._is_redo:
                 # if its no redo its do: new history and the old redos are invalid
-                self._redoCommands = []
+                self._redo_commands = []
             else:
-                self._endConsecutiveCommand()
-            if not self._isConsecutiveCommand(path, command.__name__):
-                self._undoCommands.append(entry)
+                self._end_consecutive_command()
+            if not self._is_consecutive_command(path, command.__name__):
+                self._undo_commands.append(entry)
     
-    def registerConsecutiveCommand(self, path):
-        self._conscecutiveCommand = (tuple(path), False, None)
+    def register_consecutive_command(self, path):
+        self._conscecutive_command = (tuple(path), False, None)
     
-    def _endConsecutiveCommand(self):
-        self._conscecutiveCommand = (None, False, None)
+    def _end_consecutive_command(self):
+        self._conscecutive_command = (None, False, None)
     
-    def _isConsecutiveCommand(self, path, cmdName):
-        registeredPath, started, registeredCmdName = self._conscecutiveCommand
-        if registeredPath is None:
+    def _is_consecutive_command(self, path, cmd_name):
+        registered_path, started, registered_cmd_name = self._conscecutive_command
+        if registered_path is None:
             # nothing registered
             return False
-        if registeredPath != path:
+        if registered_path != path:
             # other model
-            self._endConsecutiveCommand()
+            self._end_consecutive_command()
             return False
-        if started == True and registeredCmdName != cmdName:
+        if started == True and registered_cmd_name != cmd_name:
             # same model other command
-            self._endConsecutiveCommand()
+            self._end_consecutive_command()
             return False
         if started == False:
             # this is the first command after registration
             # the command will be added to undo other conscecutive
-            # commands with cmdName will not be added to the undo history
-            self._conscecutiveCommand = (registeredPath, True, cmdName)
+            # commands with cmd_name will not be added to the undo history
+            self._conscecutive_command = (registered_path, True, cmd_name)
             return False
         # this was a consecutive command
         return True
     
     def undo(self):
-        if len(self._undoCommands) == 0:
+        if len(self._undo_commands) == 0:
             return
-        path, command = self._undoCommands.pop()
-        model = self.resolvePath(path)
+        path, command = self._undo_commands.pop()
+        model = self._resolve_path(path)
         # this will add a command to history
-        self._isUndo = True
+        self._is_undo = True
         command(model)
-        self._isUndo = False
+        self._is_undo = False
     
     def redo(self):
-        if len(self._redoCommands) == 0:
+        if len(self._redo_commands) == 0:
             return
-        path, command = self._redoCommands.pop()
-        model = self.resolvePath(path)
+        path, command = self._redo_commands.pop()
+        model = self._resolve_path(path)
         # this will add a command to history
-        self._isRedo = True
+        self._is_redo = True
         command(model)
-        self._isRedo = False
+        self._is_redo = False
     
     def getCounts(self):
-        return (len(self._undoCommands), len(self._redoCommands))
-    
+        return (len(self._undo_commands), len(self._redo_commands))

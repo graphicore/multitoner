@@ -113,7 +113,7 @@ class ControlPoint(Emitter):
     def onButtonPress(self, button, x_in, y_in, alternate=False):
         if button == 1:
             # when active this receives onMotionNotify
-            self.model.registerConsecutiveCommand()
+            self.model.register_consecutive_command()
             self.active = True
     
     def onButtonRelease(self, button, x_in, y_in, alternate=False):

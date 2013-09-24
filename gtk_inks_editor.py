@@ -912,7 +912,7 @@ class InkSetup(object):
             self._inkOptionsBox.show_all()
         
     def focusInHandler(self, widget, __, inkId):
-        self.model.getById(inkId).registerConsecutiveCommand()
+        self.model.getById(inkId).register_consecutive_command()
     
     def onCurveTypeChange(self, widget, inkId):
         ink = self.model.getById(inkId)
