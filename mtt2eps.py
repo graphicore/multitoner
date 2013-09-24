@@ -3,11 +3,10 @@
 
 from __future__ import division, print_function, unicode_literals
 
-import sys
 import PIL.Image as Image
 import json
 
-from epstool import EPSTool
+from eps_tool import eps_tool
 from model import ModelCurves, ModelInk
 
 __all__ = ['open_image', 'model2eps', 'mtt2eps']
@@ -17,14 +16,14 @@ def _(string):
     return string
 
 def open_image(filename):
-    """ returns (epsTool, notice, error)
+    """ returns (eps_tool, notice, error)
     
-    epsTool: an instance of EPSTool loaded with the data of the image at filename
+    eps_tool: an instance of eps_tool loaded with the data of the image at filename
     notice: a tuple with a notice for the user or None
     error: None or if an error occured an error tuple to return with work,
-           then epstool and notice must not be used.
+           then eps_tool and notice must not be used.
     """
-    error = notice = epsTool = None
+    error = notice = eps_tool = None
     try:
         im = Image.open(filename)
     except IOError as e:
@@ -42,15 +41,15 @@ def open_image(filename):
                      , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
                      )
             im = im.convert('L')
-        epsTool = EPSTool()
-        epsTool.set_image_data(im.tostring(), im.size)
+        eps_tool = eps_tool()
+        eps_tool.set_image_data(im.tostring(), im.size)
         
-    return epsTool, notice, error
+    return eps_tool, notice, error
 
 def make_eps(inks, image_filename):
-    epsTool, notice, error = open_image(image_filename)
-    epsTool.set_color_data(*inks)
-    return epsTool.create(), notice, error
+    eps_tool, notice, error = open_image(image_filename)
+    eps_tool.set_color_data(*inks)
+    return eps_tool.create(), notice, error
 
 def make_eps_from_model(model, image_filename):
     return make_eps(model.visibleCurves, image_filename)
@@ -75,6 +74,7 @@ def mtt2eps(mtt_filename, image_filename, eps_filename):
     return model2eps(model, image_filename, eps_filename)
 
 if __name__ == '__main__':
+    import sys
     if len(sys.argv) == 4:
         result, message = mtt2eps(*sys.argv[1:])
         if message is not None:
