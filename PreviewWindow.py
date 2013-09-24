@@ -13,6 +13,8 @@ from compatibility import repair_gsignals
 from dialogs import showOpenImageDialog, showMessage, showSaveAsEPSDialog
 from mtt2eps import model2eps
 
+__all__ = ['PreviewWindow']
+
 # just a preparation for i18n
 def _(string):
     return string
