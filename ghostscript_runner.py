@@ -4,12 +4,15 @@
 from __future__ import print_function, unicode_literals
 
 import sys
-import ghostscript._gsprint as gs
 import ctypes as c
 try:
+    # python 2
     from cStringIO import StringIO
 except ImportError:
+    # python 3
     from io import BytesIO as StringIO
+
+import ghostscript._gsprint as gs
 
 __all__ = ['GhostscriptError', 'GhostScriptRunner']
 
