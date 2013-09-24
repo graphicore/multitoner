@@ -7,7 +7,10 @@ import sys
 import os
 import json
 from gi.repository import Gtk, Gdk, GObject
-from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
+
+from gtk_inks_editor import InksEditor
+from model import ModelCurves, ModelInk
+from history import History
 from gtk_extended import ActionGroup
 from ghostscript_workers import factory as gs_workers_factory
 from preview import PreviewWindow
