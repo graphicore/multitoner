@@ -191,6 +191,7 @@ class Document(Emitter):
             self._previewWindows.remove(widget)
         except ValueError: # not in list
             pass
+        return True
     
     def openPreview(self):
         preview = PreviewWindow(self._previewWorker, self.model)
