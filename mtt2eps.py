@@ -43,13 +43,13 @@ def open_image(filename):
                      )
             im = im.convert('L')
         epsTool = EPSTool()
-        epsTool.setImageData(im.tostring(), im.size)
+        epsTool.set_image_data(im.tostring(), im.size)
         
     return epsTool, notice, error
 
 def make_eps(inks, image_filename):
     epsTool, notice, error = open_image(image_filename)
-    epsTool.setColorData(*inks)
+    epsTool.set_color_data(*inks)
     return epsTool.create(), notice, error
 
 def make_eps_from_model(model, image_filename):

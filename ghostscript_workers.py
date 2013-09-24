@@ -134,7 +134,7 @@ class PreviewWorker(object):
             args = (error, )
             worker = no_work
         else:
-            epsTool.setColorData(*inks)
+            epsTool.set_color_data(*inks)
             eps = epsTool.create()
             args = (eps, )
             worker = work
@@ -152,7 +152,7 @@ class GradientWorker(object):
         gradientBin = array(encode('B'), range(0, 256))
         # the input gradient is 256 pixels wide and 1 pixel height
         # we don't need more data and scale this on display
-        self._epsTool.setImageData(gradientBin.tostring(), (256, 1))
+        self._epsTool.set_image_data(gradientBin.tostring(), (256, 1))
     
     @classmethod
     def new_with_pool(Cls):
@@ -170,7 +170,7 @@ class GradientWorker(object):
         callback(*args)
     
     def addJob(self, callback, *inks):
-        self._epsTool.setColorData(*inks)
+        self._epsTool.set_color_data(*inks)
         eps = self._epsTool.create()
         def cb(result):
             self.callback(callback[0], callback[1:], result)

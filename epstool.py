@@ -11,8 +11,7 @@ from datetime import datetime
 
 __all__ = ['EPSTool']
 
-# might be used one day
-initColors = Template("""gsave % clipping path gsave
+init_colors = Template("""gsave % clipping path gsave
 %note: 4.2 More Free Advice
 %%+ ...
 %%+ 2. Do not rely on the initial graphic state having a default current color value
@@ -35,7 +34,7 @@ grestore % matches clipping path gsave, so this restores the old clipping path i
 """)
 
 
-epsTemplate = Template("""%!PS-Adobe-3.0 EPSF-3.0
+eps_template = Template("""%!PS-Adobe-3.0 EPSF-3.0
 %%Creator: Multitoner V0.0
 %%Title: no title given
 %%CreationDate: $CreationDate
@@ -216,7 +215,7 @@ def junked(string, chunkLen):
 # For the saving of eps-files this might become interesting again, because
 # speed of encoding is not so important in that case.
 # import mom.codec as codec
-# def getImageBinary(string):
+# def get_image_binary(string):
 #     string = codec.base85_encode(string, codec.B85_ASCII)
 #     if bytes is not str:
 #         string = string.decode('utf-8')
@@ -226,7 +225,7 @@ def junked(string, chunkLen):
 #     length = len(string)
 #     return '%%BeginBinary: {0}{1}\n%%EndBinary'.format(len(string), string)
 
-def getImageBinary(binary):
+def get_image_binary(binary):
     ascii = binascii.hexlify(binary)
     del binary
     if bytes is not str:
@@ -239,7 +238,7 @@ def getImageBinary(binary):
     length = len(ascii)
     return '%%BeginData: {0} Hex Bytes{1}\n%%EndData'.format(len(ascii), ascii)
 
-def getDeviceNLuT(*inks):
+def get_device_n_lut(*inks):
     """
         This table has 256 indexes. For two used colors the first index
         points to two bytes (in the hex representation 4 bytes, 2 bytes
@@ -271,48 +270,48 @@ def getDeviceNLuT(*inks):
     return '\n  '.join(junked(table, 66))
 
 
-processColors = {
+process_colors = {
     'Cyan'   : (1.0, 0.0, 0.0, 0.0),
     'Magenta': (0.0, 1.0, 0.0, 0.0),
     'Yellow' : (0.0, 0.0, 1.0, 0.0),
     'Black'  : (0.0, 0.0, 0.0, 1.0)
 }
 
-def isProcessColor(ink):
-    return ink.name in processColors
+def is_process_color(ink):
+    return ink.name in process_colors
 
-def getInitColors(*inks):
-    processColorValue = '{0} {1} {2} {3}'
-    initProcessColorsTpl = Template(\
+def get_init_colors(*inks):
+    process_color_value = '{0} {1} {2} {3}'
+    init_process_colors_tpl = Template(\
     '/setcmykcolor where {pop\n  $value setcmykcolor\n  \
 100 100 moveto 101 101 lineto stroke\n} if')
     
-    customColorValue = '{0} {1} {2} {3} ({name})'
-    initCustomColorsTpl = Template(\
+    custom_color_value = '{0} {1} {2} {3} ({name})'
+    init_custom_colors_tpl = Template(\
     '/findcmykcustomcolor where {pop\n  $value\n  \
 findcmykcustomcolor 1 setcustomcolor\n  100 100 moveto 101 101 \
 lineto stroke\n} if')
     
-    processColorsInit = []
-    customColorsInit  = []
+    process_colors_init = []
+    custom_colors_init  = []
     
     for ink in inks:
         
-        if isProcessColor(ink):
-            value = processColorValue.format(*processColors[ink.name])
-            processColorsInit.append(
-                initProcessColorsTpl.substitute({'value': value}))
+        if is_process_color(ink):
+            value = process_color_value.format(*process_colors[ink.name])
+            process_colors_init.append(
+                init_process_colors_tpl.substitute({'value': value}))
         else:
-            value = customColorValue.format(*ink.cmyk, name=ink.name)
-            customColorsInit.append(
-                initCustomColorsTpl.substitute({'value': value}))
+            value = custom_color_value.format(*ink.cmyk, name=ink.name)
+            custom_colors_init.append(
+                init_custom_colors_tpl.substitute({'value': value}))
     
-    return initColors.substitute({
-        'initProcessColors': '\n'.join(processColorsInit),
-        'initCustomColors' : '\n'.join(customColorsInit)
+    return init_colors.substitute({
+        'initProcessColors': '\n'.join(process_colors_init),
+        'initCustomColors' : '\n'.join(custom_colors_init)
     })
     
-def getDSCColors(*inks):
+def get_dsc_colors(*inks):
     # this has a process color
     # %%DocumentProcessColors:  Black
     # %%DocumentCustomColors: (PANTONE 144 CVC)
@@ -326,45 +325,45 @@ def getDSCColors(*inks):
     # %%CMYKCustomColor: 0.42 0.40 0.44 0.04 (PANTONE Warm Gray 7 CVC)
     # %%CMYKCustomColor: 0.15 0.13 0.17 0.00 (PANTONE Warm Gray 2 CVC)
     result = []
-    processColors = []
-    customColors = []
-    colorsSeparator = '\n%%+ '
-    cmykCustomFormat = '%%CMYKCustomColor: {0:.4f} {1:.4f} {2:.4f} {3:.4f} ({name})'
+    process_colors = []
+    custom_colors = []
+    colors_separator = '\n%%+ '
+    cmyk_custom_format = '%%CMYKCustomColor: {0:.4f} {1:.4f} {2:.4f} {3:.4f} ({name})'
     
     for ink in inks:
-        (processColors if isProcessColor(ink) else customColors).append(ink)
+        (process_colors if is_process_color(ink) else custom_colors).append(ink)
 
-    if len(processColors):
-        DocumentProcessColors =  colorsSeparator.join([
-            ink.name for ink in processColors])
+    if len(process_colors):
+        DocumentProcessColors =  colors_separator.join([
+            ink.name for ink in process_colors])
         result.append('%%DocumentProcessColors: {0}'.format(DocumentProcessColors))
-    if len(customColors):
-        DocumentCustomColors = colorsSeparator.join([
-            '({name})'.format(name=ink.name) for ink in customColors])
+    if len(custom_colors):
+        DocumentCustomColors = colors_separator.join([
+            '({name})'.format(name=ink.name) for ink in custom_colors])
         result.append('%%DocumentCustomColors: {0}'.format(DocumentCustomColors))
         result += [
-            cmykCustomFormat.format(*ink.cmyk, name=ink.name) for ink in customColors
+            cmyk_custom_format.format(*ink.cmyk, name=ink.name) for ink in custom_colors
         ]
     return '\n'.join(result)   
 
-def getDuotoneNames(*inks):
+def get_duotone_names(*inks):
     # '/DuotoneNames [ /Black (PANTONE 144 CVC) ] def',
     names = [
-        ('/{0}' if isProcessColor(ink) else '({0})').format(ink.name)
+        ('/{0}' if is_process_color(ink) else '({0})').format(ink.name)
         for ink in inks
     ]    
     return '/DuotoneNames [ {0} ] def'.format(' '.join(names))
 
-def getDuotoneCMYKValues(*inks):
+def get_duotone_cmyk_values(*inks):
     # /DuotoneCMYKValues [
     #   [0.0000  0.0000  0.0000 1.0000] % Black
     #   [0.0300 0.5800 1.0000 0.0000] % PANTONE 144CVC
     # ] def
-    CMYKValuesFormat = '  [{0:.4f} {1:.4f} {2:.4f} {3:.4f}] % {name}'
+    cmyk_values_format = '  [{0:.4f} {1:.4f} {2:.4f} {3:.4f}] % {name}'
 
     CMYKValues = '\n'.join([
-        CMYKValuesFormat.format(
-            *(processColors[ink.name] if isProcessColor(ink) else ink.cmyk),
+        cmyk_values_format.format(
+            *(processColors[ink.name] if is_process_color(ink) else ink.cmyk),
             name=ink.name
         ) for ink in inks
     ])
@@ -373,31 +372,31 @@ def getDuotoneCMYKValues(*inks):
 class EPSTool(object):
     def __init__(self):
         self._mapping = {}
-        self._gotColor = False
-        self._gotImage = False
+        self._has_color = False
+        self._has_image = False
     
-    def setColorData(self, *curves):
-        self._gotColor = True
-        self._mapping['deviceNLUT'] = getDeviceNLuT(*curves)
-        self._mapping['initColors'] = getInitColors(*curves)
-        self._mapping['DSCColors'] = getDSCColors(*curves)
-        self._mapping['DuotoneNames'] = getDuotoneNames(*curves)
-        self._mapping['DuotoneCMYKValues'] = getDuotoneCMYKValues(*curves)
+    def set_color_data(self, *curves):
+        self._has_color = True
+        self._mapping['deviceNLUT'] = get_device_n_lut(*curves)
+        self._mapping['initColors'] = get_init_colors(*curves)
+        self._mapping['DSCColors'] = get_dsc_colors(*curves)
+        self._mapping['DuotoneNames'] = get_duotone_names(*curves)
+        self._mapping['DuotoneCMYKValues'] = get_duotone_cmyk_values(*curves)
     
-    def setImageData(self, imageBin, size):
-        self._mapping['ImageBinary'] = getImageBinary(imageBin)
+    def set_image_data(self, image_bin, size):
+        self._mapping['ImageBinary'] = get_image_binary(image_bin)
         self._mapping['width'], self._mapping['height'] = size
-        self._gotImage = True
+        self._has_image = True
     
     def create(self):
-        if not self._gotColor:
-            raise Exception('Color information is missing, use setColorData')
+        if not self._has_color:
+            raise Exception('Color information is missing, use set_color_data')
             
-        if not self._gotImage:
-            raise Exception('Image data is missing, use setImageData')
+        if not self._has_image:
+            raise Exception('Image data is missing, use set_image_data')
         
         self._mapping['CreationDate'] = datetime.now().ctime()
-        return epsTemplate.substitute(self._mapping).encode('utf-8')
+        return eps_template.substitute(self._mapping).encode('utf-8')
 
 if __name__== '__main__':
     import sys
@@ -417,6 +416,6 @@ if __name__== '__main__':
     im = Image.open(filename)
     
     epsTool = EPSTool();
-    epsTool.setColorData(*curvesModel.curves)
-    epsTool.setImageData(im.tostring(), im.size)
+    epsTool.set_color_data(*curvesModel.curves)
+    epsTool.set_image_data(im.tostring(), im.size)
     print (epsTool.create())
