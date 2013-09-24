@@ -16,7 +16,8 @@ from ghostscript_workers import factory as gs_workers_factory
 from preview import PreviewWindow
 from emitter import Emitter
 from compatibility import repair_gsignals
-from dialogs import showOpenImageDialog, showMessage, showSaveAsDialog, showSaveAsEPSDialog
+from dialogs import show_open_image_dialog, show_message, show_save_as_dialog, \
+                    show_save_as_eps_dialog
 from mtt2eps import model2eps
 
 __all__ = ['Multitoner']
@@ -445,14 +446,14 @@ class Multitoner(Gtk.Grid):
     def openFileSaveAsDialog(self, doc):
         self.setActivePage(doc)
         window = self.get_toplevel()
-        filename = showSaveAsDialog(window, doc.filename,
-                                    doc.untitledName + Document.fileExtension)
+        filename = show_save_as_dialog(window, doc.filename,
+                                       doc.untitledName + Document.fileExtension)
         if filename is not None:
             doc.saveAs(filename)
     
     def _announceError(self, error, moreInfo=None):
         window = self.get_toplevel()
-        showMessage(window, 'error', error, moreInfo)
+        show_message(window, 'error', error, moreInfo)
     
     def _askOkCancel(self, question, moreInfo=None):
         window = self.get_toplevel()
@@ -578,18 +579,18 @@ class Multitoner(Gtk.Grid):
             return
         window = self.get_toplevel()
         
-        image_filename = showOpenImageDialog(window)
+        image_filename = show_open_image_dialog(window)
         if image_filename is None:
             return
         
-        eps_filename = showSaveAsEPSDialog(window, image_filename)
+        eps_filename = show_save_as_eps_dialog(window, image_filename)
         if eps_filename is None:
             return
         
         result, message = model2eps(self.activeDocument.model, image_filename, eps_filename)
         if message:
             window = self.get_toplevel()
-            showMessage(window, *message)
+            show_message(window, *message)
     
 if __name__ == '__main__':
     GObject.threads_init()

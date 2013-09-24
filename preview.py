@@ -7,10 +7,10 @@ from gi.repository import Gtk, GObject, Gdk, GLib
 from gtk_extended import ActionGroup
 import cairo
 from emitter import Emitter
-from weakref import ref as Weakref
+from weakref import ref as weakref
 import math
 from compatibility import repair_gsignals
-from dialogs import showOpenImageDialog, showMessage, showSaveAsEPSDialog
+from dialogs import show_open_image_dialog, show_message, show_save_as_eps_dialog
 from mtt2eps import model2eps
 
 __all__ = ['PreviewWindow']
@@ -499,7 +499,7 @@ class PreviewWindow(Gtk.Window):
         self._previewWorker = previewWorker
         self.connect('destroy', previewWorker.removeClient, self.id)
         
-        self.inksModel = Weakref(inksModel)
+        self.inksModel = weakref(inksModel)
         self.imageName = imageName
         
         self.set_default_size(640, 480)
@@ -628,7 +628,7 @@ class PreviewWindow(Gtk.Window):
     
     def showMessage(self, *message):
         window = self.get_toplevel()
-        showMessage(window, *message)
+        show_message(window, *message)
     
     def onModelUpdated(self, inksModel, event, *args):
         if len(inksModel.visibleCurves) == 0:
@@ -724,7 +724,7 @@ class PreviewWindow(Gtk.Window):
     
     def askForImage(self):
         window = self.get_toplevel()
-        filename = showOpenImageDialog(window)
+        filename = show_open_image_dialog(window)
         self._openImage(filename)
     
     # actions
@@ -763,7 +763,7 @@ class PreviewWindow(Gtk.Window):
         
         window = self.get_toplevel()
         
-        eps_filename = showSaveAsEPSDialog(window, image_filename)
+        eps_filename = show_save_as_eps_dialog(window, image_filename)
         if eps_filename is None:
             return
         
@@ -771,7 +771,7 @@ class PreviewWindow(Gtk.Window):
         
         if message:
             window = self.get_toplevel()
-            showMessage(window, *message)
+            show_message(window, *message)
 
 if __name__ == '__main__':
     import sys

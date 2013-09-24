@@ -6,15 +6,15 @@ from __future__ import division, print_function, unicode_literals
 import os
 from gi.repository import Gtk, GObject, Gdk
 
-__all__ = ['showOpenImageDialog', 'showSaveAsDialog', 'showSaveAsEPSDialog',
-           'showErrorDialog', 'showNoticeDialog', 'showMessage']
+__all__ = ['show_open_image_dialog', 'show_save_as_dialog', 'show_save_as_eps_dialog',
+           'show_error_dialog', 'show_notice_dialog', 'show_message']
 
 # just a preparation for i18n
 def _(string):
     return string
 
 
-def showOpenImageDialog(window):
+def show_open_image_dialog(window):
     dialog = Gtk.FileChooserDialog(title=_('Choose an Image-File')
         , parent=window
         , action=Gtk.FileChooserAction.OPEN
@@ -34,7 +34,7 @@ def showOpenImageDialog(window):
     dialog.destroy()
     return filename
 
-def showSaveAsDialog(window, filename=None, current_name=None):
+def show_save_as_dialog(window, filename=None, current_name=None):
     dialog = Gtk.FileChooserDialog(title=_('Save File')
         , parent=window
         , action=Gtk.FileChooserAction.SAVE
@@ -55,16 +55,16 @@ def showSaveAsDialog(window, filename=None, current_name=None):
     dialog.destroy()
     return result
 
-def showSaveAsEPSDialog(window, source_filename):
+def show_save_as_eps_dialog(window, source_filename):
     last_dot = source_filename.rfind('.')
     if last_dot == -1:
         name_proposal = source_filename
     else:
         name_proposal = source_filename[0:source_filename.rfind('.')]
     name_proposal = name_proposal + '.eps'
-    return showSaveAsDialog(window, name_proposal, os.path.basename(name_proposal))
+    return show_save_as_dialog(window, name_proposal, os.path.basename(name_proposal))
 
-def _showMessageDialog(message_type, window, message, moreInfo=None):
+def _show_message_dialog(message_type, window, message, more_info=None):
     dialog = Gtk.MessageDialog(
         window
         , Gtk.DialogFlags.DESTROY_WITH_PARENT
@@ -72,8 +72,8 @@ def _showMessageDialog(message_type, window, message, moreInfo=None):
         , Gtk.ButtonsType.CLOSE
         , message
     )
-    if moreInfo is not None:
-        dialog.format_secondary_text(moreInfo)
+    if more_info is not None:
+        dialog.format_secondary_text(more_info)
     
     # Destroy the dialog when the user responds to it
     # (e.g. clicks a button)
@@ -83,17 +83,17 @@ def _showMessageDialog(message_type, window, message, moreInfo=None):
     dialog.show()
     return dialog
 
-def showErrorDialog(window, message, moreInfo=None):
-    return _showMessageDialog(Gtk.MessageType.ERROR, window, message, moreInfo)
+def show_error_dialog(window, message, more_info=None):
+    return _show_message_dialog(Gtk.MessageType.ERROR, window, message, more_info)
     
-def showNoticeDialog(window, message, moreInfo=None):
-    return _showMessageDialog(Gtk.MessageType.INFO, window, message, moreInfo)
+def show_notice_dialog(window, message, more_info=None):
+    return _show_message_dialog(Gtk.MessageType.INFO, window, message, more_info)
 
-def showMessage(window, type, message, moreInfo):
-    showDialog = {
-          'error': showErrorDialog
-        , 'notice': showNoticeDialog
+def show_message(window, type, message, more_info):
+    show_dialog = {
+          'error': show_error_dialog
+        , 'notice': show_notice_dialog
     }.get(type, None)
     assert type is not None, 'There is no dialog for message type {0}'.format(type)
     
-    return showDialog(window, message, moreInfo)
+    return show_dialog(window, message, more_info)
