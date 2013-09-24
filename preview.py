@@ -3,6 +3,7 @@
 
 from __future__ import division, print_function, unicode_literals
 
+import sys
 from gi.repository import Gtk, GObject, Gdk, GLib
 from gtk_extended import ActionGroup
 import cairo
@@ -497,7 +498,22 @@ class PreviewWindow(Gtk.Window):
         Gtk.Window.__init__(self)
         inksModel.add(self) #subscribe
         self._previewWorker = previewWorker
-        self.connect('destroy', previewWorker.removeClient, self.id)
+        
+        def destroy(self):
+            # remove the PreviewWindow from previewWorker
+            previewWorker.remove_client(self, self.id)
+            
+            # This fixes a bug where references to the PreviewWindow still
+            # existed in the signal handler functions of the actions.
+            # (like self.actionRotateLeftHandler) GTK did not remove these
+            # handlers and thus the PreviewWindow was not garbage collected.
+            # So the weakref was never released from the model emitter.
+            actions = self._globalActions.list_actions() + self._documentActions.list_actions()
+            for action in actions:
+                GObject.signal_handlers_destroy(action)
+            self.disconnect(destroy_handler_id)
+            return True
+        destroy_handler_id = self.connect('destroy', destroy)
         
         self.inksModel = weakref(inksModel)
         self.imageName = imageName
@@ -674,7 +690,7 @@ class PreviewWindow(Gtk.Window):
         self._waiting = True
         
         callback = (self._workerAnswerHandler, self.imageName)
-        self._previewWorker.addJob(self.id, callback, self.imageName, *inksModel.visibleCurves)
+        self._previewWorker.add_job(self.id, callback, self.imageName, *inksModel.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
