@@ -8,7 +8,8 @@ import numpy as np
 from scipy import interpolate 
 
 __all__ = ['InterpolationStrategy', 'InterpolatedSpline', 'InterpolatedMonotoneCubic'
-           'InterpolatedLinear', 'interpolationStrategies', 'interpolationStrategiesDict']
+           'InterpolatedLinear', 'interpolation_strategies',
+           'interpolation_strategies_dict']
 
 # just a preparation for i18n
 def _(string):
@@ -27,9 +28,9 @@ class InterpolationStrategy(object):
         raise NotImplementedError('_function must be defined by subclass')
     
     def __init__(self, points):
-        self.setPoints(points)
+        self.set_points(points)
     
-    def setPoints(self, points):
+    def set_points(self, points):
         if len(points) < 2:
             raise CurveException('Need at least two points');
         pts = list(zip(*points))
@@ -52,8 +53,8 @@ class InterpolatedSpline(InterpolationStrategy):
     """
     name = _('Spline')
     description = _('Very smooth but very self-willed, too.')
-    def setPoints(self, points):
-        super(InterpolatedSpline, self).setPoints(points)
+    def set_points(self, points):
+        super(InterpolatedSpline, self).set_points(points)
         # The number of data points must be larger than the spline degree k
         k = 5#3
         M = len(self._x)
@@ -68,8 +69,8 @@ class InterpolatedMonotoneCubic(InterpolationStrategy):
     """
     name = _('Monotone Cubic')
     description = _('Smooth and does what you say. Not as smooth as Spline.')
-    def setPoints(self, points):
-        super(InterpolatedMonotoneCubic, self).setPoints(points)
+    def set_points(self, points):
+        super(InterpolatedMonotoneCubic, self).set_points(points)
         self._function = interpolate.pchip(self._x, self._y)
 
 class InterpolatedLinear(InterpolationStrategy):
@@ -82,10 +83,10 @@ class InterpolatedLinear(InterpolationStrategy):
         return np.interp(xs, self._x, self._y)
 
 # this is to keep the list ordered
-interpolationStrategies = (
+interpolation_strategies = (
     ('monotoneCubic', InterpolatedMonotoneCubic),
     ('spline'       , InterpolatedSpline),
     ('linear'       , InterpolatedLinear)
 )
 # this is for faster lookup
-interpolationStrategiesDict = dict(interpolationStrategies)
+interpolation_strategies_dict = dict(interpolation_strategies)

@@ -9,7 +9,7 @@ from math import pi
 from gi.repository import Gtk, Gdk
 import cairo
 import numpy as np
-from interpolation import interpolationStrategies, interpolationStrategiesDict
+from interpolation import interpolation_strategies, interpolation_strategies_dict
 from emitter import Emitter
 from model import ModelCurves
 
@@ -161,8 +161,8 @@ class Curve(Emitter):
                 ys = curve.getYs(xs)
         """
         if self._interpolationStrategy is None:
-            I = interpolationStrategiesDict[self.model.interpolation]
-            self._interpolationStrategy = I(self.model.pointsValue)
+            IS = interpolation_strategies_dict[self.model.interpolation]
+            self._interpolationStrategy = IS(self.model.pointsValue)
         return self._interpolationStrategy
     
     def getCurvePoints(self):
@@ -538,7 +538,7 @@ if __name__ == '__main__':
     
     m = ModelCurves()
     points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
-    for interpolation, _ in interpolationStrategies:
+    for interpolation, _ in interpolation_strategies:
         m.appendCurve({'points':points, 'interpolation': interpolation})
     
     a = CurveEditor.new(m)

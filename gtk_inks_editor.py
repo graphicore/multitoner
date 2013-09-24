@@ -10,7 +10,7 @@ import cairo
 from weakref import ref as Weakref
 
 from gtk_curve_editor import CurveEditor
-from interpolation import interpolationStrategies, interpolationStrategiesDict
+from interpolation import interpolation_strategies, interpolation_strategies_dict
 from emitter import Emitter
 from model import ModelCurves, ModelInk
 from ghostscript_workers import GradientWorker, PreviewWorker
@@ -453,7 +453,7 @@ class InkController(Emitter):
             self._updateRow(curveModel, curveEvent, args[2:])
     
     def _updateRow(self, curveModel, curveEvent, *args):
-        interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
+        interpolationName = interpolation_strategies_dict[curveModel.interpolation].name
         row = self._getRowByModel(curveModel)
         row[1] = curveModel.name
         row[2] = interpolationName
@@ -478,7 +478,7 @@ class InkController(Emitter):
     
     def _insertIntoList(self, curveModel, position):
         modelId = curveModel.id
-        interpolationName = interpolationStrategiesDict[curveModel.interpolation].name
+        interpolationName = interpolation_strategies_dict[curveModel.interpolation].name
         #id, name, interpolation Name (for display), locked, visible
         row = [modelId, curveModel.name, interpolationName, curveModel.locked, curveModel.visible]
         # when position is -1 this appends
@@ -792,7 +792,7 @@ class InkSetup(object):
         # right, so when it breaks some day, look here
         self.gtk.add_events (0 | Gdk.EventMask.FOCUS_CHANGE_MASK)
         self._interpolations = Gtk.ListStore(str, str)
-        for key, item in interpolationStrategies:
+        for key, item in interpolation_strategies:
             self._interpolations.append([item.name, key])
         
         self._currentInkId = None

@@ -5,7 +5,7 @@ from __future__ import unicode_literals, print_function
 
 from string import Template
 import binascii
-from interpolation import interpolationStrategiesDict
+from interpolation import interpolation_strategies_dict
 import numpy as np
 from datetime import datetime
 
@@ -251,7 +251,7 @@ def get_device_n_lut(*inks):
     table = []
     xs = np.linspace(1.0, 0.0, 256)
     for ink in inks:
-        ip = interpolationStrategiesDict[ink.interpolation](ink.pointsValue)
+        ip = interpolation_strategies_dict[ink.interpolation](ink.pointsValue)
         vals = ip(xs)
         vals = np.nan_to_num(vals)
         # no pos will be smaller than 0 or bigger than 1
