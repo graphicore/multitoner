@@ -17,6 +17,9 @@ from ghostscript_workers import GradientWorker, PreviewWorker
 from preview import PreviewWindow
 from history import History
 from compatibility import repair_gsignals, encode, decode, range
+
+__all__ = ['InksEditor']
+
 # just a preparation for i18n
 def _(string):
     return string
