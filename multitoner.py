@@ -10,7 +10,7 @@ from gi.repository import Gtk, Gdk, GObject
 from gtkinktool import InksEditor, ModelCurves, ModelInk, History, GradientWorker
 from gtk_extended import ActionGroup
 from ghostscript_workers import factory as gs_workers_factory
-from PreviewWindow import PreviewWindow
+from preview import PreviewWindow
 from emitter import Emitter
 from compatibility import repair_gsignals
 from dialogs import showOpenImageDialog, showMessage, showSaveAsDialog, showSaveAsEPSDialog

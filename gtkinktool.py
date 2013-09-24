@@ -14,7 +14,7 @@ from interpolation import interpolationStrategies, interpolationStrategiesDict
 from emitter import Emitter
 from model import ModelCurves, ModelInk
 from ghostscript_workers import GradientWorker, PreviewWorker
-from PreviewWindow import PreviewWindow
+from preview import PreviewWindow
 from history import History
 from compatibility import repair_gsignals, encode, decode, range
 # just a preparation for i18n
