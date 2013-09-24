@@ -7,12 +7,14 @@ import numpy as np
 # http://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
 from scipy import interpolate 
 
+__all__ = ['InterpolationStrategy', 'InterpolatedSpline', 'InterpolatedMonotoneCubic'
+           'InterpolatedLinear', 'interpolationStrategies', 'interpolationStrategiesDict']
+
 # just a preparation for i18n
 def _(string):
     return string
 
 class InterpolationStrategy(object):
-    
     @property
     def name(self):
         raise NotImplementedError('Name must be defined by subclass')

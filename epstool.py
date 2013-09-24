@@ -9,6 +9,8 @@ from interpolation import interpolationStrategiesDict
 import numpy as np
 from datetime import datetime
 
+__all__ = ['EPSTool']
+
 # might be used one day
 initColors = Template("""gsave % clipping path gsave
 %note: 4.2 More Free Advice

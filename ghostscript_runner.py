@@ -11,6 +11,8 @@ try:
 except ImportError:
     from io import BytesIO as StringIO
 
+__all__ = ['GhostscriptError', 'GhostScriptRunner']
+
 GhostscriptError = gs.GhostscriptError
 
 class GhostScriptRunner(object):

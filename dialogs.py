@@ -6,6 +6,9 @@ from __future__ import division, print_function, unicode_literals
 import os
 from gi.repository import Gtk, GObject, Gdk
 
+__all__ = ['showOpenImageDialog', 'showSaveAsDialog', 'showSaveAsEPSDialog',
+           'showErrorDialog', 'showNoticeDialog', 'showMessage']
+
 # just a preparation for i18n
 def _(string):
     return string

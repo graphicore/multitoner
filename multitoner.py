@@ -19,6 +19,8 @@ from compatibility import repair_gsignals
 from dialogs import showOpenImageDialog, showMessage, showSaveAsDialog, showSaveAsEPSDialog
 from mtt2eps import model2eps
 
+__all__ = ['Multitoner']
+
 # just a preparation for i18n
 def _(string):
     return string

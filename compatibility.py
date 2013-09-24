@@ -4,6 +4,8 @@
 from __future__ import division, print_function, unicode_literals
 import sys
 
+__all__ = ['repair_gsignals', 'range', 'encode', 'decode']
+
 if sys.version_info < (3,0):
     # Had following error with Python 2.7.4 and GTK 3.6.4 when using
     # from __future__ import unicode_literals

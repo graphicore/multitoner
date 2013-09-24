@@ -4,6 +4,8 @@
 from __future__ import division
 from weakref import WeakSet
 
+__all__ = ['Emitter']
+
 class Emitter(object):
     """
         simple event subscription

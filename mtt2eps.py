@@ -10,6 +10,8 @@ import json
 from epstool import EPSTool
 from model import ModelCurves, ModelInk
 
+__all__ = ['open_image', 'model2eps', 'mtt2eps']
+
 # just a preparation for i18n
 def _(string):
     return string

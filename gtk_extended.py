@@ -5,6 +5,8 @@ from __future__ import division, print_function, unicode_literals
 
 from gi.repository import Gtk
 
+__all__ = ['ActionGroup']
+
 class ActionGroup(Gtk.ActionGroup):
     def __init__(*args):
         Gtk.ActionGroup.__init__(*args)

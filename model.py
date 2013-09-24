@@ -6,6 +6,8 @@ from __future__ import division, print_function, unicode_literals
 from emitter import Emitter
 from history import getSetterCommand, getCallingCommand, historize, ModelHistoryApi
 
+__all__ = ['ModelException', 'Model', 'ModelControlPoint', 'ModelCurve'
+           'ModelCurves', 'ModelInk']
 
 # just a preparation for i18n
 def _(string):

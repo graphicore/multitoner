@@ -9,7 +9,7 @@ from math import pi
 from gi.repository import Gtk, Gdk
 import cairo
 import numpy as np
-from interpolation import *
+from interpolation import interpolationStrategies, interpolationStrategiesDict
 from emitter import Emitter
 from model import ModelCurves
 

@@ -7,11 +7,13 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
-from weakref import ref as Weakref
+from weakref import ref as weakref
 from functools import wraps
 from warnings import warn
-from model import *
 from compatibility import encode
+
+__all__ = ['History', 'getSetterCommand', 'getCallingCommand', 'historize',
+           'ModelHistoryApi']
 
 def getSetterCommand(name, value):
     pickledValue = pickle.dumps(value, -1)
@@ -76,7 +78,7 @@ class ModelHistoryApi(object):
     
     @historyAPI.setter
     def historyAPI(self, api):
-        self._historyAPI = Weakref(api)
+        self._historyAPI = weakref(api)
     
     def addHistory(self, command, path=None):
         if path is None:

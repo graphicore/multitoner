@@ -16,6 +16,8 @@ from model import ModelInk
 from ghostscript_runner import GhostScriptRunner, GhostscriptError
 from compatibility import range, encode
 
+__all__ = ['PreviewWorker', 'GradientWorker', 'factory']
+
 # just a preparation for i18n
 def _(string):
     return string
