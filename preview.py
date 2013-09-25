@@ -640,7 +640,7 @@ class PreviewWindow(Gtk.Window):
         show_message(window, *message)
     
     def on_model_updated(self, inks_model, event, *args):
-        if len(inks_model.visible_curves) == 0:
+        if not inks_model.visible_curves:
             self.canvas.receive_surface(None)
             self._no_inks = True
             return
@@ -671,7 +671,7 @@ class PreviewWindow(Gtk.Window):
     def _update_surface(self):
         inks_model = self.inks_model()
         # see if the model still exists
-        if inks_model is None or len(inks_model.visible_curves) == 0 or self.image_name is None:
+        if inks_model is None or not inks_model.visible_curves or self.image_name is None:
             # need to return False, to cancel the timeout
             return False
         

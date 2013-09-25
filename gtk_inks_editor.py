@@ -198,7 +198,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         self._request_new_surface(model)
     
     def on_model_updated(self, inks_model, event, *args):
-        if len(inks_model.visible_curves) == 0:
+        if not inks_model.visible_curves:
             self._surface = None
             self.queue_draw()
             self._no_inks = True
@@ -230,7 +230,7 @@ class ColorPreviewWidget(Gtk.DrawingArea):
     def _update_surface(self, weakref_model):
         inks_model = weakref_model()
         # see if the model still exists
-        if inks_model is None or len(inks_model.visible_curves) == 0:
+        if inks_model is None or  not inks_model.visible_curves:
             # need to return False, to cancel the timeout
             return False
         
@@ -329,7 +329,7 @@ class InkController(Emitter):
     
     def changed_ink_selection_handler(self, selection):
         model, paths = selection.get_selected_rows()
-        if len(paths):
+        if paths:
             path = paths[0]
             ink_id = model[path][0]
         else:

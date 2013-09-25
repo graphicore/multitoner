@@ -172,7 +172,7 @@ class History(object):
         return True
     
     def undo(self):
-        if len(self._undo_commands) == 0:
+        if not self._undo_commands:
             return
         path, command = self._undo_commands.pop()
         model = self._resolve_path(path)
@@ -182,7 +182,7 @@ class History(object):
         self._is_undo = False
     
     def redo(self):
-        if len(self._redo_commands) == 0:
+        if not self._redo_commands:
             return
         path, command = self._redo_commands.pop()
         model = self._resolve_path(path)
