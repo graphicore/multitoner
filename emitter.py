@@ -9,7 +9,7 @@ __all__ = ['Emitter']
 
 
 class Emitter(object):
-    """simple event subscription
+    """Simple events.
     
     The subscribers are stored in a weakref.WeakSet, so:
         - Deleting all references to a subscriberend will end the subscription.
@@ -18,8 +18,8 @@ class Emitter(object):
         - There's no guaranteed order of execution. E.g. the last subscriber
           may get called first.
     
-    IMPORTANT:  the subscriber needs to implement all callbacks of the
-    concrete Emitter.
+    IMPORTANT:  The subscriber needs to implement all callbacks of the
+                concrete Emitter.
     
     to subscribe use emitterObj.add
     to unsubscribe use emitterObj.remove or emitterObj.discard or
@@ -42,13 +42,11 @@ class Emitter(object):
         self._subscriptions.add(thing)
     
     def discard(self, thing):
-        """ Remove thing from the set of subscribers if present
-        
-        """
+        """ Remove thing from the set of subscribers if present. """
         self._subscriptions.discard(thing)
     
     def remove(self, thing):
-        """ remove thing from the set of subscribers
+        """ Remove thing from the set of subscribers.
         
         raises KeyError if thing is not present
         
@@ -56,7 +54,7 @@ class Emitter(object):
         self._subscriptions.remove(thing)
     
     def _getstate(self, state):
-        """ pickle protocol: remove the weakset when pickling """
+        """ pickle protocol: Remove the weakset when pickling. """
         # this is what the __ makes with atrribute names:
         #    _{0}{1}.format(ClassName, MethodName)
         if '_Emitter__subscriptions' in state:

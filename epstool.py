@@ -394,8 +394,9 @@ class EPSTool(object):
         self._has_image = False
     
     def set_color_data(self, *curves):
-        """ use this with instances of CurvesModel to set the colors of the eps
+        """ Set the colors of the eps.
         
+        curves: instances of CurvesModel
         """
         self._has_color = True
         self._mapping['deviceNLUT'] = get_device_n_lut(*curves)
@@ -405,13 +406,12 @@ class EPSTool(object):
         self._mapping['DuotoneCMYKValues'] = get_duotone_cmyk_values(*curves)
     
     def set_image_data(self, image_bin, size):
-        """set the pixel data of the image to show in the eps document
+        """Set the pixel data of the image to show in the eps document.
         
         image_bin: str or bytes, the pixel values of a grayscale image each
-        pixel should be one byte from 0 (black) to 255 (white)
-        
+                   pixel should be one byte from 0 (black) to 255 (white)
         size: tuple of integers: (width, height)
-            width * height should be the same as len(image_bin)
+              width * height should be the same as len(image_bin)
         
         """
         self._mapping['ImageBinary'] = get_image_binary(image_bin)
@@ -419,9 +419,8 @@ class EPSTool(object):
         self._has_image = True
     
     def create(self):
-        """ returns a utf-8 encoded string/bytes with the EPS-data
-        or raises EPSToolException if data is missing
-        
+        """ Return a utf-8 encoded string/bytes with the EPS-data
+        or raise EPSToolException if data is missing.
         """
         if not self._has_color:
             raise EPSToolException('Color information is missing, use set_color_data')
