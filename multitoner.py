@@ -82,88 +82,89 @@ class Label(Gtk.Grid):
         button = Gtk.Button()
         button.set_focus_on_click(False)
         button.add(Gtk.Image.new_from_stock(Gtk.STOCK_CLOSE, Gtk.IconSize.MENU))
-        button.connect('clicked', self.clickedHandler, id)
+        button.connect('clicked', self.clicked_handler, id)
         self.attach_next_to(button, label, Gtk.PositionType.RIGHT, 1, 1)
         self.show_all()
-    def clickedHandler(self, button, id, data=None):
-        self.emit("close", id)
     
-    def setLabelText(self, text):
+    def clicked_handler(self, button, id, data=None):
+        self.emit('close', id)
+    
+    def set_label_text(self, text):
         self.label.set_text(text)
     
-    def setChangedIndicator(self, hasChanges):
+    def set_changed_indicator(self, has_changes):
         _class = 'has-changes'
-        if hasChanges:
+        if has_changes:
             self.get_style_context().add_class(_class)
         else:
             self.get_style_context().remove_class(_class)
 
 class Document(Emitter):
-    fileExtension = '.mtt' # .m(ulti)t(oner)t(ool)
-    untitledName = _('untitled')
-    def __init__(self, gradientWorker, previewWorker, filename=None, data=None):
+    file_extension = '.mtt' # .m(ulti)t(oner)t(ool)
+    untitled_name = _('untitled')
+    def __init__(self, gradient_worker, preview_worker, filename=None, data=None):
         if data is None:
             data = {}
-        self._gradientWorker = gradientWorker
-        self._previewWorker = previewWorker
+        self._gradient_worker = gradient_worker
+        self._preview_worker = preview_worker
         
         model = ModelCurves(ChildModel=ModelInk, **data)
         model.add(self)
         history = History(model)
-        inksEditor = InksEditor(model, self._gradientWorker)
-        inksEditor.connect('open-preview', self.openPreviewHandler)
+        inks_editor = InksEditor(model, self._gradient_worker)
+        inks_editor.connect('open-preview', self.open_preview_handler)
         
         self.id = id(self)
-        label = Label(self.id, self.untitledName)
+        label = Label(self.id, self.untitled_name)
         
         self.history = history
         self.model = model
-        self.widget = inksEditor
+        self.widget = inks_editor
         self.label = label
         self.filename = filename
         
-        self._previewWindows = []
+        self._preview_windows = []
     
     @classmethod
-    def newFromFile(Cls, gradientWorker, previewWorker, filename):
+    def new_from_file(Cls, gradient_worker, preview_worker, filename):
         with open(filename, 'r') as f:
             data = json.load(f)
-        return Cls(gradientWorker, previewWorker, filename, data)
+        return Cls(gradient_worker, preview_worker, filename, data)
     
-    @property
-    def filename(self):
-        return getattr(self, '_filename', None)
-    
-    def triggerOnDocumentStateUpdate(self, *args):
+    def trigger_on_document_state_update(self, *args):
         for item in self._subscriptions:
-            item.onDocumentStateUpdate(self, *args)
+            item.on_document_state_update(self, *args)
     
     @property
-    def hasChanges(self):
-        return getattr(self, '_hasChanges', False)
+    def has_changes(self):
+        return getattr(self, '_has_changes', False)
     
-    @hasChanges.setter
-    def hasChanges(self, value):
-        old = self.hasChanges
-        self._hasChanges = not not value
-        if old != self._hasChanges:
-            self.label.setChangedIndicator(self._hasChanges)
-        self.triggerOnDocumentStateUpdate() 
+    @has_changes.setter
+    def has_changes(self, value):
+        old = self.has_changes
+        self._has_changes = not not value
+        if old != self._has_changes:
+            self.label.set_changed_indicator(self._has_changes)
+        self.trigger_on_document_state_update() 
     
     def onModelUpdated(self, model, event, *args):
         """ 
         model updates are used as indicator that the history changed as well
         """
-        self.hasChanges = True
+        self.has_changes = True
+    
+    @property
+    def filename(self):
+        return getattr(self, '_filename', None)
     
     @filename.setter
     def filename(self, value):
         self._filename = value
         if self._filename is None:
-            label = self.untitledName
+            label = self.untitled_name
         else:
             label = os.path.basename(self._filename)
-        self.label.setLabelText(label)
+        self.label.set_label_text(label)
         self.label.set_tooltip_text(self._filename or '')
     
     def _save(self, filename):
@@ -171,142 +172,143 @@ class Document(Emitter):
         data = json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
         with open(filename, 'w') as f:
             f.write(data)
-        self.hasChanges = False
+        self.has_changes = False
     
     def save(self):
         self._save(self.filename)
     
-    def saveAs(self, filename):
+    def save_as(self, filename):
         self._save(filename)
         self.filename = filename
     
     def destroy(self):
         """ Closes Resources. Only Preview Windows right now. """
-        previews = tuple(self._previewWindows)
+        previews = tuple(self._preview_windows)
         for preview in previews:
             preview.destroy()
     
-    def destroyPreviewHandler(self, widget):
+    def destroy_preview_handler(self, widget):
         try:
-            self._previewWindows.remove(widget)
+            self._preview_windows.remove(widget)
         except ValueError: # not in list
             pass
         return True
     
-    def openPreview(self):
-        preview = PreviewWindow(self._previewWorker, self.model)
+    def open_preview(self):
+        preview = PreviewWindow(self._preview_worker, self.model)
         preview.show_all()
         preview.askForImage()
-        preview.connect('destroy', self.destroyPreviewHandler)
-        self._previewWindows.append(preview)
+        preview.connect('destroy', self.destroy_preview_handler)
+        self._preview_windows.append(preview)
     
-    def openPreviewHandler(self, *args):
-        self.openPreview()
+    def open_preview_handler(self, *args):
+        self.open_preview()
 
 class Multitoner(Gtk.Grid):
     def __init__(self):
         Gtk.Grid.__init__(self)
-        self._gradientWorker, self._previewWorker = gs_workers_factory()
+        self._gradient_worker, self._preview_worker = gs_workers_factory()
         
         self._documents = {}
-        self.activeDocument = None
+        self._active_document = None
         
-        self._documentActions = self._makeDocumentActions()
-        self._globalActions = self._makeGlobalActions()
-        self.menubar = menubar = self._initMenu()
+        self._document_actions = self._make_document_actions()
+        self._global_actions = self._make_global_actions()
+        self.menubar = menubar = self._init_menu()
         self.attach(menubar, 0, 0, 1, 1)
         self._notebook = Gtk.Notebook()
         self._notebook.set_scrollable(True)
         
-        self._notebook.connect('switch-page', self.switchPageHandler)
-        self._notebook.connect('page-removed' , self.pageAddRemoveHandler)
-        self._notebook.connect('page-added'   , self.pageAddRemoveHandler)
+        self._notebook.connect('switch-page', self.switch_page_handler)
+        self._notebook.connect('page-removed' , self.page_add_remove_handler)
+        self._notebook.connect('page-added'   , self.page_add_remove_handler)
         
         self.attach(self._notebook, 0, 1, 1, 1)
-        self._setActiveDocumentState()
-        self._setGlobalState()
+        self._set_active_document_state()
+        self._set_global_state()
     
-    def switchPageHandler(self, widget, page, page_num):
-        self.setCurrentPage(page_num)
+    @staticmethod
+    def _actions_set_sensitive(action_group, *action_tuples):
+        for action_name, sensitive in action_tuples:
+            action = action_group.get_action(action_name)
+            action.set_sensitive(sensitive)
     
-    def pageAddRemoveHandler(self, *data):
-        self.setCurrentPage()
+    def _set_active_document_state(self):
+        if self._active_document is None:
+            # there is no current page
+            self._document_actions.set_sensitive(False)
+            return
+        else:
+            self._document_actions.set_sensitive(True)
+        
+        undos, redos = self._active_document.history.get_counts()
+        actions = (
+              ('FileSaveDocument', self._active_document.has_changes)
+            , ('EditUndo', undos > 0)
+            , ('EditRedo', redos > 0)
+            , ('FileCloseOther', len(self._documents) > 1)
+            
+        )
+        self._actions_set_sensitive(self._document_actions, *actions)
     
-    def getDocumentByPage(self, page):
-        widget = self._notebook.get_nth_page(page)
-        return self.getDocumentByWidget(widget)
-    
-    def getDocumentByWidget(self, widget):
+    def _get_document_by_widget(self, widget):
         for doc in self._documents.values():
             if doc.widget is widget:
                 return doc
         return None
     
-    def getDocumentByFileName(self, filename):
+    def _get_document_by_page(self, page):
+        widget = self._notebook.get_nth_page(page)
+        return self._get_document_by_widget(widget)
+    
+    def _set_global_state(self):
+        actions = (
+              ('FileSaveAll', self._has_changed_documents)
+            , ('FileCloseAll', len(self._documents) > 0)
+        )
+        self._actions_set_sensitive(self._global_actions, *actions)
+    
+    def _set_current_page(self, page=None):
+        if page is None:
+            page = self._notebook.get_current_page()
+        # _active_document is either a Document or None
+        self._active_document = self._get_document_by_page(page)
+        self._set_active_document_state()
+        self._set_global_state()
+    
+    def switch_page_handler(self, widget, page, page_num):
+        self._set_current_page(page_num)
+    
+    def page_add_remove_handler(self, *data):
+        self._set_current_page()
+    
+    def _get_document_by_filename(self, filename):
         for doc in self._documents.values():
             if doc.filename == filename:
                 return doc
         return None
     
     @property
-    def hasChangedDocuments(self):
+    def _has_changed_documents(self):
         for doc in self._documents.values():
-            if doc.hasChanges:
+            if doc.has_changes:
                 return True
         return False
     
-    def setActivePage(self, doc):
+    def _set_active_page(self, doc):
         page = self._notebook.page_num(doc.widget)
         self._notebook.set_current_page(page)
     
-    def onDocumentStateUpdate(self, doc, *args):
-        if doc is self.activeDocument:
-            self._setActiveDocumentState()
-        self._setGlobalState()
+    def on_document_state_update(self, doc, *args):
+        if doc is self._active_document:
+            self._set_active_document_state()
+        self._set_global_state()
     
-    def setCurrentPage(self, page=None):
-        if page is None:
-            page = self._notebook.get_current_page()
-        # activeDocument is either a Document or None
-        self.activeDocument = self.getDocumentByPage(page)
-        self._setActiveDocumentState()
-        self._setGlobalState()
-    
-    def _setGlobalState(self):
-        actions = (
-              ('FileSaveAll', self.hasChangedDocuments)
-            , ('FileCloseAll', len(self._documents) > 0)
-        )
-        self._actionsSetSensitive(self._globalActions, *actions)
-    
-    def _setActiveDocumentState(self):
-        if self.activeDocument is None:
-            # there is no current page
-            self._documentActions.set_sensitive(False)
-            return
-        else:
-            self._documentActions.set_sensitive(True)
-        
-        undos, redos = self.activeDocument.history.getCounts()
-        actions = (
-              ('FileSaveDocument', self.activeDocument.hasChanges)
-            , ('EditUndo', undos > 0)
-            , ('EditRedo', redos > 0)
-            , ('FileCloseOther', len(self._documents) > 1)
-            
-        )
-        self._actionsSetSensitive(self._documentActions, *actions)
-    
-    def _actionsSetSensitive(self, actionGroup, *actionTuples):
-        for actionName, sensitive in actionTuples:
-            action = actionGroup.get_action(actionName)
-            action.set_sensitive(sensitive)
-    
-    def _initMenu(self):
+    def _init_menu(self):
         self.UIManager = uimanager = Gtk.UIManager()
         uimanager.add_ui_from_string(UI_INFO)
-        uimanager.insert_action_group(self._globalActions)
-        uimanager.insert_action_group(self._documentActions)
+        uimanager.insert_action_group(self._global_actions)
+        uimanager.insert_action_group(self._document_actions)
         menubar = uimanager.get_widget("/MenuBar")
         
         #toolbar = uimanager.get_widget("/ToolBar")
@@ -325,72 +327,65 @@ class Multitoner(Gtk.Grid):
         realize_handler_id = self.connect('realize' , onRealize)
         return menubar
     
-    def openRecentHandler(self, widget):
-        item = widget.get_current_item()
-        uri = item.get_uri()
-        if uri.startswith('file://'):
-            filename = uri[(len('file://')):]
-            self.openDocument(filename)
-    
-    def _makeGlobalActions(self):
-        actionGroup = ActionGroup('global_actions')
-        actionGroup.add_actions([
+    def _make_global_actions(self):
+        action_group = ActionGroup('global_actions')
+        action_group.add_actions([
               ('FileMenu', None, _('File'), None,
                None, None)
             , ('EditMenu', None, _('Edit'), None,
                None, None)
             , ('FileNew', Gtk.STOCK_NEW, _('New'), '<Ctrl>n',
-               _('Start a new document.'), self.menuFileNewHandler)
+               _('Start a new document.'), self.action_file_new_handler)
             , ('FileQuit', Gtk.STOCK_QUIT, _('Quit'), '<ctrl>q',
-               None, self.menuFileQuitHandler)
+               None, self.action_file_quit_handler)
             , ('FileOpen', Gtk.STOCK_OPEN, _('Open'), '<Ctrl>o',
-               _('Open a document.'), self.menuFileOpenHandler)
+               _('Open a document.'), self.action_file_open_handler)
             , ('FileSaveAll', Gtk.STOCK_SAVE, _('Save All'), '<Ctrl><Shift>s',
-               _('Save all documents.'), self.menuFileSaveAllHandler)
+               _('Save all documents.'), self.action_file_save_all_handler)
             , ('FileCloseAll', Gtk.STOCK_CLOSE, _('Close All'), '<Ctrl><Shift>w',
-               _('Close all documents.'), self.menuFileCloseAllHandler)
+               _('Close all documents.'), self.action_file_close_all_handler)
             ])
         # recent files chooser
         # does only .mtt files
-        recentAction = Gtk.RecentAction.new_for_manager('FileOpenRecent',
+        recent_action = Gtk.RecentAction.new_for_manager('FileOpenRecent',
             _('Recent Files'), None, None, None)
-        recentFilter= Gtk.RecentFilter()
-        recentFilter.add_pattern ("*" + Document.fileExtension);
-        recentAction.add_filter(recentFilter)
-        recentAction.connect('item-activated', self.openRecentHandler)
-        actionGroup.add_action(recentAction)
-        return actionGroup
+        recent_filter= Gtk.RecentFilter()
+        recent_filter.add_pattern ("*" + Document.file_extension);
+        recent_action.add_filter(recent_filter)
+        recent_action.connect('item-activated', self.open_recent_handler)
+        action_group.add_action(recent_action)
+        return action_group
     
-    def _makeDocumentActions(self):
-        actionGroup = ActionGroup('document_actions')
-        actionGroup.add_actions([
+    def _make_document_actions(self):
+        action_group = ActionGroup('document_actions')
+        action_group.add_actions([
               ('EditUndo', Gtk.STOCK_UNDO, _('Undo'),  '<Ctrl>z',
-               None, self.menuEditUndoHandler)
+               None, self.action_edit_undo_handler)
             , ('EditRedo', Gtk.STOCK_REDO, _('Redo'), '<Ctrl>y',
-               None, self.menuEditRedoHandler)
+               None, self.action_edit_redo_handler)
             , ('FileSaveDocument', Gtk.STOCK_SAVE, _('Save'), '<ctrl>s',
-               None, self.menuFileSaveDocumentHandler)
+               None, self.action_file_save_document_handler)
             , ('FileSaveAsDocument', Gtk.STOCK_SAVE, _('Save As'), '<ctrl><alt>s',
-               None, self.menuFileSaveDocumentAsHandler)
+               None, self.action_file_save_document_as_handler)
             , ('FileClose', Gtk.STOCK_CLOSE, _('Close'), '<ctrl>w',
-               None, self.menuFileCloseHandler)
+               None, self.action_file_close_handler)
             , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close Other Documents'), '<ctrl><alt>w',
-               None, self.menuFileCloseOtherHandler)
+               None, self.action_file_close_other_handler)
             , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open a Preview Window'), None,
-               None, self.menuOpenPrevieWindowHandler)
+               None, self.action_open_preview_handler)
             ])
         
-        actionGroup.add_icon_actions([
+        action_group.add_icon_actions([
               ('FileExportImage', _('Export Image'), _('Export Image as EPS file'),
-               'document-save', self.menuFileExportImage, '<ctrl>E')
+               'document-save', self.action_file_export_image_handler, '<ctrl>E')
             # , ...
             ])
-        actionGroup.set_sensitive(False)
-        return actionGroup
+        action_group.set_sensitive(False)
+        return action_group
     
-    def _registerDocument(self, doc):
+    def _register_document(self, doc):
         self._documents[doc.id] = doc
-        doc.label.connect('close', self.closeDocumentHandler, doc.id)
+        doc.label.connect('close', self.close_document_handler, doc.id)
         doc.add(self)
         page = self._notebook.append_page(doc.widget, doc.label)
         self._notebook.set_tab_reorderable(doc.widget, True)
@@ -398,41 +393,45 @@ class Multitoner(Gtk.Grid):
         self._notebook.set_current_page(page)
         return doc.id
     
-    def _unregisterDocument(self, doc):
+    def _unregister_document(self, doc):
         doc.remove(self)
         del self._documents[doc.id]
         page = self._notebook.page_num(doc.widget)
         self._notebook.remove_page(page)
     
-    def makeNewDocument(self):
-        doc = Document(self._gradientWorker, self._previewWorker)
-        self._registerDocument(doc)
+    def _make_new_document(self):
+        doc = Document(self._gradient_worker, self._preview_worker)
+        self._register_document(doc)
+
+    def _announce_error(self, error, moreInfo=None):
+        window = self.get_toplevel()
+        show_message(window, 'error', error, moreInfo)
     
-    def _openDocument(self, filename):
+    def _open_document(self, filename):
         try:
-            doc = Document.newFromFile(self._gradientWorker, self._previewWorker, filename)
+            doc = Document.new_from_file(self._gradient_worker, self._preview_worker, filename)
         except Exception as e:
             error = _('Error opening the file "{0}"').format(filename)
             detail = _('Message: {0} {1}').format( e, type(e))
-            self._announceError(error, detail)
+            self._announce_error(error, detail)
         else:
-            self._registerDocument(doc)
+            self._register_document(doc)
     
-    def openDocument(self, filename):
-        doc = self.getDocumentByFileName(filename)
+    def open_document(self, filename):
+        doc = self._get_document_by_filename(filename)
         if doc:
             page = self._notebook.page_num(doc.widget)
             self._notebook.set_current_page(page)
             return doc.id
         else:
-            return self._openDocument(filename)
+            return self._open_document(filename)
     
-    def openFileOpenDialog(self):
+    def _show_file_open_dialog(self):
         window = self.get_toplevel()
         dialog = Gtk.FileChooserDialog(title=_('Open File')
             , parent=window
             , action=Gtk.FileChooserAction.OPEN
-            , buttons=(  Gtk.STOCK_CANCEL
+            , buttons=( Gtk.STOCK_CANCEL
                       , Gtk.ResponseType.CANCEL
                       , Gtk.STOCK_OPEN
                       , Gtk.ResponseType.ACCEPT
@@ -441,38 +440,34 @@ class Multitoner(Gtk.Grid):
         )
         if dialog.run() == Gtk.ResponseType.ACCEPT:
             filename = dialog.get_filename()
-            self.openDocument(filename)
+            self.open_document(filename)
         dialog.destroy()
     
-    def openFileSaveAsDialog(self, doc):
-        self.setActivePage(doc)
+    def _show_file_save_as_dialog(self, doc):
+        self._set_active_page(doc)
         window = self.get_toplevel()
         filename = show_save_as_dialog(window, doc.filename,
-                                       doc.untitledName + Document.fileExtension)
+                                       Document.untitled_name + Document.file_extension)
         if filename is not None:
-            doc.saveAs(filename)
+            doc.save_as(filename)
     
-    def _announceError(self, error, moreInfo=None):
-        window = self.get_toplevel()
-        show_message(window, 'error', error, moreInfo)
-    
-    def _askOkCancel(self, question, moreInfo=None):
+    def _ask_ok_cancel(self, question, more_info=None):
         window = self.get_toplevel()
         dialog = Gtk.MessageDialog(window, 0, Gtk.MessageType.QUESTION,
                                    Gtk.ButtonsType.OK_CANCEL, question)
-        if moreInfo is not None:
-            dialog.format_secondary_text(moreInfo)
+        if more_info is not None:
+            dialog.format_secondary_text(more_info)
         response = dialog.run()
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
             return True
         return False
     
-    def closeDocument(self, doc):
+    def close_document(self, doc):
         ok = True
-        if doc.hasChanges:
-            self.setActivePage(doc)
-            ok = self._askOkCancel(
+        if doc.has_changes:
+            self._set_active_page(doc)
+            ok = self._ask_ok_cancel(
                 _('Close without Saving?'),
                 _('All changes to the document will be lost.')
             )
@@ -480,32 +475,39 @@ class Multitoner(Gtk.Grid):
         if not ok:
             return
         
-        self._unregisterDocument(doc)
+        self._unregister_document(doc)
         doc.destroy()
     
-    def saveDocument(self, doc):
+    def save_document(self, doc):
         if doc.filename is None:
-            self.openFileSaveAsDialog(doc)
+            self._show_file_save_as_dialog(doc)
         else:
             doc.save()
     
+    def open_recent_handler(self, widget):
+        item = widget.get_current_item()
+        uri = item.get_uri()
+        if uri.startswith('file://'):
+            filename = uri[(len('file://')):]
+            self.open_document(filename)
+    
     # global action handlers
-    def menuFileNewHandler(self, widget):
-        self.makeNewDocument()
+    def action_file_new_handler(self, widget):
+        self._make_new_document()
     
-    def menuFileOpenHandler(self, widget):
-        self.openFileOpenDialog()
+    def action_file_open_handler(self, widget):
+        self._show_file_open_dialog()
     
-    def closeDocumentHandler(self, widget, id, *data):
+    def close_document_handler(self, widget, id, *data):
         doc = self._documents.get(id, None)
         if doc is None:
             return
-        self.closeDocument(doc)
+        self.close_document(doc)
     
     def quit(self):
         ok = True
-        if self.hasChangedDocuments:
-            ok = self._askOkCancel(
+        if self._has_changed_documents:
+            ok = self._ask_ok_cancel(
                 _('Quit without Saving?'),
                 _('There are documents with changes. All changes '
                   'will be lost.')
@@ -515,68 +517,68 @@ class Multitoner(Gtk.Grid):
             return False
         return True
     
-    def quitHandler(self, *data):
+    def quit_handler(self, *data):
         return self.quit()
     
-    menuFileQuitHandler = quitHandler
+    action_file_quit_handler = quit_handler
     
-    def menuFileCloseAllHandler(self, widget):
-        active = self.activeDocument
+    def action_file_close_all_handler(self, widget):
+        active = self._active_document
         for doc in self._documents.values():
-            self.closeDocument(doc)
+            self.close_document(doc)
         if active is not None:
-            self.setActivePage(active)
+            self._set_active_page(active)
         
-    def menuFileSaveAllHandler(self, widget):
-        active = self.activeDocument
+    def action_file_save_all_handler(self, widget):
+        active = self._active_document
         for doc in self._documents.values():
-            if doc.hasChanges:
-                self.saveDocument(doc)
+            if doc.has_changes:
+                self.save_document(doc)
         if active is not None:
-            self.setActivePage(active)
+            self._set_active_page(active)
 
     # document action handlers
-    def menuFileCloseHandler(self, widget):
-        if self.activeDocument is None:
+    def action_file_close_handler(self, widget):
+        if self._active_document is None:
             return
-        self.closeDocument(self.activeDocument)
+        self.close_document(self._active_document)
     
-    def menuFileCloseOtherHandler(self, widget):
-        if self.activeDocument is None:
+    def action_file_close_other_handler(self, widget):
+        if self._active_document is None:
             return
-        active = self.activeDocument
+        active = self._active_document
         for doc in self._documents.values():
             if doc is not active:
-                self.closeDocument(doc)
-        self.setActivePage(active)
+                self.close_document(doc)
+        self._set_active_page(active)
     
-    def menuFileSaveDocumentHandler(self, widget):
-        if self.activeDocument is None:
+    def action_file_save_document_handler(self, widget):
+        if self._active_document is None:
             return
-        self.saveDocument(self.activeDocument)
+        self.save_document(self._active_document)
     
-    def menuFileSaveDocumentAsHandler(self, widget):
-        if self.activeDocument is None:
+    def action_file_save_document_as_handler(self, widget):
+        if self._active_document is None:
             return
-        self.openFileSaveAsDialog(self.activeDocument)
+        self._show_file_save_as_dialog(self._active_document)
     
-    def menuEditUndoHandler(self, widget):
-        if self.activeDocument is None:
+    def action_edit_undo_handler(self, widget):
+        if self._active_document is None:
             return
-        self.activeDocument.history.undo()
+        self._active_document.history.undo()
     
-    def menuEditRedoHandler(self, widget):
-        if self.activeDocument is None:
+    def action_edit_redo_handler(self, widget):
+        if self._active_document is None:
             return
-        self.activeDocument.history.redo()
+        self._active_document.history.redo()
     
-    def menuOpenPrevieWindowHandler(self, widget):
-        if self.activeDocument is None:
+    def action_open_preview_handler(self, widget):
+        if self._active_document is None:
             return
-        self.activeDocument.openPreview()
+        self._active_document.open_preview()
     
-    def menuFileExportImage(self, widget):
-        if self.activeDocument is None:
+    def action_file_export_image_handler(self, widget):
+        if self._active_document is None:
             return
         window = self.get_toplevel()
         
@@ -588,7 +590,7 @@ class Multitoner(Gtk.Grid):
         if eps_filename is None:
             return
         
-        result, message = model2eps(self.activeDocument.model, image_filename, eps_filename)
+        result, message = model2eps(self._active_document.model, image_filename, eps_filename)
         if message:
             window = self.get_toplevel()
             show_message(window, *message)
@@ -603,14 +605,14 @@ if __name__ == '__main__':
     # the theme should do so
     window.set_border_width(5)
     
-    cssProvider = Gtk.CssProvider()
-    cssProvider.load_from_path('style.css')
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_path('style.css')
     screen = window.get_screen()
-    styleContext = Gtk.StyleContext()
-    styleContext.add_provider_for_screen(screen, cssProvider,
+    style_context = Gtk.StyleContext()
+    style_context.add_provider_for_screen(screen, css_provider,
         Gtk.STYLE_PROVIDER_PRIORITY_USER)
     multitoner = Multitoner()
-    window.connect('delete-event', multitoner.quitHandler)
+    window.connect('delete-event', multitoner.quit_handler)
     window.add(multitoner)
     
     window.show_all()
