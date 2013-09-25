@@ -191,5 +191,5 @@ class History(object):
         command(model)
         self._is_redo = False
     
-    def getCounts(self):
+    def get_counts(self):
         return (len(self._undo_commands), len(self._redo_commands))
