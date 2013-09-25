@@ -52,7 +52,7 @@ def make_eps(inks, image_filename):
     return eps_tool.create(), notice, error
 
 def make_eps_from_model(model, image_filename):
-    return make_eps(model.visibleCurves, image_filename)
+    return make_eps(model.visible_curves, image_filename)
     
 def open_mtt_file(mtt_filename):
     with open(mtt_filename, 'r') as f:

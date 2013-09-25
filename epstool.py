@@ -251,7 +251,7 @@ def get_device_n_lut(*inks):
     table = []
     xs = np.linspace(1.0, 0.0, 256)
     for ink in inks:
-        ip = interpolation_strategies_dict[ink.interpolation](ink.pointsValue)
+        ip = interpolation_strategies_dict[ink.interpolation](ink.points_value)
         vals = ip(xs)
         vals = np.nan_to_num(vals)
         # no pos will be smaller than 0 or bigger than 1
@@ -404,12 +404,12 @@ if __name__== '__main__':
     import PIL.Image as Image
     
     curvesModel = ModelCurves(ChildModel=ModelInk)
-    curvesModel.appendCurve({'name':'Black', 'cmyk':(0.0, 0.0, 0.0, 1)})
+    curvesModel.append_curve({'name':'Black', 'cmyk':(0.0, 0.0, 0.0, 1)})
     
-    curvesModel.appendCurve({'name':'PANTONE Greeen', 'cmyk':(0.0800, 0.0020, 0.9, 0)
+    curvesModel.append_curve({'name':'PANTONE Greeen', 'cmyk':(0.0800, 0.0020, 0.9, 0)
         ,'interpolation':'linear'})
     
-    curvesModel.appendCurve({'name':'Orange', 'cmyk':(0.0, 0.1, 0.0002, 0.0040)
+    curvesModel.append_curve({'name':'Orange', 'cmyk':(0.0, 0.1, 0.0002, 0.0040)
         ,'interpolation':'linear'})
     
     filename = sys.argv[1]

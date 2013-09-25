@@ -80,7 +80,7 @@ class ControlPoint(Emitter):
         for item in self._subscriptions:
             item.on_point_delete(self)
     
-    def onModelUpdated(self, model):
+    def on_model_updated(self, model):
         self._invalidate()
     
     def _set_coordinates(self, xy):
@@ -163,7 +163,7 @@ class Curve(Emitter):
         """
         if self._interpolation_strategy is None:
             IS = interpolation_strategies_dict[self.model.interpolation]
-            self._interpolation_strategy = IS(self.model.pointsValue)
+            self._interpolation_strategy = IS(self.model.points_value)
         return self._interpolation_strategy
     
     def _get_curve_points(self):
@@ -199,7 +199,7 @@ class Curve(Emitter):
             if ctrl.model is cp_model:
                 self._controls.remove(ctrl)
     
-    def onModelUpdated(self, model, event=None, *args):
+    def on_model_updated(self, model, event=None, *args):
         """
         there are several occasions for a model update:
             addPoint
@@ -228,7 +228,7 @@ class Curve(Emitter):
             self._set_points()
     
     def on_point_delete(self, ctrl):
-        self.model.removePoint(ctrl.model)
+        self.model.remove_point(ctrl.model)
     
     def _get_intersection(self, x_in):
         """ intersection y of x """
@@ -242,7 +242,7 @@ class Curve(Emitter):
             intersection = self._get_intersection(x_in)
             x, y = self.scale.to_screen(intersection)
             if in_circle(x, y, self.control_radius, x_in, y_in):
-                self.model.addPoint(intersection)
+                self.model.add_point(intersection)
     
     def on_button_release(self, button, x_in, y_in, alternate=False):
         pass
@@ -253,7 +253,7 @@ class Curve(Emitter):
         
         ctm = cr.get_matrix()
         self.scale.transform_cairo(cr)
-        cr.set_source_rgb(*self.model.displayColor)
+        cr.set_source_rgb(*self.model.display_color)
         
         # draw interpolated curve
         points = self._get_curve_points()
@@ -422,7 +422,7 @@ class CurveEditor(Gtk.DrawingArea):
         #the event needs a transformation
         return self.scale.transform_event((x - allocation.x, y - allocation.y)), alternate
     
-    def onModelUpdated(self, model, event=None, *args):
+    def on_model_updated(self, model, event=None, *args):
         # especially cmykChanged can happen very often and needs no
         # draw of this widget
         if event == 'curveUpdate' and (args[1] == 'cmykChanged' \
@@ -532,7 +532,7 @@ if __name__ == '__main__':
     m = ModelCurves()
     points = [(0.0,0.0), (0.1, 0.4), (0.2, 0.6), (0.5, 0.2), (0.4, 0.3), (1.0,1.0)]
     for interpolation, _ in interpolation_strategies:
-        m.appendCurve({'points':points, 'interpolation': interpolation})
+        m.append_curve({'points':points, 'interpolation': interpolation})
     
     a = CurveEditor.new(m)
     w.add(a)

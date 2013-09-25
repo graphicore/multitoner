@@ -147,7 +147,7 @@ class Document(Emitter):
             self.label.set_changed_indicator(self._has_changes)
         self.trigger_on_document_state_update() 
     
-    def onModelUpdated(self, model, event, *args):
+    def on_model_updated(self, model, event, *args):
         """ 
         model updates are used as indicator that the history changed as well
         """
@@ -168,7 +168,7 @@ class Document(Emitter):
         self.label.set_tooltip_text(self._filename or '')
     
     def _save(self, filename):
-        data = self.model.getArgs()
+        data = self.model.get_args()
         data = json.dumps(data, sort_keys=True, indent=2, separators=(',', ': '))
         with open(filename, 'w') as f:
             f.write(data)

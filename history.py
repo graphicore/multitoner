@@ -125,7 +125,7 @@ class History(object):
         path = path[:-1] # we don't need the root_model id
         model = self._root_model
         for mid in reversed(path):
-            model = model.getById(mid)
+            model = model.get_by_id(mid)
         return model
     
     def add_history(self, command, path):

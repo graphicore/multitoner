@@ -13,11 +13,11 @@ __all__ = ['ModelException', 'Model', 'ModelControlPoint', 'ModelCurve'
 def _(string):
     return string
 
-_uniqueIdCounter = 0
-def getUniqueId():
-    global _uniqueIdCounter
-    result = _uniqueIdCounter
-    _uniqueIdCounter += 1
+_unique_id_counter = 0
+def get_unique_id():
+    global _unique_id_counter
+    result = _unique_id_counter
+    _unique_id_counter += 1
     return result
 
 class ModelException(Exception):
@@ -26,7 +26,7 @@ class ModelException(Exception):
 class Model(ModelHistoryApi, Emitter):
     def __init__(self):
         super(Model, self).__init__()
-        _id = getUniqueId()
+        _id = get_unique_id()
         self._id = _id
     
     def __getstate__(self):
@@ -44,9 +44,9 @@ class Model(ModelHistoryApi, Emitter):
             child.add(self) # subscribe
             child.history_api = self # for undo/redo
     
-    def triggerOnModelUpdated(self, *args):
+    def trigger_on_model_updated(self, *args):
         for item in self._subscriptions:
-            item.onModelUpdated(self, *args)
+            item.on_model_updated(self, *args)
 
 class ModelControlPoint(Model):
     def __init__(self, xy):
@@ -66,14 +66,14 @@ class ModelControlPoint(Model):
         )
         if not hasattr(self, '_xy') or xy != self._xy:
             self._xy = xy
-            self.triggerOnModelUpdated()
+            self.trigger_on_model_updated()
 
 class ModelCurve(Model):
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', displayColor=(0,0,0), locked=False, visible=True):
+    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', display_color=(0,0,0), locked=False, visible=True):
         super(ModelCurve, self).__init__()
         self.interpolation = interpolation
         self.points = points
-        self.displayColor = displayColor
+        self.display_color = display_color
         self.locked = locked
         self.visible = visible
     
@@ -82,25 +82,25 @@ class ModelCurve(Model):
         self.__dict__.update(state)
         self._connect(*self._points)
     
-    def getArgs(self):
+    def get_args(self):
         return {
             'points': [p.xy for p in self.points],
             'interpolation': self.interpolation,
-            'displayColor': self.displayColor,
+            'display_color': self.display_color,
             'locked': self.locked,
             'visible': self.visible,
         }
     
-    def getById(self, mid):
+    def get_by_id(self, model_id):
         for model in self._points:
-            if model.id == mid:
+            if model.id == model_id:
                 return model
-        raise ModelException('Model not found by id {0}'.format(mid))
+        raise ModelException('Model not found by id {0}'.format(model_id))
     
-    def onModelUpdated(self, cp_model, *args):
-        self.triggerOnModelUpdated('pointUpdate', cp_model, *args)
+    def on_model_updated(self, cp_model, *args):
+        self.trigger_on_model_updated('pointUpdate', cp_model, *args)
     
-    def _addPoint(self, point):
+    def _add_point(self, point):
         if not isinstance(point, ModelControlPoint):
             model = ModelControlPoint(point)
         else:
@@ -109,32 +109,32 @@ class ModelCurve(Model):
         self._points.append(model)
         return model
     
-    def addPoint(self, point):
-        model = self._addPoint(point)
+    def add_point(self, point):
+        model = self._add_point(point)
         
-        undo = get_calling_command('removePointById', model.id)
+        undo = get_calling_command('remove_point_by_id', model.id)
         self.add_history(undo)
         
-        self.triggerOnModelUpdated('addPoint', model)
+        self.trigger_on_model_updated('addPoint', model)
     
-    def removePoint(self, model):
+    def remove_point(self, model):
         """
             removes the point with model id
-            the invert of this is addPoint
+            the invert of this is add_point
         """
         if len(self._points) == 2:
             return
         position = self._points.index(model)
         
-        undo = get_calling_command('addPoint', model)
+        undo = get_calling_command('add_point', model)
         self.add_history(undo)
         
         self._points.pop(position)
-        self.triggerOnModelUpdated('removePoint', model)
+        self.trigger_on_model_updated('removePoint', model)
     
-    def removePointById(self, modelId):
-        model = self.getById(modelId)
-        self.removePoint(model)
+    def remove_point_by_id(self, modelId):
+        model = self.get_by_id(modelId)
+        self.remove_point(model)
     
     @property
     def points(self):
@@ -149,8 +149,8 @@ class ModelCurve(Model):
     def points(self, points):
         self._points = []
         for point in points:
-            self._addPoint(point)
-        self.triggerOnModelUpdated('setPoints')
+            self._add_point(point)
+        self.trigger_on_model_updated('setPoints')
     
     @property
     def interpolation(self):
@@ -160,21 +160,21 @@ class ModelCurve(Model):
     @historize
     def interpolation(self, interpolation):
         self._interpolation = interpolation
-        self.triggerOnModelUpdated('interpolationChanged')
+        self.trigger_on_model_updated('interpolationChanged')
     
     @property
-    def pointsValue(self):
+    def points_value(self):
         return sorted(point.xy for point in self._points)
     
     @property
-    def displayColor(self):
-        return self._displayColor
+    def display_color(self):
+        return self._display_color
     
-    @displayColor.setter
+    @display_color.setter
     @historize
-    def displayColor(self, value):
-        self._displayColor = value
-        self.triggerOnModelUpdated('displayColorChanged')
+    def display_color(self, value):
+        self._display_color = value
+        self.trigger_on_model_updated('displayColorChanged')
     
     @property
     def locked(self):
@@ -184,7 +184,7 @@ class ModelCurve(Model):
     @historize
     def locked(self, value):
         self._locked = bool(value)
-        self.triggerOnModelUpdated('lockedChanged')
+        self.trigger_on_model_updated('lockedChanged')
     
     @property
     def visible(self):
@@ -194,10 +194,10 @@ class ModelCurve(Model):
     @historize
     def visible(self, value):
         self._visible = bool(value)
-        self.triggerOnModelUpdated('visibleChanged')
+        self.trigger_on_model_updated('visibleChanged')
     
 class ModelCurves(Model):
-    def __init__(self, curves=[], ChildModel = ModelCurve):
+    def __init__(self, curves=[], ChildModel=ModelCurve):
         super(ModelCurves, self).__init__()
         self.ChildModel = ChildModel
         self.curves = curves
@@ -207,8 +207,8 @@ class ModelCurves(Model):
         self.__dict__.update(state)
         self._connect(*self._curves)
     
-    def getArgs(self):
-        return {'curves': [curve.getArgs() for curve in self._curves]}
+    def get_args(self):
+        return {'curves': [curve.get_args() for curve in self._curves]}
     
     @property
     def curves(self):
@@ -220,11 +220,11 @@ class ModelCurves(Model):
         self._curves = []
         for curve in curves:
             # -1 appends
-            self._insertCurve(-1, curve)
-        self.triggerOnModelUpdated('setCurves')
+            self._insert_curve(-1, curve)
+        self.trigger_on_model_updated('setCurves')
     
     @property
-    def visibleCurves(self):
+    def visible_curves(self):
         return tuple(filter(lambda x: x.visible, self._curves))
     
     def __len__(self):
@@ -234,46 +234,46 @@ class ModelCurves(Model):
     def ids(self):
         return tuple(map(lambda c: c.id, self._curves))
         
-    def reorderByIdList(self, ids):
-        currentOrder = self.ids
+    def reorder_by_id_list(self, ids):
+        current_order = self.ids
         ids = tuple(ids)
-        if ids == currentOrder:
+        if ids == current_order:
             # the same order was supplied
             return;
         
-        undo = get_calling_command('reorderByIdList', currentOrder)
+        undo = get_calling_command('reorder_by_id_list', current_order)
         self.add_history(undo)
         
-        idSet = set(ids)
-        if len(idSet) != len(self._curves):
+        id_set = set(ids)
+        if len(id_set) != len(self._curves):
             raise ModelException(
                 'Reorder: list of ids is not long enough. Len is {0} but should be {1}'
                 .format(len(ids), len(self._curves))
             )
         seen = set()
-        newOrder = []
+        new_order = []
         for mid in ids:
             if mid in seen:
                 raise ModelException('Having a duplicate id in ordering {0}'.format(mid))
             seen.add(mid)
             try:
-                currentPos = currentOrder.index(mid)
+                current_pos = current_order.index(mid)
             except ValueError as e:
                 raise ModelException('Model not found by id {0}'.format(mid))
-            newOrder.append(self._curves[currentPos])
-        self._curves = newOrder
-        self.triggerOnModelUpdated('reorderedCurves', ids)
+            new_order.append(self._curves[current_pos])
+        self._curves = new_order
+        self.trigger_on_model_updated('reorderedCurves', ids)
     
-    def getById(self, mid):
+    def get_by_id(self, mid):
         for model in self._curves:
             if model.id == mid:
                 return model
         raise ModelException('Model not found by id {0}'.format(mid))
     
-    def onModelUpdated(self, curveModel, *args):
-        self.triggerOnModelUpdated('curveUpdate', curveModel, *args)
+    def on_model_updated(self, curve_model, *args):
+        self.trigger_on_model_updated('curveUpdate', curve_model, *args)
     
-    def _insertCurve(self, position, curve):
+    def _insert_curve(self, position, curve):
         if not isinstance(curve, self.ChildModel):
             model = self.ChildModel(**curve)
         else:
@@ -285,34 +285,34 @@ class ModelCurves(Model):
         self._curves.insert(position, model)
         return model
     
-    def insertCurve(self, position, curve=None):
+    def insert_curve(self, position, curve=None):
         if curve is None:
             curve = {}
-        model = self._insertCurve(position, curve)
+        model = self._insert_curve(position, curve)
         
-        undo = get_calling_command('removeCurveById', model.id)
+        undo = get_calling_command('remove_curve_by_id', model.id)
         self.add_history(undo)
         
         # get the actual position the model has now
         position = self._curves.index(model)
-        self.triggerOnModelUpdated('insertCurve', model, position)
+        self.trigger_on_model_updated('insertCurve', model, position)
     
-    def appendCurve(self, curve=None):
-        """ this is a shortcut for self.insertCurve(-1, curve) """
-        self.insertCurve(-1, curve)
+    def append_curve(self, curve=None):
+        """ this is a shortcut for self.insert_curve(-1, curve) """
+        self.insert_curve(-1, curve)
     
-    def removeCurve(self, model):
+    def remove_curve(self, model):
         position = self._curves.index(model)
         
-        undo = get_calling_command('insertCurve', position, model)
+        undo = get_calling_command('insert_curve', position, model)
         self.add_history(undo)
         
         self._curves.pop(position)
-        self.triggerOnModelUpdated('removeCurve', model)
+        self.trigger_on_model_updated('removeCurve', model)
     
-    def removeCurveById(self, modelId):
-        model = self.getById(modelId)
-        self.removeCurve(model)
+    def remove_curve_by_id(self, modelId):
+        model = self.get_by_id(modelId)
+        self.remove_curve(model)
 
 class ModelInk(ModelCurve):
     def __init__(self, name=_('(unnamed)'), cmyk=(0.0, 0.0, 0.0, 0.0), **args):
@@ -320,8 +320,8 @@ class ModelInk(ModelCurve):
         self.name = name
         self.cmyk = cmyk
     
-    def getArgs(self):
-        args = super(ModelInk, self).getArgs()
+    def get_args(self):
+        args = super(ModelInk, self).get_args()
         args['name'] = self.name
         args['cmyk'] = self.cmyk
         return args
@@ -334,7 +334,7 @@ class ModelInk(ModelCurve):
     @historize
     def name(self, value):
         self._name = value
-        self.triggerOnModelUpdated('nameChanged')
+        self.trigger_on_model_updated('nameChanged')
     
     @property
     def cmyk(self):
@@ -344,7 +344,7 @@ class ModelInk(ModelCurve):
     @historize
     def cmyk(self, value):
         self._cmyk = list(value)
-        self.triggerOnModelUpdated('cmykChanged')
+        self.trigger_on_model_updated('cmykChanged')
     
     @property
     def c(self):
@@ -354,7 +354,7 @@ class ModelInk(ModelCurve):
     @historize
     def c(self, value):
         self._cmyk[0] = value
-        self.triggerOnModelUpdated('cmykChanged')
+        self.trigger_on_model_updated('cmykChanged')
     
     @property
     def m(self):
@@ -364,7 +364,7 @@ class ModelInk(ModelCurve):
     @historize
     def m(self, value):
         self._cmyk[1] = value
-        self.triggerOnModelUpdated('cmykChanged')
+        self.trigger_on_model_updated('cmykChanged')
     
     @property
     def y(self):
@@ -374,7 +374,7 @@ class ModelInk(ModelCurve):
     @historize
     def y(self, value):
         self._cmyk[2] = value
-        self.triggerOnModelUpdated('cmykChanged')
+        self.trigger_on_model_updated('cmykChanged')
     
     @property
     def k(self):
@@ -384,4 +384,4 @@ class ModelInk(ModelCurve):
     @historize
     def k(self, value):
         self._cmyk[3] = value
-        self.triggerOnModelUpdated('cmykChanged')
+        self.trigger_on_model_updated('cmykChanged')
