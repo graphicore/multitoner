@@ -61,7 +61,7 @@ UI_INFO = """
 class Canvas(Gtk.Viewport):
     __gsignals__ = repair_gsignals({
         'scale-to-fit-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
-                                 # the value of scaleToFit
+                                 # the value of scale_to_fit
                                  GObject.TYPE_BOOLEAN, ))
     })
     
@@ -69,192 +69,49 @@ class Canvas(Gtk.Viewport):
     def __init__(self, *args):
         Gtk.Viewport.__init__(self, *args)
         
-        self._transformedPatternCache = (None, None)
+        self._transformed_pattern_cache = (None, None)
         
-        self.sourceSurface = None
+        self._source_surface = None
         
         self._center = None
-        self._restoringCenter = False
+        self._restoring_center = False
         self._timers = {}
         
         self.da = Gtk.DrawingArea()
         self.add(self.da)
-        self._initEventHandlers()
-        
-        self.drawCounter = 0
+        self._init_event_handlers()
     
-    def _initEventHandlers(self):
-        self.da.connect('draw' , self.onDraw)
+    def _init_event_handlers(self):
+        self.da.connect('draw' , self.draw_handler)
         self.da.add_events(
             Gdk.EventMask.STRUCTURE_MASK # needed for configure-event
         )
-        self.da.connect('configure-event', self.configureHandler)
+        self.da.connect('configure-event', self.configure_handler)
         self.get_vadjustment().connect(
-            'value-changed', self.adjustmentValueChangedHandler)
+            'value-changed', self.adjustment_value_changed_handler)
         self.get_hadjustment().connect(
-            'value-changed', self.adjustmentValueChangedHandler)
+            'value-changed', self.adjustment_value_changed_handler)
         
         # this will keep the center of the image in the center of the window
         # when the window is beeing resized
         self.add_events(
             Gdk.EventMask.STRUCTURE_MASK # needed for configure-event
         )
-        def onRealize(widget, *args):
+        def realize_handler(widget, *args):
             """ 
             closure to connect to window when it establishes this widget
             """
             window = widget.get_toplevel()
-            window.connect('configure-event', self.toplevelConfigureHandler)
+            window.connect('configure-event', self.toplevel_configure_handler)
             
             parent = widget.get_parent()
-            parent.connect('size-allocate', self.parentSizeAllocateHandler)
+            parent.connect('size-allocate', self.parent_size_allocate_handler)
             
             widget.disconnect(realize_handler_id)
         # save realize_handler_id for the closure of onRealize 
-        realize_handler_id = self.connect('realize' , onRealize)
+        realize_handler_id = self.connect('realize' , realize_handler)
     
-    def receiveSurface(self, surface):
-        self.sourceSurface = surface
-        if not hasattr(self, '_scale') or self.scaleToFit:
-            self.setFittingScale()
-        else:
-            self._resize()
-        self.da.queue_draw()
-    
-    def _resize(self):
-        # needs bounding box width and height after all transformations
-        if self.sourceSurface is not None:
-            matrix = self._getScaledMatrix()
-            w, h, _, _ = self._getSurfaceExtents(matrix, self.sourceSurface)
-        else:
-            w = h = 0
-        self.da.set_size_request(w, h)
-    
-    def configureHandler(self, widget, event):
-        """
-        the configure event signals when the DrawingArea got resized
-        happens after receiveSurface and can be handled immediately
-        """
-        if not self.scaleToFit:
-            self._restoreCenter()
-    
-    """ when the toplevel window got resized """
-    toplevelConfigureHandler = configureHandler
-    
-    def parentSizeAllocateHandler(self, parent, allocation):
-        if self.scaleToFit:
-            self._setFittingScale(allocation.width, allocation.height)
-    
-    def adjustmentValueChangedHandler(self, adjustment):
-        self._saveCenter()
-    
-    def _saveCenter(self):
-        if self._restoringCenter == True:
-            return
-        center = (
-        #   (scrollbar position                 + screen width                 / 2)) / image width
-            (self.get_hadjustment().get_value() + (self.get_allocated_width()  / 2)) / self.da.get_allocated_width()
-        #   (scrollbar position                 + screen height                / 2)) / image height
-          , (self.get_vadjustment().get_value() + (self.get_allocated_height() / 2)) / self.da.get_allocated_height()
-        )
-        self._center = center
-        return center
-    
-    def _restoreCenter(self):
-        if self._center is None:
-            return
-        self._restoringCenter = True
-        try:
-            h, v = self._center
-            #      image width                    * center of view - screen width   / 2
-            left = self.da.get_allocated_width()  * h - self.get_allocated_width()  / 2
-            #      image height                   * center of view - screen height  / 2
-            top  = self.da.get_allocated_height() * v - self.get_allocated_height() / 2
-            self.get_hadjustment().set_value(left)
-            self.get_vadjustment().set_value(top)
-        finally:
-            self._restoringCenter = False
-    
-    def _setScale(self, value):
-        """ will set the new scale"""
-        if self.scale == value:
-            return
-        self._scale = value
-        self._saveCenter()
-        self._resize()
-        self.da.queue_draw()
-    
-    @property
-    def rotation(self):
-        return getattr(self, '_rotation', 0)
-    
-    @rotation.setter
-    def rotation(self, value):
-        """ between 0 and 2 will be multiplied with PI => radians """
-        self._rotation = value % 2
-        if self.scaleToFit:
-            self.setFittingScale()
-        self._resize()
-        self.da.queue_draw()
-    
-    def addRotation(self, value):
-        self.rotation += value
-    
-    @property
-    def scale(self):
-        return getattr(self, '_scale', 1.0)
-    
-    @scale.setter
-    def scale(self, value):
-        """ will turn off scale to fit and set the new scale"""
-        self.scaleToFit = False
-        self._setScale(value)
-    
-    @property
-    def scaleToFit(self):
-        return getattr(self, '_scaleToFit', True)
-    
-    @scaleToFit.setter
-    def scaleToFit(self, value):
-        old = self.scaleToFit
-        self._scaleToFit = not not value
-        if self._scaleToFit != old:
-            self.emit('scale-to-fit-changed', self._scaleToFit)
-        if self._scaleToFit:
-            self.setFittingScale()
-    
-    def setFittingScale(self):
-        parent = self.get_parent()
-        if parent is None:
-            return
-        parent_allocation = parent.get_allocation()
-        self._setFittingScale(parent_allocation.width, parent_allocation.height)
-    
-    def _setFittingScale(self, available_width, available_height):
-        """
-        set the scale to a value that makes the image fit exactly into
-        available_width and available_height
-        """
-        if self.sourceSurface is None:
-            return
-        # needs unscaled width and unscaled height, so the matrix must not
-        # be scaled, the rotation however is needed
-        matrix = self._getRotatedMatrix()
-        source_width, source_height, _, _ = self._getSurfaceExtents(matrix, self.sourceSurface)
-        try:
-            aspect_ratio = source_width / source_height
-            available_aspect_ratio = available_width / available_height
-        except ZeroDivisionError:
-            self._setScale(1)
-        else:
-            if aspect_ratio > available_aspect_ratio:
-                # fit to width
-                self._setScale(available_width / source_width)
-            else: 
-                # fit to height
-                self._setScale(available_height / source_height)
-    
-    def _getBBox(self, matrix, x1, y1, x2, y2):
+    def _get_bbox(self, matrix, x1, y1, x2, y2):
         """
         transform the rectangle defined by x1, y1, x2, y2 and return
         the bounding box of the result rectangle
@@ -276,47 +133,188 @@ class Canvas(Gtk.Viewport):
         
         return min_x, min_y, max_x, max_y
     
-    def _getBBOxExtents(self, matrix, x1, y1, x2, y2):
+    def _get_bbox_extents(self, matrix, x1, y1, x2, y2):
         """
         apply matrix to the rectangle defined by x1, y1, x2, y2
         returns width, height, offset_x, offset_y of the bounding box
         this is used to determine the space needed to draw the surface
         and to move the contents back into view using the offsets
         """
-        x1, y1, x2, y2 = self._getBBox(matrix, x1, y1, x2, y2)
+        x1, y1, x2, y2 = self._get_bbox(matrix, x1, y1, x2, y2)
         w = int(math.ceil(x2-x1))
         h = int(math.ceil(y2-y1))
         offset_x, offset_y = x1, y1
         return w, h, offset_x, offset_y
     
-    def _getSurfaceExtents(self, matrix, surface):
+    def _get_surface_extents(self, matrix, surface):
         """
         get the extents and offsets of surface after the application
         of matrix
         """
         x1, y1, x2, y2 = 0, 0, surface.get_width(), surface.get_height()
-        return self._getBBOxExtents(matrix, x1, y1, x2, y2)
+        return self._get_bbox_extents(matrix, x1, y1, x2, y2)
     
-    def _getRotatedMatrix(self):
+    def _get_rotated_matrix(self):
         """ matrix with rotation but without scale"""
         matrix = cairo.Matrix()
         matrix.rotate(self.rotation * math.pi)
         # rotate?
         return matrix
+
+    def _save_center(self):
+        if self._restoring_center == True:
+            return
+        center = (
+        #   (scrollbar position                 + screen width                 / 2)) / image width
+            (self.get_hadjustment().get_value() + (self.get_allocated_width()  / 2)) / self.da.get_allocated_width()
+        #   (scrollbar position                 + screen height                / 2)) / image height
+          , (self.get_vadjustment().get_value() + (self.get_allocated_height() / 2)) / self.da.get_allocated_height()
+        )
+        self._center = center
+        return center
     
-    def _getScaledMatrix(self):
+    def _get_scaled_matrix(self):
         """ matrix with rotation and scale"""
-        matrix = self._getRotatedMatrix()
+        matrix = self._get_rotated_matrix()
         matrix.scale(self.scale, self.scale)
         return matrix
     
-    def _createTransformedPattern(self, sourceSurface, transform_buffer=True):
+    def _resize(self):
+        # needs bounding box width and height after all transformations
+        if self._source_surface is not None:
+            matrix = self._get_scaled_matrix()
+            w, h, _, _ = self._get_surface_extents(matrix, self._source_surface)
+        else:
+            w = h = 0
+        self.da.set_size_request(w, h)
+    
+    def _set_scale(self, value):
+        """ will set the new scale"""
+        if self.scale == value:
+            return
+        self._scale = value
+        self._save_center()
+        self._resize()
+        self.da.queue_draw()
+    
+    def _set_fitting_scale(self, available_width, available_height):
+        """
+        set the scale to a value that makes the image fit exactly into
+        available_width and available_height
+        """
+        if self._source_surface is None:
+            return
+        # needs unscaled width and unscaled height, so the matrix must not
+        # be scaled, the rotation however is needed
+        matrix = self._get_rotated_matrix()
+        source_width, source_height, _, _ = self._get_surface_extents(matrix, self._source_surface)
+        try:
+            aspect_ratio = source_width / source_height
+            available_aspect_ratio = available_width / available_height
+        except ZeroDivisionError:
+            self._set_scale(1)
+        else:
+            if aspect_ratio > available_aspect_ratio:
+                # fit to width
+                self._set_scale(available_width / source_width)
+            else: 
+                # fit to height
+                self._set_scale(available_height / source_height)
+    
+    def set_fitting_scale(self):
+        parent = self.get_parent()
+        if parent is None:
+            return
+        parent_allocation = parent.get_allocation()
+        self._set_fitting_scale(parent_allocation.width, parent_allocation.height)
+    
+    def receive_surface(self, surface):
+        self._source_surface = surface
+        if not hasattr(self, '_scale') or self.scale_to_fit:
+            self.set_fitting_scale()
+        else:
+            self._resize()
+        self.da.queue_draw()
+
+    def _restore_center(self):
+        if self._center is None:
+            return
+        self._restoring_center = True
+        try:
+            h, v = self._center
+            #      image width                    * center of view - screen width   / 2
+            left = self.da.get_allocated_width()  * h - self.get_allocated_width()  / 2
+            #      image height                   * center of view - screen height  / 2
+            top  = self.da.get_allocated_height() * v - self.get_allocated_height() / 2
+            self.get_hadjustment().set_value(left)
+            self.get_vadjustment().set_value(top)
+        finally:
+            self._restoring_center = False
+
+    def configure_handler(self, widget, event):
+        """
+        the configure event signals when the DrawingArea got resized
+        happens after receive_surface and can be handled immediately
+        """
+        if not self.scale_to_fit:
+            self._restore_center()
+    
+    """ when the toplevel window got resized """
+    toplevel_configure_handler = configure_handler
+    
+    def parent_size_allocate_handler(self, parent, allocation):
+        if self.scale_to_fit:
+            self._set_fitting_scale(allocation.width, allocation.height)
+    
+    def adjustment_value_changed_handler(self, adjustment):
+        self._save_center()
+    
+    @property
+    def rotation(self):
+        return getattr(self, '_rotation', 0)
+    
+    @rotation.setter
+    def rotation(self, value):
+        """ between 0 and 2 will be multiplied with PI => radians """
+        self._rotation = value % 2
+        if self.scale_to_fit:
+            self.set_fitting_scale()
+        self._resize()
+        self.da.queue_draw()
+    
+    def add_rotation(self, value):
+        self.rotation += value
+    
+    @property
+    def scale(self):
+        return getattr(self, '_scale', 1.0)
+    
+    @scale.setter
+    def scale(self, value):
+        """ will turn off scale to fit and set the new scale"""
+        self.scale_to_fit = False
+        self._set_scale(value)
+    
+    @property
+    def scale_to_fit(self):
+        return getattr(self, '_scale_to_fit', True)
+    
+    @scale_to_fit.setter
+    def scale_to_fit(self, value):
+        old = self.scale_to_fit
+        self._scale_to_fit = not not value
+        if self._scale_to_fit != old:
+            self.emit('scale-to-fit-changed', self._scale_to_fit)
+        if self._scale_to_fit:
+            self.set_fitting_scale()
+    
+    def _create_transformed_pattern(self, source_surface, transform_buffer=True):
         """
         returns cairo pattern to set as source of a cairo context
         
         When transform_buffer is False the returned pattern will have all
         necessary transformations applied to its affine transformation
-        matrix. The source buffer, however will be the original sourceSurface.
+        matrix. The source buffer, however will be the original source_surface.
         So drawing that pattern will apply all transformations life, this
         can result in a lot of cpu work when the pattern is drawn multiple
         times.
@@ -326,8 +324,8 @@ class Canvas(Gtk.Viewport):
         will hold the image data after all transformations have been applied.
         """
         # calculate width and height using the new matrix
-        matrix = self._getScaledMatrix()
-        w, h, offset_x, offset_y = self._getSurfaceExtents(matrix, sourceSurface)
+        matrix = self._get_scaled_matrix()
+        w, h, offset_x, offset_y = self._get_surface_extents(matrix, source_surface)
         
         # finish the transformation matrix by translating the pattern
         # back into view using the offsets the transformation created.
@@ -338,7 +336,7 @@ class Canvas(Gtk.Viewport):
         translate_matrix.translate(-offset_x, -offset_y)
         matrix = matrix.multiply(translate_matrix)
         
-        source_pattern = cairo.SurfacePattern(sourceSurface)
+        source_pattern = cairo.SurfacePattern(source_surface)
         # cairo.SurfacePattern uses inverted matrices, see the docs for pattern
         matrix.invert()
         source_pattern.set_matrix(matrix)
@@ -346,7 +344,7 @@ class Canvas(Gtk.Viewport):
             return source_pattern
         # the result of this can be cached and will speedup the display
         # for large images alot, because all transformations will be applied
-        # just once not on every onDraw event
+        # just once not on every draw signal
         target_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
         # the context to draw on the new surface
         co = cairo.Context(target_surface)
@@ -356,14 +354,14 @@ class Canvas(Gtk.Viewport):
         target_pattern = cairo.SurfacePattern(target_surface)
         return target_pattern
     
-    def _getSourcePattern(self):
-        if self.sourceSurface is None:
-            self._transformedPatternCache = (None, None)
+    def _get_source_pattern(self):
+        if self._source_surface is None:
+            self._transformed_pattern_cache = (None, None)
             return None
-        sourceSurface = self.sourceSurface
+        source_surface = self._source_surface
         
-        new_check = (id(sourceSurface), self.scale, self.rotation)
-        check, transformed_pattern = self._transformedPatternCache
+        new_check = (id(source_surface), self.scale, self.rotation)
+        check, transformed_pattern = self._transformed_pattern_cache
         # see if the cache is invalid
         if new_check != check:
             # seems like a good rule of thumb to transform the buffer and
@@ -371,23 +369,18 @@ class Canvas(Gtk.Viewport):
             # scales bigger than one the life transformation is fast enough
             # this is likely not the best behavior in all scenarios
             transform_buffer = self.scale < 1
-            transformed_pattern = self._createTransformedPattern(sourceSurface, transform_buffer)
+            transformed_pattern = self._create_transformed_pattern(source_surface, transform_buffer)
             # cache the results
-            self._transformedPatternCache = (new_check, transformed_pattern)
+            self._transformed_pattern_cache = (new_check, transformed_pattern)
         return transformed_pattern
     
-    def onDraw(self, da, cr):
-        # if not hasattr(self, '_draw_counter')
-        #     self._draw_counter = 0
-        # print ('onDraw', self._draw_counter)
-        # self._draw_counter += 1
-        
+    def draw_handler(self, da, cr):
         width = self.get_allocated_width()
         height =  self.get_allocated_height()
         left = math.floor(self.get_hadjustment().get_value())
         top = math.floor(self.get_vadjustment().get_value())
         
-        pattern = self._getSourcePattern()
+        pattern = self._get_source_pattern()
         if pattern is not None:
             cr.set_source(pattern)
             # draws just the visible area
@@ -406,26 +399,26 @@ class CanvasControls(Emitter):
         
         self.canvas.scale = new
     
-    def zoomOut(self):
+    def zoom_out(self):
         old = self.canvas.scale
         old = round(old, 2)
         new = old - 0.05
         new = max(0.05, new)
         self.canvas.scale = new
     
-    def zoomUnit(self):
+    def zoom_unit(self):
         old = self.canvas.scale
         self.canvas.scale = 1
     
-    def zoomFit(self):
+    def zoom_fit(self):
         """ toggles scale to filt"""
-        self.canvas.scaleToFit = not self.canvas.scaleToFit
+        self.canvas.scale_to_fit = not self.canvas.scale_to_fit
     
-    def rotateRight(self):
-        self.canvas.addRotation(0.5)
+    def rotate_right(self):
+        self.canvas.add_rotation(0.5)
     
-    def rotateLeft(self):
-        self.canvas.addRotation(-0.5)
+    def rotate_left(self):
+        self.canvas.add_rotation(-0.5)
 
 class ScrollByHandTool(Gtk.EventBox):
     def __init__(self, hadjustment, vadjustment):
@@ -440,17 +433,17 @@ class ScrollByHandTool(Gtk.EventBox):
         self.hadjustment = hadjustment
         self.vadjustment = vadjustment
         
-        vadjustment.connect('value-changed', self.adjustmentValueChangedHandler)
-        hadjustment.connect('value-changed', self.adjustmentValueChangedHandler)
+        vadjustment.connect('value-changed', self.adjustment_value_changed_handler)
+        hadjustment.connect('value-changed', self.adjustment_value_changed_handler)
         
         
-        self.connect('button-press-event'  , self.buttonPressHandler)
-        self.connect('button-release-event', self.buttonReleaseHandler)
-        self.connect('motion-notify-event' , self.motionNotifyHandler)
-        self._scrollBase = None
-        self._canScroll = False
+        self.connect('button-press-event'  , self.button_press_handler)
+        self.connect('button-release-event', self.button_release_handler)
+        self.connect('motion-notify-event' , self.motion_notify_handler)
+        self._scroll_base = None
+        self._can_scroll = False
     
-    def adjustmentValueChangedHandler(self, *args):
+    def adjustment_value_changed_handler(self, *args):
         h = self.hadjustment
         v = self.vadjustment
         # "value" field represents the position of the scrollbar, which must
@@ -458,29 +451,29 @@ class ScrollByHandTool(Gtk.EventBox):
         can_scroll_x = 0 < h.get_upper() - h.get_lower() - h.get_page_size()
         can_scroll_y = 0 < v.get_upper() - v.get_lower() - v.get_page_size()
         
-        self._canScroll = can_scroll_x or can_scroll_y
-        if self._canScroll:
+        self._can_scroll = can_scroll_x or can_scroll_y
+        if self._can_scroll:
             cursor = Gdk.Cursor.new(Gdk.CursorType.FLEUR)
             self.get_window().set_cursor(cursor)
         else:
             cursor = Gdk.Cursor.new(Gdk.CursorType.ARROW)
             self.get_window().set_cursor(cursor)
             # stop scrolling if doing so
-            self._scrollBase = None
+            self._scroll_base = None
         
-    def buttonPressHandler(self, canvas, event):
-        if not self._canScroll:
+    def button_press_handler(self, canvas, event):
+        if not self._can_scroll:
             #no need to scroll
-            self._scrollBase = None
+            self._scroll_base = None
             return
         original_x = self.hadjustment.get_value()
         original_y = self.vadjustment.get_value()
-        self._scrollBase = event.x, event.y, original_x, original_y
+        self._scroll_base = event.x, event.y, original_x, original_y
     
-    def motionNotifyHandler(self, canvas, event):
-        if self._scrollBase is None:
+    def motion_notify_handler(self, canvas, event):
+        if self._scroll_base is None:
             return
-        start_x, start_y, original_x, original_y = self._scrollBase
+        start_x, start_y, original_x, original_y = self._scroll_base
         now_x, now_y = event.x, event.y
         
         delta_x = now_x - start_x
@@ -489,34 +482,34 @@ class ScrollByHandTool(Gtk.EventBox):
         self.hadjustment.set_value(original_x - delta_x)
         self.vadjustment.set_value(original_y - delta_y)
     
-    def buttonReleaseHandler(self, canvas, event):
-        self._scrollBase = None
+    def button_release_handler(self, canvas, event):
+        self._scroll_base = None
 
 
 class PreviewWindow(Gtk.Window):
-    def __init__(self, previewWorker, inksModel, imageName=None):
+    def __init__(self, preview_worker, inks_model, image_name=None):
         Gtk.Window.__init__(self)
-        inksModel.add(self) #subscribe
-        self._previewWorker = previewWorker
+        inks_model.add(self) #subscribe
+        self._preview_worker = preview_worker
         
-        def destroy(self):
-            # remove the PreviewWindow from previewWorker
-            previewWorker.remove_client(self, self.id)
+        def destroy_handler(self):
+            # remove the PreviewWindow from preview_worker
+            preview_worker.remove_client(self, self.id)
             
             # This fixes a bug where references to the PreviewWindow still
             # existed in the signal handler functions of the actions.
-            # (like self.actionRotateLeftHandler) GTK did not remove these
+            # (like self.action_rotate_left_handler) GTK did not remove these
             # handlers and thus the PreviewWindow was not garbage collected.
             # So the weakref was never released from the model emitter.
-            actions = self._globalActions.list_actions() + self._documentActions.list_actions()
+            actions = self._global_actions.list_actions() + self._document_actions.list_actions()
             for action in actions:
                 GObject.signal_handlers_destroy(action)
             self.disconnect(destroy_handler_id)
             return True
-        destroy_handler_id = self.connect('destroy', destroy)
+        destroy_handler_id = self.connect('destroy', destroy_handler)
         
-        self.inksModel = weakref(inksModel)
-        self.imageName = imageName
+        self.inks_model = weakref(inks_model)
+        self.image_name = image_name
         
         self.set_default_size(640, 480)
         self.set_has_resize_grip(True)
@@ -524,7 +517,7 @@ class PreviewWindow(Gtk.Window):
         self._timeout = None
         self._waiting = False
         self._update_needed = False
-        self._noInks = False
+        self._no_inks = False
         
         self.grid = Gtk.Grid()
         self.add(self.grid)
@@ -536,103 +529,103 @@ class PreviewWindow(Gtk.Window):
         self.canvas = Canvas(*adjustments)
         self.canvas.set_halign(Gtk.Align.CENTER)
         self.canvas.set_valign(Gtk.Align.CENTER)
-        self.canvasCtrl = CanvasControls(self.canvas)
-        self.canvasCtrl.add(self) # subscribe
+        self.canvas_ctrl = CanvasControls(self.canvas)
+        self.canvas_ctrl.add(self) # subscribe
         
         self.scrolled.add(self.canvas)
         self.scrolled.set_hexpand(True)
         self.scrolled.set_vexpand(True)
         
-        scrollByHand = ScrollByHandTool(*adjustments)
-        scrollByHand.add(self.scrolled)
+        scroll_by_hand = ScrollByHandTool(*adjustments)
+        scroll_by_hand.add(self.scrolled)
         
-        self.menubar, self.toolbar = self._initMenu()
+        self.menubar, self.toolbar = self._init_menu()
         # synchronize the zoom to fit value
-        self._setZoomFitActionActiveValue(self.canvas.scaleToFit)
-        self.canvas.connect('scale-to-fit-changed', self.scaleToFitChangedHandler)
+        self._set_zoom_fit_action_active_value(self.canvas.scale_to_fit)
+        self.canvas.connect('scale-to-fit-changed', self.scale_to_fit_changed_handler)
         
         # self.grid.attach(self.menubar, 0, 0, 1, 1)
         self.grid.attach(self.toolbar, 0, 1, 1, 1)
         
-        self.grid.attach(scrollByHand, 0, 3, 1, 1)
+        self.grid.attach(scroll_by_hand, 0, 3, 1, 1)
         
-        self._openImage(imageName)
+        self._open_image(image_name)
     
     @property
     def id(self):
         return id(self)
     
-    def _setTitle(self):
-        filename = self.imageName or _('(no image)')
+    def _set_title(self):
+        filename = self.image_name or _('(no image)')
         self.set_title(_('Multitoner Tool Preview: {filename}').format(filename=filename))
     
     @property
-    def imageName(self):
-        if not hasattr(self, '_imageName'):
-            self._imageName = None
-        return self._imageName
+    def image_name(self):
+        if not hasattr(self, '_image_name'):
+            self._image_name = None
+        return self._image_name
     
-    @imageName.setter
-    def imageName(self, value):
-        if value == self.imageName:
+    @image_name.setter
+    def image_name(self, value):
+        if value == self.image_name:
             return
-        self._imageName = value
-        self._setTitle()
+        self._image_name = value
+        self._set_title()
     
-    def _makeGlobalActions(self):
-        actionGroup = ActionGroup('gloabl_actions')
+    def _make_global_actions(self):
+        action_group = ActionGroup('gloabl_actions')
         
-        actionGroup.add_actions([
+        action_group.add_actions([
               ('FileMenu', None, _('File'), None,
                None, None)
             , ('OpenImage', Gtk.STOCK_OPEN, _('Open Image'), 'o',
-               _('Open An Image For Preview'), self.actionOpenImageHandler)
+               _('Open An Image For Preview'), self.action_open_image_handler)
             , ('Quit', Gtk.STOCK_CLOSE, None, 'q',
-               _('Close Preview Window'), self.actionCloseHandler)
+               _('Close Preview Window'), self.action_close_handler)
         ])
-        return actionGroup
+        return action_group
     
-    def _makeDocumentActions(self):
-        actionGroup = ActionGroup('document_actions')
-        actionGroup.add_actions([
+    def _make_document_actions(self):
+        action_group = ActionGroup('document_actions')
+        action_group.add_actions([
               ('EditMenu', None, _('Edit'), None,
                None, None)
             , ('ZoomIn', Gtk.STOCK_ZOOM_IN, None,  'plus',
-               _('Zoom In'), self.actionZoomInHandler)
+               _('Zoom In'), self.action_zoom_in_handler)
             , ('ZoomOut', Gtk.STOCK_ZOOM_OUT, None, 'minus',
-               _('Zoom Out'), self.actionZoomOutHandler)
+               _('Zoom Out'), self.action_zoom_out_handler)
             , ('ZoomUnit', Gtk.STOCK_ZOOM_100, None, '1',
-               _('Zoom to Normal Size'), self.actionZoomUnitHandler)
+               _('Zoom to Normal Size'), self.action_zoom_unit_handler)
             ])
         
-        actionGroup.add_icon_actions([
+        action_group.add_icon_actions([
               ('ZoomFit', None, _('Zoom To Fit Image To Windowsize'),
-                None, self.actionZoomFitHandler, 'F', Gtk.STOCK_ZOOM_FIT,
+                None, self.action_zoom_fit_handler, 'F', Gtk.STOCK_ZOOM_FIT,
                 Gtk.ToggleAction)
             , ('RotateRight',  _('Rotate Clockwise'), _('Rotate Clockwise'),
-              'object-rotate-right', self.actionRotateRightHandler, 'R')
+              'object-rotate-right', self.action_rotate_right_handler, 'R')
             , ('RotateLeft', _('Rotate Counterclockwise'), _('Rotate Counterclockwise'),
-              'object-rotate-left', self.actionRotateLeftHandler, 'L')
+              'object-rotate-left', self.action_rotate_left_handler, 'L')
             , ('ExportImage', _('Export Image'), _('Export Image as EPS file'),
-               'document-save', self.actionExportImageHandler, 'E')
+               'document-save', self.action_export_image_handler, 'E')
             ])
-        return actionGroup
+        return action_group
     
-    def _setZoomFitActionActiveValue(self, value):
-        zoomFitAction = self._documentActions.get_action('ZoomFit')
-        zoomFitAction.handler_block_by_func(self.actionZoomFitHandler)
-        zoomFitAction.set_active(value)
-        zoomFitAction.handler_unblock_by_func(self.actionZoomFitHandler)
+    def _set_zoom_fit_action_active_value(self, value):
+        zoom_fit_action = self._document_actions.get_action('ZoomFit')
+        zoom_fit_action.handler_block_by_func(self.action_zoom_fit_handler)
+        zoom_fit_action.set_active(value)
+        zoom_fit_action.handler_unblock_by_func(self.action_zoom_fit_handler)
     
-    def _initMenu(self):
-        self._globalActions = self._makeGlobalActions()
-        self._documentActions = self._makeDocumentActions()
-        self._documentActions.set_sensitive(False)
+    def _init_menu(self):
+        self._global_actions = self._make_global_actions()
+        self._document_actions = self._make_document_actions()
+        self._document_actions.set_sensitive(False)
         
-        self.UIManager = uimanager = Gtk.UIManager()
+        uimanager = Gtk.UIManager()
         uimanager.add_ui_from_string(UI_INFO)
-        uimanager.insert_action_group(self._documentActions)
-        uimanager.insert_action_group(self._globalActions)
+        uimanager.insert_action_group(self._document_actions)
+        uimanager.insert_action_group(self._global_actions)
         menubar = uimanager.get_widget("/MenuBar")
         toolbar = uimanager.get_widget("/ToolBar")
         
@@ -642,28 +635,29 @@ class PreviewWindow(Gtk.Window):
         
         return menubar, toolbar
     
-    def showMessage(self, *message):
+    def _show_message(self, *message):
         window = self.get_toplevel()
         show_message(window, *message)
     
-    def onModelUpdated(self, inksModel, event, *args):
-        if len(inksModel.visibleCurves) == 0:
-            self.canvas.receiveSurface(None)
-            self._noInks = True
+    def onModelUpdated(self, inks_model, event, *args):
+        if len(inks_model.visibleCurves) == 0:
+            self.canvas.receive_surface(None)
+            self._no_inks = True
             return
-        self._noInks = False
+        self._no_inks = False
         if event == 'curveUpdate':
             # whitelist, needs probbaly an update when more relevant events occur
-            inkEvent = args[1]
-            if inkEvent not in ('pointUpdate', 'addPoint', 'removePoint',
-                                'setPoints', 'interpolationChanged',
-                                'visibleChanged', 'cmykChanged',
-                                'nameChanged'):
+            ink_event = args[1]
+            if ink_event not in ('pointUpdate', 'addPoint', 'removePoint',
+                                 'setPoints', 'interpolationChanged',
+                                 'visibleChanged', 'cmykChanged',
+                                 'nameChanged'):
                 return
-        assert self.inksModel() is inksModel, 'A wrong inksModel instance publishes to this PreviewWindow'
-        self._requestNewSurface()
+        assert self.inks_model() is inks_model, 'A wrong inks_model instance ' \
+                                                'publishes to this PreviewWindow'
+        self._request_new_surface()
     
-    def _requestNewSurface(self):
+    def _request_new_surface(self):
         """ this will be called very frequently, because generating the
         preview can take a moment this waits until the last call to this
         method was 300 millisecconds ago and then let the rendering start
@@ -672,12 +666,12 @@ class PreviewWindow(Gtk.Window):
         if self._timeout is not None:
             GObject.source_remove(self._timeout)
         # schedule a new execution
-        self._timeout = GObject.timeout_add(300, self._updateSurface)
+        self._timeout = GObject.timeout_add(300, self._update_surface)
     
-    def _updateSurface(self):
-        inksModel = self.inksModel()
+    def _update_surface(self):
+        inks_model = self.inks_model()
         # see if the model still exists
-        if inksModel is None or len(inksModel.visibleCurves) == 0 or self.imageName is None:
+        if inks_model is None or len(inks_model.visibleCurves) == 0 or self.image_name is None:
             # need to return False, to cancel the timeout
             return False
         
@@ -689,34 +683,34 @@ class PreviewWindow(Gtk.Window):
         
         self._waiting = True
         
-        callback = (self._workerAnswerHandler, self.imageName)
-        self._previewWorker.add_job(self.id, callback, self.imageName, *inksModel.visibleCurves)
+        callback = (self._worker_callback, self.image_name)
+        self._preview_worker.add_job(self.id, callback, self.image_name, *inks_model.visibleCurves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
-    def _workerAnswerHandler(self, type, imageName, *args):
+    def _worker_callback(self, type, image_name, *args):
         self._waiting = False
         if type == 'result':
             message = args[-1]
             if message is not None:
-                GLib.idle_add(self.showMessage, *message)
-            cairo_surface = self._receiveSurface(imageName, *args[0:-1])
+                GLib.idle_add(self._show_message, *message)
+            cairo_surface = self._receive_surface(image_name, *args[0:-1])
         else:
             if type == 'error':
-                self.imageName = None
-            GLib.idle_add(self.showMessage, type, *args)
+                self.image_name = None
+            GLib.idle_add(self._show_message, type, *args)
             cairo_surface = None
         
         if cairo_surface is not None:
-            self._documentActions.set_sensitive(True)
+            self._document_actions.set_sensitive(True)
         else:
-            self.imageName = None
-            self._documentActions.set_sensitive(False)
-        self.canvas.receiveSurface(cairo_surface)
+            self.image_name = None
+            self._document_actions.set_sensitive(False)
+        self.canvas.receive_surface(cairo_surface)
     
-    def _receiveSurface(self, imageName, w, h, rowstride, buf):
-        if self._noInks or self.imageName != imageName:
+    def _receive_surface(self, image_name, w, h, rowstride, buf):
+        if self._no_inks or self.image_name != image_name:
             # this may receive a surface after all inks are invisible
             # or after the image to display changed
             cairo_surface = None
@@ -725,56 +719,55 @@ class PreviewWindow(Gtk.Window):
                 buf, cairo.FORMAT_RGB24, w, h, rowstride
             )
         
-        # print ('_receiveSurface >>>> ', w, h)
         if self._update_needed:
             # while we where waiting another update became due
             self._update_needed = False
-            self._requestNewSurface()
+            self._request_new_surface()
         return cairo_surface
     
-    def _openImage(self, imageName):
-        if imageName is None:
+    def _open_image(self, image_name):
+        if image_name is None:
             return
-        self.imageName = imageName
-        self._requestNewSurface()
+        self.image_name = image_name
+        self._request_new_surface()
     
-    def askForImage(self):
+    def ask_for_image(self):
         window = self.get_toplevel()
         filename = show_open_image_dialog(window)
-        self._openImage(filename)
+        self._open_image(filename)
     
     # actions
-    def actionZoomInHandler(self, widget):
-        self.canvasCtrl.zoomIn()
+    def action_zoom_in_handler(self, widget):
+        self.canvas_ctrl.zoomIn()
     
-    def actionZoomOutHandler(self, widget):
-        self.canvasCtrl.zoomOut()
+    def action_zoom_out_handler(self, widget):
+        self.canvas_ctrl.zoom_out()
     
-    def actionZoomUnitHandler(self, widget):
-        self.canvasCtrl.zoomUnit()
+    def action_zoom_unit_handler(self, widget):
+        self.canvas_ctrl.zoom_unit()
     
-    def actionZoomFitHandler(self, widget):
-        self.canvasCtrl.zoomFit()
+    def action_zoom_fit_handler(self, widget):
+        self.canvas_ctrl.zoom_fit()
     
-    def actionRotateRightHandler(self, widget):
-        self.canvasCtrl.rotateRight()
+    def action_rotate_right_handler(self, widget):
+        self.canvas_ctrl.rotate_right()
     
-    def actionRotateLeftHandler(self, widget):
-        self.canvasCtrl.rotateLeft()
+    def action_rotate_left_handler(self, widget):
+        self.canvas_ctrl.rotate_left()
     
-    def scaleToFitChangedHandler(self, widget, scaleToFit):
-        self._setZoomFitActionActiveValue(scaleToFit)
+    def scale_to_fit_changed_handler(self, widget, scale_to_fit):
+        self._set_zoom_fit_action_active_value(scale_to_fit)
     
-    def actionOpenImageHandler(self, widget):
-        self.askForImage()
+    def action_open_image_handler(self, widget):
+        self.ask_for_image()
 
-    def actionCloseHandler(self, widget):
+    def action_close_handler(self, widget):
         self.destroy()
     
-    def actionExportImageHandler(self, widget):
-        inksModel = self.inksModel()
-        image_filename = self.imageName
-        if image_filename is None or inksModel is None:
+    def action_export_image_handler(self, widget):
+        inks_model = self.inks_model()
+        image_filename = self.image_name
+        if image_filename is None or inks_model is None:
             return
         
         window = self.get_toplevel()
@@ -783,7 +776,7 @@ class PreviewWindow(Gtk.Window):
         if eps_filename is None:
             return
         
-        result, message = model2eps(inksModel, image_filename, eps_filename)
+        result, message = model2eps(inks_model, image_filename, eps_filename)
         
         if message:
             window = self.get_toplevel()
@@ -797,18 +790,18 @@ if __name__ == '__main__':
     GObject.threads_init()
     
     if len(sys.argv) > 1:
-        mttFile = sys.argv[1]
-        imageName = None
+        mtt_file = sys.argv[1]
+        image_name = None
         if len(sys.argv) > 2:
-            imageName = sys.argv[-1]
-        print (imageName, mttFile)
-        with open(mttFile) as f:
+            image_name = sys.argv[-1]
+        print (image_name, mtt_file)
+        with open(mtt_file) as f:
             data = json.load(f)
         model = ModelCurves(ChildModel=ModelInk, **data)
-        previewWorker = PreviewWorker.new_with_pool(processes=1)
-        previewWindow = PreviewWindow(previewWorker, model, imageName)
-        previewWindow.connect('destroy', Gtk.main_quit)
-        previewWindow.show_all()
+        preview_worker = PreviewWorker.new_with_pool(processes=1)
+        preview_window = PreviewWindow(preview_worker, model, image_name)
+        preview_window.connect('destroy', Gtk.main_quit)
+        preview_window.show_all()
         Gtk.main()
     else:
         print (_('Need a .mtt file as first argument and optionally an image file as last argument.'))

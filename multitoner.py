@@ -197,7 +197,7 @@ class Document(Emitter):
     def open_preview(self):
         preview = PreviewWindow(self._preview_worker, self.model)
         preview.show_all()
-        preview.askForImage()
+        preview.ask_for_image()
         preview.connect('destroy', self.destroy_preview_handler)
         self._preview_windows.append(preview)
     
@@ -305,7 +305,7 @@ class Multitoner(Gtk.Grid):
         self._set_global_state()
     
     def _init_menu(self):
-        self.UIManager = uimanager = Gtk.UIManager()
+        uimanager = Gtk.UIManager()
         uimanager.add_ui_from_string(UI_INFO)
         uimanager.insert_action_group(self._global_actions)
         uimanager.insert_action_group(self._document_actions)

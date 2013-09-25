@@ -1108,7 +1108,7 @@ if __name__ == '__main__':
         preview_window = PreviewWindow(preview_worker, model, image_name)
         preview_window.show_all()
         if image_name is None:
-            preview_window.askForImage()
+            preview_window.ask_for_image()
     
     def request_preview_handler(widget, *user_data):
         open_preview()
