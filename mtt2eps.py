@@ -6,7 +6,7 @@ from __future__ import division, print_function, unicode_literals
 import PIL.Image as Image
 import json
 
-from eps_tool import eps_tool
+from epstool import EPSTool
 from model import ModelCurves, ModelInk
 
 __all__ = ['open_image', 'model2eps', 'mtt2eps']
@@ -41,7 +41,7 @@ def open_image(filename):
                      , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
                      )
             im = im.convert('L')
-        eps_tool = eps_tool()
+        eps_tool = EPSTool()
         eps_tool.set_image_data(im.tostring(), im.size)
         
     return eps_tool, notice, error
