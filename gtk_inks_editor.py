@@ -398,7 +398,7 @@ class InkController(Emitter):
             new_index += 1
         if old_index < new_index:
             new_index -= 1
-        new_order = removed_source[0:new_index] + (source.id, ) + removed_source[newIndex:]
+        new_order = removed_source[0:new_index] + (source.id, ) + removed_source[new_index:]
         self.inks.reorder_by_id_list(new_order)
     
     def init_control_panel(self):
