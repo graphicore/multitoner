@@ -5,11 +5,12 @@ from __future__ import unicode_literals, print_function
 
 from string import Template
 import binascii
-from interpolation import interpolation_strategies_dict
-import numpy as np
 from datetime import datetime
+import numpy as np
 
-__all__ = ['EPSTool']
+from interpolation import interpolation_strategies_dict
+
+__all__ = ['EPSTool', 'EPSToolException']
 
 init_colors = Template("""gsave % clipping path gsave
 %note: 4.2 More Free Advice
@@ -215,6 +216,12 @@ def junked(string, chunkLen):
 # For the saving of eps-files this might become interesting again, because
 # speed of encoding is not so important in that case.
 # import mom.codec as codec
+#
+# An alternative way to using a python module for ascii_85 encoding would
+# be to use ghostscript for that matter. That would ensure compatibillity
+# and would show how to use ghostscript for encoding, too.
+# However this module would have an dependency on ghostscrip, then.
+#
 # def get_image_binary(string):
 #     string = codec.base85_encode(string, codec.B85_ASCII)
 #     if bytes is not str:
@@ -240,13 +247,13 @@ def get_image_binary(binary):
 
 def get_device_n_lut(*inks):
     """
-        This table has 256 indexes. For two used colors the first index
-        points to two bytes (in the hex representation 4 bytes, 2 bytes
-        are used for one binary byte) The first byte is for the first
-        color the seccond is for the seccond color. These values are an
-        representation of the curves defined in the editor as Loockup Table.
-        It describes how much of the ink should be printed for whatever
-        color value (between 0 and 255, like in the grayscale image)
+    This table has 256 indexes. For two used colors the first index
+    points to two bytes (in the hex representation 4 bytes, 2 bytes
+    are used for one binary byte) The first byte is for the first
+    color the seccond is for the seccond color. These values are an
+    representation of the curves defined in the editor as Loockup Table.
+    It describes how much of the ink should be printed for whatever
+    color value (between 0 and 255, like in the grayscale image)
     """
     table = []
     xs = np.linspace(1.0, 0.0, 256)
@@ -369,13 +376,27 @@ def get_duotone_cmyk_values(*inks):
     ])
     return '/DuotoneCMYKValues [\n{0}\n] def'.format(CMYKValues)
 
+class EPSToolException(Exception):
+    pass
+
+
 class EPSTool(object):
+    """ Create an eps file file from raw grayscale image pixel data and
+    a list of CurvesModels
+    
+    This is designed to take the image data independently from the CurvesModel
+    color-data. Its possible to store image data here and change the color-data
+    to generate differnetly colored images with copy of the image or vice versa.
+    """
     def __init__(self):
         self._mapping = {}
         self._has_color = False
         self._has_image = False
     
     def set_color_data(self, *curves):
+        """ use this with instances of CurvesModel to set the colors of the eps
+        
+        """
         self._has_color = True
         self._mapping['deviceNLUT'] = get_device_n_lut(*curves)
         self._mapping['initColors'] = get_init_colors(*curves)
@@ -384,16 +405,29 @@ class EPSTool(object):
         self._mapping['DuotoneCMYKValues'] = get_duotone_cmyk_values(*curves)
     
     def set_image_data(self, image_bin, size):
+        """set the pixel data of the image to show in the eps document
+        
+        image_bin: str or bytes, the pixel values of a grayscale image each
+        pixel should be one byte from 0 (black) to 255 (white)
+        
+        size: tuple of integers: (width, height)
+            width * height should be the same as len(image_bin)
+        
+        """
         self._mapping['ImageBinary'] = get_image_binary(image_bin)
         self._mapping['width'], self._mapping['height'] = size
         self._has_image = True
     
     def create(self):
+        """ returns a utf-8 encoded string/bytes with the EPS-data
+        or raises EPSToolException if data is missing
+        
+        """
         if not self._has_color:
-            raise Exception('Color information is missing, use set_color_data')
+            raise EPSToolException('Color information is missing, use set_color_data')
             
         if not self._has_image:
-            raise Exception('Image data is missing, use set_image_data')
+            raise EPSToolException('Image data is missing, use set_image_data')
         
         self._mapping['CreationDate'] = datetime.now().ctime()
         return eps_template.substitute(self._mapping).encode('utf-8')
