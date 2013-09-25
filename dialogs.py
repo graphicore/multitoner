@@ -4,15 +4,16 @@
 from __future__ import division, print_function, unicode_literals
 
 import os
-from gi.repository import Gtk, GObject, Gdk
 
-__all__ = ['show_open_image_dialog', 'show_save_as_dialog', 'show_save_as_eps_dialog',
-           'show_error_dialog', 'show_notice_dialog', 'show_message']
+from gi.repository import Gtk
+
+__all__ = ['show_open_image_dialog', 'show_save_as_dialog',
+           'show_save_as_eps_dialog', 'show_error_dialog',
+           'show_notice_dialog', 'show_message']
 
 # just a preparation for i18n
 def _(string):
     return string
-
 
 def show_open_image_dialog(window):
     dialog = Gtk.FileChooserDialog(title=_('Choose an Image-File')
