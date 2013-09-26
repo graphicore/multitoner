@@ -448,6 +448,7 @@ class Multitoner(Gtk.Grid):
 if __name__ == '__main__':
     """ bootstrap the application """
     import sys
+    import os
     from gi.repository import GObject
     
     GObject.threads_init()
@@ -461,7 +462,10 @@ if __name__ == '__main__':
     window.set_border_width(5)
     
     css_provider = Gtk.CssProvider()
-    css_provider.load_from_path('style.css')
+    
+    directory = os.path.dirname(os.path.realpath(__file__))
+    css_provider.load_from_path(os.path.join(directory, 'style.css'))
+    
     screen = window.get_screen()
     style_context = Gtk.StyleContext()
     style_context.add_provider_for_screen(screen, css_provider,

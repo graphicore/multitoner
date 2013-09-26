@@ -618,6 +618,7 @@ class CellRendererToggle(Gtk.CellRenderer):
 
 
 class InkControlPanel(Gtk.TreeView):
+    _directory = os.path.dirname(os.path.realpath(__file__)) 
     """ This is the 'table' with the toggles for lock and visibility, the
     delete button and the editor color chooser. Furthermore this can be
     used to reorder the inks with drag and drop.
@@ -704,7 +705,7 @@ class InkControlPanel(Gtk.TreeView):
     def _init_toggle(self, icons, callback, *data):
         setup = {}
         for key, filename in icons.items():
-            icon_path = os.path.join(os.path.dirname(__file__), encode('icons'), encode(filename))
+            icon_path = os.path.join(self._directory, encode('icons'), encode(filename))
             setup[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(icon_path, 16, 16)
         toggle = CellRendererToggle(**setup)
         toggle.set_fixed_size (16, 16)
