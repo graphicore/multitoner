@@ -199,8 +199,8 @@ class Multitoner(Gtk.Grid):
         # does only .mtt files
         recent_action = Gtk.RecentAction.new_for_manager('FileOpenRecent',
             _('Recent Files'), None, None, None)
-        recent_filter= Gtk.RecentFilter()
-        recent_filter.add_pattern ("*" + Document.file_extension);
+        recent_filter = Gtk.RecentFilter()
+        recent_filter.add_pattern ("*" + Document.file_extension)
         recent_action.add_filter(recent_filter)
         recent_action.connect('item-activated', self.open_recent_handler)
         action_group.add_action(recent_action)
@@ -219,10 +219,10 @@ class Multitoner(Gtk.Grid):
                None, self.action_file_save_document_as_handler)
             , ('FileClose', Gtk.STOCK_CLOSE, _('Close'), '<ctrl>w',
                None, self.action_file_close_handler)
-            , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close Other Documents'), '<ctrl><alt>w',
-               None, self.action_file_close_other_handler)
-            , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open a Preview Window'), None,
-               None, self.action_open_preview_handler)
+            , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close Other Documents'),
+               '<ctrl><alt>w', None, self.action_file_close_other_handler)
+            , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open a Preview Window'),
+              None, None, self.action_open_preview_handler)
             ])
         
         action_group.add_icon_actions([
@@ -259,7 +259,8 @@ class Multitoner(Gtk.Grid):
     
     def _open_document(self, filename):
         try:
-            doc = Document.new_from_file(self._gradient_worker, self._preview_worker, filename)
+            doc = Document.new_from_file(self._gradient_worker,
+                                         self._preview_worker, filename)
         except Exception as e:
             error = _('Error opening the file "{0}"').format(filename)
             detail = _('Message: {0} {1}').format( e, type(e))
@@ -440,7 +441,8 @@ class Multitoner(Gtk.Grid):
         if eps_filename is None:
             return
         
-        result, message = model2eps(self._active_document.model, image_filename, eps_filename)
+        result, message = model2eps(self._active_document.model,
+                                    image_filename, eps_filename)
         if message:
             window = self.get_toplevel()
             show_message(window, *message)

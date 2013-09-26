@@ -103,6 +103,10 @@ class HistoryAPI(object):
     # no need for since this class can handle a missing _history_api
     
     @property
+    def id(self):
+        raise NotImplementedError('The id property is not implemented')
+    
+    @property
     def history_api(self):
         weak_ref = getattr(self, '_history_api', None)
         history_api = None
@@ -158,7 +162,7 @@ class History(object):
         self._conscecutive_command = (None, False, None)
         
         root_model.history_api = self
-        self._root_model = root_model;
+        self._root_model = root_model
     
     def _resolve_path(self, path):
         path = path[:-1] # we don't need the root_model id

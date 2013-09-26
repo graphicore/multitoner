@@ -45,7 +45,7 @@ def show_save_as_dialog(window, filename=None, current_name=None):
                     , Gtk.ResponseType.ACCEPT
         )
     )
-    dialog.set_do_overwrite_confirmation(True);
+    dialog.set_do_overwrite_confirmation(True)
     if current_name is not None:
         dialog.set_current_name(current_name)
     if filename is not None:

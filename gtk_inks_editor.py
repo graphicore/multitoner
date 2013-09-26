@@ -32,7 +32,8 @@ class CellRendererInk (Gtk.CellRendererText):
     For anything else, this could be a Gtk.GtkCellRenderer without objections
     """
     __gsignals__ = repair_gsignals({
-        'received-surface': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_INT, ))
+        'received-surface': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                             (GObject.TYPE_INT, ))
     })
     
     identifier = GObject.property(type=str, default='')
@@ -152,7 +153,8 @@ class CellRendererInk (Gtk.CellRendererText):
         self ... a GtkCellRenderer
         cr : a cairo context to draw to
         widget : the widget owning window
-        background_area : entire cell area (including tree expanders and maybe padding on the sides)
+        background_area : entire cell area (including tree expanders and
+                          maybe padding on the sides)
         cell_area : area normally rendered by a cell renderer
         flags : flags that affect rendering
         """
@@ -311,7 +313,8 @@ class InkController(Emitter):
     """ Comunicate between model and Gtk.ListStore. The latter is important
     to render the InkControlPanel and the gradients displaying Gtk.TreeView.
     
-    This handles the events of the InkControlPanels initialized with init_control_panel.
+    This handles the events of the InkControlPanels initialized with
+    init_control_panel.
     
     Subscribers must implement on_changed_ink_selection which is called with
     two arguments. The instance of InkController and the currently selected
@@ -380,7 +383,8 @@ class InkController(Emitter):
         window = widget.get_toplevel()
         
         #open colorchooser Dialog
-        dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'), window)
+        dialog = Gtk.ColorChooserDialog(_('Pick a color for the editor widget'),
+                                        window)
         color = Gdk.RGBA(*model.display_color)
         dialog.set_rgba(color)
         dialog.run()
@@ -402,7 +406,8 @@ class InkController(Emitter):
             new_index += 1
         if old_index < new_index:
             new_index -= 1
-        new_order = removed_source[0:new_index] + (source.id, ) + removed_source[new_index:]
+        new_order = removed_source[0:new_index] + (source.id, ) \
+                    + removed_source[new_index:]
         self.inks.reorder_by_id_list(new_order)
     
     def init_control_panel(self):
@@ -412,10 +417,12 @@ class InkController(Emitter):
         # ink_control_panel.set_valign(Gtk.Align.END)
         tree_selection = ink_control_panel.get_selection()
         tree_selection.connect('changed', self.changed_ink_selection_handler)
-        ink_control_panel.connect('toggle-visibility', self.toggle_visibility_handler)
+        ink_control_panel.connect('toggle-visibility',
+                                  self.toggle_visibility_handler)
         ink_control_panel.connect('toggle-lock', self.toggle_lock_handler)
         ink_control_panel.connect('delete', self.delete_handler)
-        ink_control_panel.connect('set-display-color', self.set_display_color_handler)
+        ink_control_panel.connect('set-display-color',
+                                  self.set_display_color_handler)
         ink_control_panel.connect('reorder', self.reorder_handler)
         return ink_control_panel
     
@@ -426,10 +433,13 @@ class InkController(Emitter):
         # gradient_view.set_property('headers-visible', False)
         # the width value is just initial and will change when the scale of
         # the CurveEditor changes
-        renderer_ink = CellRendererInk(model=self.inks, gradient_worker=gradient_worker, width=256)
+        renderer_ink = CellRendererInk(model=self.inks,
+                                       gradient_worker=gradient_worker,
+                                       width=256)
         renderer_ink.connect('received-surface', self.receive_surface_handler)
         
-        column_ink = HScalingTreeColumnView(_('Single Ink Gradients'), renderer_ink, identifier=0)
+        column_ink = HScalingTreeColumnView(_('Single Ink Gradients'),
+                                            renderer_ink, identifier=0)
         gradient_view.append_column(column_ink)
         scale.add(column_ink)
         return gradient_view
@@ -442,10 +452,12 @@ class InkController(Emitter):
         self.ink_list_store.row_changed(path, itr)
     
     def _update_row(self, curve_model, curve_event, *args):
-        interpolationName = interpolation_strategies_dict[curve_model.interpolation].name
+        interpolation = interpolation_strategies_dict[curve_model.interpolation]
+        interpolation_name = interpolation.name
+        
         row = self._get_row_by_model(curve_model)
         row[1] = curve_model.name
-        row[2] = interpolationName
+        row[2] = interpolation_name
         row[3] = curve_model.locked
         row[4] = curve_model.visible
     
@@ -456,12 +468,14 @@ class InkController(Emitter):
         self.ink_list_store.remove(itr)
     
     def _insert_into_list(self, curve_model, position):
-        interpolation_name = interpolation_strategies_dict[curve_model.interpolation].name
+        interpolation = interpolation_strategies_dict[curve_model.interpolation]
+        interpolation_name = interpolation.name
+        
         #id, name, interpolation_name (for display), locked, visible
         row = [curve_model.id, curve_model.name, interpolation_name,
                curve_model.locked, curve_model.visible]
         # when position is -1 this appends
-        self.ink_list_store.insert(position, row);
+        self.ink_list_store.insert(position, row)
     
     def _append_to_list(self, curve_model):
         self._insert_into_list(curve_model, -1)
@@ -529,7 +543,8 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
     """
     
     __gsignals__ = repair_gsignals({
-        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
+        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                    (GObject.TYPE_STRING, ))
     })
 
     def __init__(self):
@@ -557,7 +572,8 @@ class CellRendererEditorColor (CellRendererPixbufButton):
         self ... a GtkCellRenderer
         cr : a cairo context to draw to
         widget : the widget owning window
-        background_area : entire cell area (including tree expanders and maybe padding on the sides)
+        background_area : entire cell area (including tree expanders and
+                          maybe padding on the sides)
         cell_area : area normally rendered by a cell renderer
         flags : flags that affect rendering
         """
@@ -577,7 +593,8 @@ class CellRendererToggle(Gtk.CellRenderer):
     """ Render and toggle a property called "active" switching between
     two pixbufs for each state """
     __gsignals__ = repair_gsignals({
-        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
+        'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                    (GObject.TYPE_STRING, ))
     })
     
     #active property
@@ -599,7 +616,8 @@ class CellRendererToggle(Gtk.CellRenderer):
         self ... a GtkCellRenderer
         cr : a cairo context to draw to
         widget : the widget owning window
-        background_area : entire cell area (including tree expanders and maybe padding on the sides)
+        background_area : entire cell area (including tree expanders and
+                          maybe padding on the sides)
         cell_area : area normally rendered by a cell renderer
         flags : flags that affect rendering
         """
@@ -650,7 +668,8 @@ class InkControlPanel(Gtk.TreeView):
         # The reordering is implemented by setting up the tree view as a
         # drag source and destination.
         targets = [('text/plain', Gtk.TargetFlags.SAME_WIDGET, 0)]
-        self.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK, targets, Gdk.DragAction.MOVE)
+        self.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK, targets,
+                                      Gdk.DragAction.MOVE)
         self.enable_model_drag_dest(targets, Gdk.DragAction.MOVE)
         self.connect('drag-data-received', self.drag_data_received_handler)
         self.connect('drag-data-get', self.drag_data_get_handler)
@@ -674,7 +693,8 @@ class InkControlPanel(Gtk.TreeView):
         return
     
     @staticmethod
-    def drag_data_received_handler(treeview, context, x, y, data, info, time, *user_data):
+    def drag_data_received_handler(treeview, context, x, y, data, info,
+                                   time, *user_data):
         """
         Atguments:
         GdkDragContext   context    <gtk.gdk.X11DragContext object at 0x325ad70 (GdkX11DragContext at 0x35fdd30)>,
@@ -689,14 +709,17 @@ class InkControlPanel(Gtk.TreeView):
         target_path, drop_position = treeview.get_dest_row_at_pos(x, y)
         # drop_positions:
         #     # both before
-        before_positions = (Gtk.TreeViewDropPosition.BEFORE, Gtk.TreeViewDropPosition.INTO_OR_BEFORE)
-        after_positions = (Gtk.TreeViewDropPosition.AFTER, Gtk.TreeViewDropPosition.INTO_OR_AFTER)
+        before_positions = (Gtk.TreeViewDropPosition.BEFORE,
+                            Gtk.TreeViewDropPosition.INTO_OR_BEFORE)
+        after_positions = (Gtk.TreeViewDropPosition.AFTER,
+                           Gtk.TreeViewDropPosition.INTO_OR_AFTER)
         if drop_position in before_positions:
             before = True
         elif drop_position in after_positions:
             before = False
         else:
-            warn('drop position is neither before nor after {0}'.format(drop_position))
+            warn('drop position is neither before nor after {0}'\
+                 .format(drop_position))
             return
         
         treeview.emit('reorder', source_path, target_path, before)
@@ -705,8 +728,10 @@ class InkControlPanel(Gtk.TreeView):
     def _init_toggle(self, icons, callback, *data):
         setup = {}
         for key, filename in icons.items():
-            icon_path = os.path.join(self._directory, encode('icons'), encode(filename))
-            setup[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(icon_path, 16, 16)
+            icon_path = os.path.join(self._directory, encode('icons'),
+                                     encode(filename))
+            setup[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(icon_path,
+                                                                16, 16)
         toggle = CellRendererToggle(**setup)
         toggle.set_fixed_size (16, 16)
         toggle.connect('clicked', callback, *data)
@@ -718,22 +743,27 @@ class InkControlPanel(Gtk.TreeView):
     def _init_editor_color_interface(self, model):
         editor_color = CellRendererEditorColor(model=model)
         editor_color.set_fixed_size(16,16)
-        editor_color.connect('clicked', self.generic_handler, 'set-display-color')
-        return editor_color;
+        editor_color.connect('clicked', self.generic_handler,
+                             'set-display-color')
+        return editor_color
     
     def _init_visibility_toggle(self):
-        icons = {'active_icon': 'visible.svg', 'inactive_icon': 'invisible.svg'}
-        return self._init_toggle(icons, self.generic_handler, 'toggle-visibility')
+        icons = {'active_icon': 'visible.svg',
+                 'inactive_icon': 'invisible.svg'}
+        return self._init_toggle(icons, self.generic_handler,
+                                 'toggle-visibility')
     
     def _init_lock_toggle(self):
-        icons = {'active_icon': 'locked.svg', 'inactive_icon': 'unlocked.svg'}
-        return self._init_toggle(icons, self.generic_handler, 'toggle-lock')
+        icons = {'active_icon': 'locked.svg',
+                 'inactive_icon': 'unlocked.svg'}
+        return self._init_toggle(icons, self.generic_handler,
+                                 'toggle-lock')
     
     def _init_delete_button(self):
         button = CellRendererPixbufButton()
         button.set_property('stock-id', Gtk.STOCK_DELETE)
         button.connect('clicked', self.generic_handler, 'delete')
-        return button;
+        return button
     
     def _init_column_id(self, model):
         column = Gtk.TreeViewColumn(_('Tools'))
@@ -751,7 +781,7 @@ class InkControlPanel(Gtk.TreeView):
         column.add_attribute(editor_color, 'identifier', 0)
         column.add_attribute(lock_toggle, 'active', 3)
         column.add_attribute(visibility_toggle, 'active', 4)
-        return column;
+        return column
     
     def _init_column_name(self):
         renderer = Gtk.CellRendererText()
@@ -771,7 +801,9 @@ class InkControlPanel(Gtk.TreeView):
 
 
 class InkSetup(object):
-    """ Interface to change the setup of an ink (name, interplation type, cmyk)"""
+    """ Interface to change the setup of an ink (name, interplation type,
+    cmyk)
+    """
     def __init__(self, model):
         self.model = model
         model.add(self)
@@ -799,9 +831,9 @@ class InkSetup(object):
         
         self._current_ink_id = None
         # events show() connected to
-        self._connected = [];
+        self._connected = []
         self._widgets = {}
-        self.show();
+        self.show()
     
     def on_model_updated(self, model, event, *args):
         if event != 'curveUpdate':
@@ -867,7 +899,8 @@ class InkSetup(object):
             # make the name widget
             widget = Gtk.Entry()
             widget.set_text(ink.name)
-            handler_id = widget.connect('changed', self.name_changed_handler, ink_id);
+            handler_id = widget.connect('changed', self.name_changed_handler,
+                                        ink_id)
             widget.connect('focus-in-event', self.focus_in_handler, ink_id)
             widgets['name'] = (widget, handler_id)
             
@@ -876,7 +909,9 @@ class InkSetup(object):
             widget.set_model(self._interpolations)
             widget.set_id_column(1)
             widget.set_active_id(ink.interpolation)
-            handler_id = widget.connect('changed', self.interpolation_changed_handler, ink_id);
+            handler_id = widget.connect('changed',
+                                        self.interpolation_changed_handler,
+                                        ink_id)
             widgets['interpolation'] = (widget, handler_id)
             
             # insert the name and the interpolation type widget with labels
@@ -891,7 +926,8 @@ class InkSetup(object):
             
             # make and insert the cmyk widgets
             offset = len(ws)
-            for i, (color_attr, label) in enumerate([('c',_('C')),('m',_('M')),('y',_('Y')),('k', _('K'))]):
+            for i, (color_attr, label) in enumerate([('c',_('C')),('m',_('M')),
+                                                     ('y',_('Y')),('k', _('K'))]):
                 w = Gtk.Label(label)
                 w.set_halign(Gtk.Align.START)
                 self._ink_options_box.attach(w, 0,i+offset, 1, 1)
@@ -904,9 +940,11 @@ class InkSetup(object):
                 # page_size : The page size of the adjustment.
                 value = getattr(ink, color_attr)
                 adjustment = Gtk.Adjustment(value, 0.0, 1.0, 0.0001,0.01, 0.0)
-                widget = Gtk.SpinButton(digits=4, climb_rate=0.0001, adjustment=adjustment)
+                widget = Gtk.SpinButton(digits=4, climb_rate=0.0001,
+                    adjustment=adjustment)
                 widget.set_halign(Gtk.Align.FILL)
-                handler_id = widget.connect('value-changed', self.cmyk_value_changed_handler, ink_id, color_attr)
+                handler_id = widget.connect('value-changed',
+                    self.cmyk_value_changed_handler, ink_id, color_attr)
                 widget.connect('focus-in-event', self.focus_in_handler, ink_id)
                 self._ink_options_box.attach(widget, 1, i+offset, 1, 1)
                 widgets[color_attr] = (widget, handler_id)
@@ -958,7 +996,7 @@ class InksEditor(Gtk.Grid):
         # its important to keep a reference of this, otherwise its __dict__
         # gets lost and the ink_setup won't know its model anymore
         # this is a phenomen with gtk
-        self.ink_setup = ink_setup = self._init_ink_setup(model);
+        self.ink_setup = ink_setup = self._init_ink_setup(model)
         # todo: the selection could and maybe should be part of the
         # model data. Then the ink_setup could just subscribe to
         # on_model_updated
@@ -974,7 +1012,8 @@ class InksEditor(Gtk.Grid):
         gradient_view = self.ink_controller.init_gradient_view(
             gradient_worker, curve_editor.scale)
         
-        color_preview_widget = self._init_color_preview_widget(model, gradient_worker)
+        color_preview_widget = self._init_color_preview_widget(model,
+            gradient_worker)
         
         color_preview_label = self._init_color_preview_label()
         open_preview_button = self._init_open_preview_button()
@@ -1004,9 +1043,10 @@ class InksEditor(Gtk.Grid):
         # min width is 256
         curve_editor.set_size_request(256, -1)
         
-        self.add_events(Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.KEY_RELEASE_MASK)
-        self.connect('key-press-event'     , curve_editor.key_press_handler)
-        self.connect('key-release-event'   , curve_editor.key_release_handler)
+        self.add_events(Gdk.EventMask.KEY_PRESS_MASK | \
+                        Gdk.EventMask.KEY_RELEASE_MASK)
+        self.connect('key-press-event'  , curve_editor.key_press_handler)
+        self.connect('key-release-event', curve_editor.key_release_handler)
         
         return curve_editor
     
@@ -1014,7 +1054,7 @@ class InksEditor(Gtk.Grid):
         ink_setup = InkSetup(model)
         ink_setup.gtk.set_valign(Gtk.Align.FILL)
         ink_setup.gtk.set_vexpand(True) # so this pushes itself to the bottom
-        return ink_setup;
+        return ink_setup
     
     def _init_color_preview_widget(self, model, gradient_worker):
         widget = ColorPreviewWidget(model, gradient_worker)
@@ -1038,7 +1078,8 @@ class InksEditor(Gtk.Grid):
         # label 
         label = Gtk.Grid()
         # label icon
-        icon = Gtk.Image.new_from_stock(Gtk.STOCK_PRINT_PREVIEW, Gtk.IconSize.BUTTON)
+        icon = Gtk.Image.new_from_stock(Gtk.STOCK_PRINT_PREVIEW,
+                                        Gtk.IconSize.BUTTON)
         label.attach(icon, 0, 0, 1, 1)
         # label text
         text = Gtk.Label(' ' + _('Open Preview'))
@@ -1070,7 +1111,8 @@ if __name__ == '__main__':
     css_provider.load_from_path('style.css')
     screen = window.get_screen()
     style_context = Gtk.StyleContext()
-    style_context.add_provider_for_screen(screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
+    style_context.add_provider_for_screen(screen, css_provider,
+                                          Gtk.STYLE_PROVIDER_PRIORITY_USER)
     
     window.set_title(_('Ink Tool'))
     window.set_default_size(640, 480)
@@ -1130,19 +1172,24 @@ if __name__ == '__main__':
         {
             'locked': True,
             'name': 'PANTONE 406 C',
-            'display_color': (0.8233333333333334, 0.7876555555555557, 0.7876555555555557),
+            'display_color': (0.8233333333333334, 0.7876555555555557,
+                              0.7876555555555557),
             'cmyk': (0.05, 0.09, 0.1, 0.13),
             'visible': True,
-            'points': [(0, 0.13370473537604458), (1, 0.45403899721448465), (0.18808777429467086, 0.2590529247910863)],
+            'points': [(0, 0.13370473537604458), (1, 0.45403899721448465),
+                       (0.18808777429467086, 0.2590529247910863)],
             'interpolation': 'monotoneCubic'
         },
         {
             'locked': False,
             'name': 'PANTONE 409 C',
-            'display_color': (0.5333333333333333, 0.5411764705882353, 0.5215686274509804),
+            'display_color': (0.5333333333333333, 0.5411764705882353,
+                              0.5215686274509804),
             'cmyk': (0.16, 0.25, 0.21, 0.45),
             'visible': True,
-            'points': [(0, 0), (0.38557993730407525, 0.22841225626740946), (0.7084639498432602, 0.6434540389972145), (1, 0.8495821727019499)],
+            'points': [(0, 0), (0.38557993730407525, 0.22841225626740946),
+                       (0.7084639498432602, 0.6434540389972145),
+                       (1, 0.8495821727019499)],
             'interpolation': 'linear'
         },
         {
@@ -1151,7 +1198,8 @@ if __name__ == '__main__':
             'display_color': (0, 0, 0),
             'cmyk': (0.0, 0.0, 0.0, 0.0),
             'visible': True,
-            'points': [(0.4890282131661442, 0), (1, 1), (0, 0), (0.780564263322884, 0.6295264623955432)],
+            'points': [(0.4890282131661442, 0), (1, 1), (0, 0),
+                       (0.780564263322884, 0.6295264623955432)],
             'interpolation': 'spline'
         }
     ]

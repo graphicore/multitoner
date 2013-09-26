@@ -47,7 +47,7 @@ def _catch_all(func):
         except Exception as e:
             return ('error'
                    , _('Caught a Fatal Exception')
-                   , _('Message: {0} {1} {2}').format(e, type(e), traceback)
+                   , _('Message: {0} {1} {2}').format(e, type(e))
                    )
     return wrapper
 
@@ -156,7 +156,8 @@ class GradientWorker(object):
     
     def _callback(self, callback, user_data, result):
         """ Restore the buffer data from string and run the callback """
-        assert result[0] == 'result', 'Gradient rendering failed {0}, {1} {2}'.format(*result)
+        assert result[0] == 'result', 'Gradient rendering failed {0}, {1} {2}'\
+                                       .format(*result)
         buf = c.create_string_buffer(result[-1])
         result_data = result[1:-1]
         args = user_data + result_data + (buf, )

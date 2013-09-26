@@ -408,7 +408,6 @@ class CanvasControls(object):
         self.canvas.scale = new
     
     def zoom_unit(self):
-        old = self.canvas.scale
         self.canvas.scale = 1
     
     def zoom_fit(self):

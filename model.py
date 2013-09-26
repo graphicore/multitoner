@@ -7,7 +7,7 @@ from emitter import Emitter
 from history import get_calling_command, historize, HistoryAPI
 
 
-__all__ = ['ModelException', 'Model', 'ModelControlPoint', 'ModelCurve'
+__all__ = ['ModelException', 'Model', 'ModelControlPoint', 'ModelCurve',
            'ModelCurves', 'ModelInk']
 
 
@@ -99,7 +99,8 @@ class ModelCurve(Model):
     locked: whether the curve can be manipulated via an editor
     visible: whether the curve is visible in an editor or elsewhere
     """
-    def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', display_color=(0,0,0), locked=False, visible=True):
+    def __init__(self, points=((0,0), (1,1)), interpolation='monotoneCubic',
+                 display_color=(0,0,0), locked=False, visible=True):
         super(ModelCurve, self).__init__()
         self.interpolation = interpolation
         self.points = points
@@ -313,7 +314,7 @@ class ModelInk(ModelCurve):
 
 class ModelCurves(Model):
     """ Model representing a ordered collection of curves """
-    def __init__(self, curves=[], ChildModel=ModelCurve):
+    def __init__(self, curves=(), ChildModel=ModelCurve):
         """ ChildModel is very often ModelInk but ModelCurve would be enough
         for some uses, like a stand alone CurveEditor.
         """
@@ -335,7 +336,7 @@ class ModelCurves(Model):
     
     @curves.setter
     @historize
-    def curves(self, curves=[]):
+    def curves(self, curves=()):
         self._curves = []
         for curve in curves:
             # -1 appends
@@ -358,7 +359,7 @@ class ModelCurves(Model):
         ids = tuple(ids)
         if ids == current_order:
             # the same order was supplied
-            return;
+            return
         
         undo = get_calling_command('reorder_by_id_list', current_order)
         self.add_history(undo)

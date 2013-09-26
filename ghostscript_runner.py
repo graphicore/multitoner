@@ -76,7 +76,7 @@ class GhostScriptRunner(object):
         
         try:
             gs.init_with_args(self.instance, args)
-        except:
+        except Exception:
             # re-raise always
             raise
         finally:
@@ -90,7 +90,7 @@ class GhostScriptRunner(object):
     def _gsdll_stdin(self, instance, dest, count):
         try:
             data = self.stdin.read(count)
-        except:
+        except Exception:
             count = -1
         else:
             if not data:
@@ -108,7 +108,7 @@ class GhostScriptRunner(object):
         sys.stdout.flush()
         return length
     
-    def _gsdll_stderr(self,instance, data, length):
+    def _gsdll_stderr(self, instance, data, length):
         message = data[:length]
         if str is not bytes:
             message = message.decode('utf-8')

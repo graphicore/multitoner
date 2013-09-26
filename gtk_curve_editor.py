@@ -7,7 +7,6 @@ from weakref import ref as weakref
 from math import pi
 
 from gi.repository import Gtk, Gdk
-import cairo
 import numpy as np
 
 from interpolation import interpolation_strategies_dict
@@ -75,7 +74,8 @@ def in_circle(center_x, center_y, radius, x, y):
 
 
 class ControlPoint(Emitter):
-    """ A ControlPoint of a Curve in CurveEditor. Will Modify its according ModelControlPoint
+    """ A ControlPoint of a Curve in CurveEditor. Will Modify its
+    according ModelControlPoint.
     
     Subscribers must implement on_point_delete which is called with a
     single argument, the instance of ControlPoint
@@ -83,7 +83,7 @@ class ControlPoint(Emitter):
     """
     display_radius = 2
     control_radius = 5
-    color = (1,0,0)
+    color = (1, 0, 0)
     cursor_type = Gdk.CursorType.FLEUR
     alt_cursor_type = Gdk.CursorType.PIRATE
     # this is needed for the cairo context arc method, its enough to calculate this once
@@ -235,10 +235,12 @@ class Curve(object):
             setPoints
             interpolation changed
             displayColorChanged
-            pointUpdate (this is triggered by a child model of this, this model is just a relay)
+            pointUpdate (this is triggered by a child model of this, this
+                         model is just a relay)
             
-            all but displayColorChanged require that _curve_points are reset
-            but addPoint, removePoint, setPoints need actions regarding the controlPoints
+            All but displayColorChanged require that _curve_points are reset
+            but addPoint, removePoint, setPoints need actions regarding
+            the controlPoints.
         """
         if event != 'displayColorChanged':
             self._invalidate()
@@ -345,7 +347,9 @@ class CurveEditor(Gtk.DrawingArea):
     
     @classmethod
     def new(Cls, model):
-        """ Factory to create a CurveEditor widget and connect all necessary events """
+        """ Factory to create a CurveEditor widget and connect all
+        necessary events
+        """
         widget = Cls(model)
         widget.add_events(
               Gdk.EventMask.BUTTON_PRESS_MASK
@@ -452,7 +456,8 @@ class CurveEditor(Gtk.DrawingArea):
             alternate = self._state_is_alternate(state)
             allocation = self.get_allocation()
         #the event needs a transformation
-        return self.scale.transform_event((x - allocation.x, y - allocation.y)), alternate
+        return (self.scale.transform_event((x - allocation.x, y - allocation.y)),
+                alternate)
     
     def on_model_updated(self, model, event=None, *args):
         # especially cmykChanged can happen very often and needs no
@@ -505,7 +510,7 @@ class CurveEditor(Gtk.DrawingArea):
             # this is that the new ControlPoint can start dragging immediately
             if old_ctrl == ctrl:
                 # control did not change
-                break;
+                break
             old_ctrl = ctrl
             ctrl.on_button_press(event.button, x, y, alternate)
             ctrl = self._find_control(x, y)
@@ -520,7 +525,7 @@ class CurveEditor(Gtk.DrawingArea):
         while ctrl is not None:
             if old_ctrl == ctrl:
                 # control did not change
-                break;
+                break
             old_ctrl = ctrl
             ctrl.on_button_release(event.button, x, y, alternate)
             ctrl = self._find_control(x, y)
