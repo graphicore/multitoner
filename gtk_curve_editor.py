@@ -335,6 +335,9 @@ class Curve(object):
 class CurveEditor(Gtk.DrawingArea):
     """ Widget to display and manipulate Curves controlled by ControlPoints. """
     background_color = (1,1,1)
+    _tooltip = _('<b>Click</b> on a curve to add a control point. <b>Drag'
+                 '</b> a control point to alter its position. <b>Press Ctrl'
+                 ' and Click</b> on a control point to delete it.')
     def __init__(self, model):
         Gtk.DrawingArea.__init__(self)
         
@@ -344,6 +347,9 @@ class CurveEditor(Gtk.DrawingArea):
         self.model = model
         model.add(self) # subscribe
         self._set_curves()
+        
+        
+        self.set_tooltip_markup(self._tooltip)
     
     @classmethod
     def new(Cls, model):
