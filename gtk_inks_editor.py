@@ -1058,7 +1058,7 @@ if __name__ == '__main__':
     
     from model import ModelCurves, ModelInk
     from ghostscript_workers import GradientWorker, PreviewWorker
-    from preview import PreviewWindow
+    from gtk_preview import PreviewWindow
     from history import History
     
     GObject.threads_init()
