@@ -287,6 +287,11 @@ process_colors = {
 def is_process_color(ink):
     return ink.name in process_colors
 
+def escape_string(string):
+    name = string.replace('\\', '\\\\')
+    name = name.replace(')', '\\)')
+    return name
+
 def get_init_colors(*inks):
     process_color_value = '{0} {1} {2} {3}'
     init_process_colors_tpl = Template(\
@@ -309,7 +314,8 @@ lineto stroke\n} if')
             process_colors_init.append(
                 init_process_colors_tpl.substitute({'value': value}))
         else:
-            value = custom_color_value.format(*ink.cmyk, name=ink.name)
+            
+            value = custom_color_value.format(*ink.cmyk, name=escape_string(ink.name))
             custom_colors_init.append(
                 init_custom_colors_tpl.substitute({'value': value}))
     
@@ -346,17 +352,17 @@ def get_dsc_colors(*inks):
         result.append('%%DocumentProcessColors: {0}'.format(DocumentProcessColors))
     if len(custom_colors):
         DocumentCustomColors = colors_separator.join([
-            '({name})'.format(name=ink.name) for ink in custom_colors])
+            '({name})'.format(name=escape_string(ink.name)) for ink in custom_colors])
         result.append('%%DocumentCustomColors: {0}'.format(DocumentCustomColors))
         result += [
-            cmyk_custom_format.format(*ink.cmyk, name=ink.name) for ink in custom_colors
+            cmyk_custom_format.format(*ink.cmyk, name=escape_string(ink.name)) for ink in custom_colors
         ]
     return '\n'.join(result)   
 
 def get_duotone_names(*inks):
     # '/DuotoneNames [ /Black (PANTONE 144 CVC) ] def',
     names = [
-        ('/{0}' if is_process_color(ink) else '({0})').format(ink.name)
+        ('/{0}' if is_process_color(ink) else '({0})').format(escape_string(ink.name))
         for ink in inks
     ]    
     return '/DuotoneNames [ {0} ] def'.format(' '.join(names))
@@ -371,7 +377,7 @@ def get_duotone_cmyk_values(*inks):
     CMYKValues = '\n'.join([
         cmyk_values_format.format(
             *(process_colors[ink.name] if is_process_color(ink) else ink.cmyk),
-            name=ink.name
+            name=escape_string(ink.name)
         ) for ink in inks
     ])
     return '/DuotoneCMYKValues [\n{0}\n] def'.format(CMYKValues)
