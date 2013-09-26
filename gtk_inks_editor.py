@@ -636,11 +636,30 @@ class CellRendererToggle(Gtk.CellRenderer):
 
 
 class InkControlPanel(Gtk.TreeView):
-    _directory = os.path.dirname(os.path.realpath(__file__)) 
     """ This is the 'table' with the toggles for lock and visibility, the
     delete button and the editor color chooser. Furthermore this can be
     used to reorder the inks with drag and drop.
     """
+    _directory = os.path.dirname(os.path.realpath(__file__))
+    
+    _tooltips = {
+          'editor-color': _('Change the color of the curve in the editor.')
+        , 'visibility': _('Toggle visibility of the ink. A hidden ink will '
+                        'not appear in the final eps document.')
+        , 'lock': _('Toggle the controls for this ink in the curve editor. '
+                  'A locked curve can\'t be changed in the curve editor')
+        , 'delete': _('Delete the curve from the document.')
+        , 'drag_n_drop': _('<b>Click</b> to show the setup interface for '
+                           ' this ink. Use <b>drag and drop</b> to change '
+                           'the order of the inks. The inks will '
+                           'theoretically be printed in order, from bottom '
+                           'to top. As a rule of thumb darker colors '
+                           'should be at the bottom while lighter colors '
+                           'should be at the top.') # FIXME: verify these claims!
+                       
+    }
+    
+    
     __gsignals__ = repair_gsignals({
           'toggle-visibility': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
                             # path
@@ -674,14 +693,47 @@ class InkControlPanel(Gtk.TreeView):
         self.connect('drag-data-received', self.drag_data_received_handler)
         self.connect('drag-data-get', self.drag_data_get_handler)
         
-        def init_column_id():
-            """ needs ink_model as argument, thus the currying """
-            return self._init_column_id(ink_model)
+        self.connect('query-tooltip', self.query_tooltip_handler)
+        self.set_property('has-tooltip', True)
         
-        for initiate in (init_column_id, self._init_column_name,
-                         self._init_column_curve_type):
+        def init_column_tools():
+            """ needs ink_model as argument, thus the currying """
+            return self._init_column_tools(ink_model)
+        
+        for name, initiate in (
+                    ('tools', init_column_tools)
+                    , ('name', self._init_column_name)
+                    , ('curve', self._init_column_curve_type)
+                ):
             column = initiate()
+            column.name = name
             self.append_column(column)
+        
+    def query_tooltip_handler(self, treeview, x, y, keyboard_mode, tooltip):
+        tooltip_context = treeview.get_tooltip_context(x, y, keyboard_mode)
+        has_row, cell_x, cell_y, model, path, iter = tooltip_context
+        if not has_row:
+            return False
+        path_at_pos = treeview.get_path_at_pos(cell_x, cell_y)
+        if path_at_pos is None:
+            return False
+        path, column = path_at_pos[0:2]
+        if column is None:
+            return False
+        if column.name in ('name', 'curve'):
+            tooltip.set_markup(self._tooltips['drag_n_drop'])
+            return True
+        elif column.name != 'tools':
+            return False
+        # tooltips for the tools column
+        for cell in column.get_cells():
+            col_x, col_width = column.cell_get_position(cell)
+            if cell_x > col_x and cell_x <= col_x + col_width:
+                if cell.name not in self._tooltips:
+                    return False
+                tooltip.set_markup( self._tooltips[cell.name])
+                return True
+        return True
     
     @staticmethod
     def drag_data_get_handler(treeview, context, selection, info, timestamp):
@@ -745,27 +797,33 @@ class InkControlPanel(Gtk.TreeView):
         editor_color.set_fixed_size(16,16)
         editor_color.connect('clicked', self.generic_handler,
                              'set-display-color')
+        editor_color.name = 'editor-color'
         return editor_color
     
     def _init_visibility_toggle(self):
         icons = {'active_icon': 'visible.svg',
                  'inactive_icon': 'invisible.svg'}
-        return self._init_toggle(icons, self.generic_handler,
-                                 'toggle-visibility')
+        toggle = self._init_toggle(icons, self.generic_handler,
+                                   'toggle-visibility')
+        toggle.name = 'visibility'
+        return toggle
     
     def _init_lock_toggle(self):
         icons = {'active_icon': 'locked.svg',
                  'inactive_icon': 'unlocked.svg'}
-        return self._init_toggle(icons, self.generic_handler,
-                                 'toggle-lock')
+        toggle = self._init_toggle(icons, self.generic_handler,
+                                   'toggle-lock')
+        toggle.name = 'lock'
+        return toggle
     
     def _init_delete_button(self):
         button = CellRendererPixbufButton()
         button.set_property('stock-id', Gtk.STOCK_DELETE)
         button.connect('clicked', self.generic_handler, 'delete')
+        button.name = 'delete'
         return button
     
-    def _init_column_id(self, model):
+    def _init_column_tools(self, model):
         column = Gtk.TreeViewColumn(_('Tools'))
         
         visibility_toggle = self._init_visibility_toggle()
@@ -804,6 +862,24 @@ class InkSetup(object):
     """ Interface to change the setup of an ink (name, interplation type,
     cmyk)
     """
+    
+    _cmyk_tooltip_format = _('<b>{color}</b> color component to approximate'
+                             ' the ink color in print preview.')
+    _tooltips = {
+          'c': _cmyk_tooltip_format.format(color=_('Cyan'))
+        , 'm': _cmyk_tooltip_format.format(color=_('Magenta'))
+        , 'y': _cmyk_tooltip_format.format(color=_('Yellow'))
+        , 'k': _cmyk_tooltip_format.format(color=_('Black'))
+        , 'name': _('The name of the color, often you would wan\'t to use '
+                    'a name of a <i>color matching system</i> such as '
+                    '<i>RAL</i> or <i>Pantone</i>. Special names are '
+                    '<b>Cyan</b>, <b>Magenta</b>, <b>Yellow</b> and '
+                    '<b>Black</b>. These are the names of the <i>CMYK '
+                    'process colors</i>. When using a process color '
+                    'setting a custom color value for preview will have '
+                    'no effect.')
+    }
+    
     def __init__(self, model):
         self.model = model
         model.add(self)
@@ -825,9 +901,9 @@ class InkSetup(object):
         # however, since it worked before I have no proof that this is done
         # right, so when it breaks some day, look here
         self.gtk.add_events (0 | Gdk.EventMask.FOCUS_CHANGE_MASK)
-        self._interpolations = Gtk.ListStore(str, str)
+        self._interpolations = Gtk.ListStore(str, str, str)
         for key, item in interpolation_strategies:
-            self._interpolations.append([item.name, key])
+            self._interpolations.append([key, item.name, item.description])
         
         self._current_ink_id = None
         # events show() connected to
@@ -899,15 +975,25 @@ class InkSetup(object):
             # make the name widget
             widget = Gtk.Entry()
             widget.set_text(ink.name)
+            widget.set_tooltip_markup(self._tooltips['name'])
+            
             handler_id = widget.connect('changed', self.name_changed_handler,
                                         ink_id)
             widget.connect('focus-in-event', self.focus_in_handler, ink_id)
             widgets['name'] = (widget, handler_id)
             
             # make the interpolation type widget
-            widget = Gtk.ComboBoxText.new()
+            widget = Gtk.ComboBox()
             widget.set_model(self._interpolations)
-            widget.set_id_column(1)
+            widget.set_id_column(0)
+            widget.set_property('has-tooltip', True)
+            widget.connect('query-tooltip',
+                           self.interpolation_query_tooltip_handler)
+            
+            text_renderer = Gtk.CellRendererText()
+            widget.pack_start(text_renderer, False)
+            widget.add_attribute(text_renderer, 'text', 1)
+            
             widget.set_active_id(ink.interpolation)
             handler_id = widget.connect('changed',
                                         self.interpolation_changed_handler,
@@ -943,15 +1029,26 @@ class InkSetup(object):
                 widget = Gtk.SpinButton(digits=4, climb_rate=0.0001,
                     adjustment=adjustment)
                 widget.set_halign(Gtk.Align.FILL)
+                widget.set_tooltip_markup(self._tooltips[color_attr])
+                
                 handler_id = widget.connect('value-changed',
                     self.cmyk_value_changed_handler, ink_id, color_attr)
                 widget.connect('focus-in-event', self.focus_in_handler, ink_id)
                 self._ink_options_box.attach(widget, 1, i+offset, 1, 1)
                 widgets[color_attr] = (widget, handler_id)
+                
             for widget, __ in widgets.values():
                 widget.set_hexpand(True)
             self._ink_options_box.show_all()
-        
+    
+    @staticmethod
+    def interpolation_query_tooltip_handler(widget, x, y, keyboard_mode,
+                                            tooltip, *user_data):
+        iter = widget.get_active_iter()
+        model = widget.get_model()
+        tooltip.set_text(model[iter][2])
+        return True
+    
     def focus_in_handler(self, widget, __, ink_id):
         self.model.get_by_id(ink_id).register_consecutive_command()
     
