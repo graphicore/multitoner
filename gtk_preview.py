@@ -4,7 +4,7 @@
 from __future__ import division, print_function, unicode_literals
 
 from gi.repository import Gtk, GObject, Gdk, GLib
-from gtk_extended import ActionGroup
+from gtk_actiongroup import ActionGroup
 import cairo
 from weakref import ref as weakref
 import math
