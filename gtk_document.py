@@ -10,9 +10,9 @@ import json
 from gi.repository import Gtk, GObject
 
 from gtk_inks_editor import InksEditor
+from gtk_preview import PreviewWindow
 from model import ModelCurves, ModelInk
 from history import History
-from gtk_preview import PreviewWindow
 from emitter import Emitter
 from compatibility import repair_gsignals
 
