@@ -9,7 +9,7 @@ from gtk_extended import ActionGroup
 from dialogs import show_open_image_dialog, show_message, show_save_as_dialog, \
                     show_save_as_eps_dialog
 
-from document import Document
+from gtk_document import Document
 from ghostscript_workers import factory as gs_workers_factory
 from mtt2eps import model2eps
 
