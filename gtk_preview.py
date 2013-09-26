@@ -9,7 +9,7 @@ import cairo
 from weakref import ref as weakref
 import math
 from compatibility import repair_gsignals
-from dialogs import show_open_image_dialog, show_message, show_save_as_eps_dialog
+from gtk_dialogs import show_open_image_dialog, show_message, show_save_as_eps_dialog
 from mtt2eps import model2eps
 
 __all__ = ['PreviewWindow']
