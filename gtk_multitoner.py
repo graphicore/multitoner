@@ -50,6 +50,17 @@ UI_INFO = """
       <menuitem action='EditOpenPreview' />
     </menu>
   </menubar>
+  <toolbar name="ToolBar">
+      <toolitem action='FileNew' />
+      <toolitem action='FileOpen' />
+      <toolitem action='FileSaveDocument' />
+      <separator />
+      <toolitem action='EditUndo' />
+      <toolitem action='EditRedo' />
+      <separator />
+      <toolitem action='EditOpenPreview' />
+      <toolitem action='FileExportImage' />
+  </toolbar>
 </ui>
 """
 
@@ -64,8 +75,10 @@ class Multitoner(Gtk.Grid):
         
         self._document_actions = self._make_document_actions()
         self._global_actions = self._make_global_actions()
-        self.menubar = menubar = self._init_menu()
+        menubar, toolbar = self._init_menu()
+         
         self.attach(menubar, 0, 0, 1, 1)
+        self.attach(toolbar, 0, 1, 1, 1)
         self._notebook = Gtk.Notebook()
         self._notebook.set_scrollable(True)
         
@@ -73,7 +86,7 @@ class Multitoner(Gtk.Grid):
         self._notebook.connect('page-removed' , self.page_add_remove_handler)
         self._notebook.connect('page-added'   , self.page_add_remove_handler)
         
-        self.attach(self._notebook, 0, 1, 1, 1)
+        self.attach(self._notebook, 0, 2, 1, 1)
         self._set_active_document_state()
         self._set_global_state()
     
@@ -160,7 +173,7 @@ class Multitoner(Gtk.Grid):
         uimanager.insert_action_group(self._global_actions)
         uimanager.insert_action_group(self._document_actions)
         menubar = uimanager.get_widget("/MenuBar")
-        
+        toolbar = uimanager.get_widget("/ToolBar")
         #toolbar = uimanager.get_widget("/ToolBar")
         # this removes the immediate dependency to window
         def onRealize(widget, *args):
@@ -175,7 +188,7 @@ class Multitoner(Gtk.Grid):
             widget.disconnect(realize_handler_id)
         #save realize_handler_id for the closure of onRealize 
         realize_handler_id = self.connect('realize' , onRealize)
-        return menubar
+        return menubar, toolbar
     
     def _make_global_actions(self):
         action_group = ActionGroup('global_actions')
@@ -210,23 +223,23 @@ class Multitoner(Gtk.Grid):
         action_group = ActionGroup('document_actions')
         action_group.add_actions([
               ('EditUndo', Gtk.STOCK_UNDO, _('Undo'),  '<Ctrl>z',
-               None, self.action_edit_undo_handler)
+               _('undo'), self.action_edit_undo_handler)
             , ('EditRedo', Gtk.STOCK_REDO, _('Redo'), '<Ctrl>y',
-               None, self.action_edit_redo_handler)
+               _('redo'), self.action_edit_redo_handler)
             , ('FileSaveDocument', Gtk.STOCK_SAVE, _('Save'), '<ctrl>s',
-               None, self.action_file_save_document_handler)
+               _('Save the current document.'), self.action_file_save_document_handler)
             , ('FileSaveAsDocument', Gtk.STOCK_SAVE, _('Save As'), '<ctrl><alt>s',
                None, self.action_file_save_document_as_handler)
             , ('FileClose', Gtk.STOCK_CLOSE, _('Close'), '<ctrl>w',
                None, self.action_file_close_handler)
-            , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close Other Documents'),
+            , ('FileCloseOther', Gtk.STOCK_CLOSE, _('Close other documents'),
                '<ctrl><alt>w', None, self.action_file_close_other_handler)
-            , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open a Preview Window'),
-              None, None, self.action_open_preview_handler)
+            , ('EditOpenPreview', Gtk.STOCK_PRINT_PREVIEW, _('Open A Preview Window'),
+              None,  _('Open a preview window.'), self.action_open_preview_handler)
             ])
         
         action_group.add_icon_actions([
-              ('FileExportImage', _('Export Image'), _('Export Image as EPS file'),
+              ('FileExportImage', _('Export An Image'), _('Export an image as EPS file'),
                'document-save', self.action_file_export_image_handler, '<ctrl>E')
             # , ...
             ])

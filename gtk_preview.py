@@ -601,18 +601,18 @@ class PreviewWindow(Gtk.Window):
             , ('ZoomOut', Gtk.STOCK_ZOOM_OUT, None, 'minus',
                _('Zoom Out'), self.action_zoom_out_handler)
             , ('ZoomUnit', Gtk.STOCK_ZOOM_100, None, '1',
-               _('Zoom to Normal Size'), self.action_zoom_unit_handler)
+               _('Zoom to normal size.'), self.action_zoom_unit_handler)
             ])
         
         action_group.add_icon_actions([
-              ('ZoomFit', None, _('Zoom To Fit Image To Windowsize'),
+              ('ZoomFit', None, _('Zoom to fit image to window size.'),
                 None, self.action_zoom_fit_handler, 'F', Gtk.STOCK_ZOOM_FIT,
                 Gtk.ToggleAction)
-            , ('RotateRight',  _('Rotate Clockwise'), _('Rotate Clockwise'),
+            , ('RotateRight',  _('Rotate Clockwise'), _('Rotate clockwise.'),
               'object-rotate-right', self.action_rotate_right_handler, 'R')
-            , ('RotateLeft', _('Rotate Counterclockwise'), _('Rotate Counterclockwise'),
+            , ('RotateLeft', _('Rotate Counterclockwise'), _('Rotate counterclockwise.'),
               'object-rotate-left', self.action_rotate_left_handler, 'L')
-            , ('ExportImage', _('Export Image'), _('Export Image as EPS file'),
+            , ('ExportImage', _('Export Image'), _('Export image as EPS file.'),
                'document-save', self.action_export_image_handler, 'E')
             ])
         return action_group
