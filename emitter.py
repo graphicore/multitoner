@@ -53,7 +53,8 @@ class Emitter(object):
         """
         self._subscriptions.remove(thing)
     
-    def _getstate(self, state):
+    @classmethod
+    def _cleanstate(Cls, state):
         """ pickle protocol: Remove the weakset when pickling. """
         # this is what the __ makes with atrribute names:
         #    _{0}{1}.format(ClassName, MethodName)
@@ -62,7 +63,7 @@ class Emitter(object):
     
     def __getstate__(self):
         state = self.__dict__.copy() # copy the dict since we change it
-        return self._getstate(_getstate)
+        return self._cleanstate(state)
     
     # def __setstate__():
-    # no need for since this Class can handle a missing _Emitter__subscriptions
+    # no need for since this class can handle a missing _Emitter__subscriptions

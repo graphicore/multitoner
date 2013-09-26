@@ -4,18 +4,21 @@
 from __future__ import division, print_function, unicode_literals
 
 import numpy as np
-# http://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
-from scipy import interpolate 
+from scipy import interpolate # http://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
+
 
 __all__ = ['InterpolationStrategy', 'InterpolatedSpline', 'InterpolatedMonotoneCubic'
            'InterpolatedLinear', 'interpolation_strategies',
            'interpolation_strategies_dict']
 
+
 # just a preparation for i18n
 def _(string):
     return string
 
+
 class InterpolationStrategy(object):
+    """ Abstract base class for all interpolation strategies. """
     @property
     def name(self):
         raise NotImplementedError('Name must be defined by subclass')
@@ -41,16 +44,14 @@ class InterpolationStrategy(object):
         self._y = np.array(pts[1], dtype=float)
     
     def __call__(self, xs):
-        """
-        takes an np array of x values and returns an np array of the same
-        length as the input array representing the corresponding y values
+        """ Take an np array of x values and return an np array of the same
+        length as the input array representing the corresponding y values.
         """
         return self._function(xs)
 
+
 class InterpolatedSpline(InterpolationStrategy):
-    """
-    Produces a smooth spline between the input points
-    """
+    """ Produces a smooth spline between the input points """
     name = _('Spline')
     description = _('Very smooth but very self-willed, too.')
     def set_points(self, points):
@@ -62,10 +63,10 @@ class InterpolatedSpline(InterpolationStrategy):
             k = M-1
         self._function = interpolate.UnivariateSpline(self._x,self._y,s=0,k=k)
 
+
 class InterpolatedMonotoneCubic(InterpolationStrategy):
-    """
-    Produces a smoothend curve between the input points using a monotonic
-    cubic interpolation PCHIP: Piecewise Cubic Hermite Interpolating Polynomia
+    """ Produces a smoothend curve between the input points using a monotonic
+    cubic interpolation PCHIP: Piecewise Cubic Hermite Interpolating Polynomia.
     """
     name = _('Monotone Cubic')
     description = _('Smooth and does what you say. Not as smooth as Spline.')
@@ -73,14 +74,14 @@ class InterpolatedMonotoneCubic(InterpolationStrategy):
         super(InterpolatedMonotoneCubic, self).set_points(points)
         self._function = interpolate.pchip(self._x, self._y)
 
+
 class InterpolatedLinear(InterpolationStrategy):
-    """
-    Produces a lineaer interpolation between the input points
-    """
+    """ Produces a lineaer interpolation between the input points. """
     name = _('Linear')
     description = _('Just straight lines between control points.')
     def _function(self, xs):
         return np.interp(xs, self._x, self._y)
+
 
 # this is to keep the list ordered
 interpolation_strategies = (
@@ -88,5 +89,6 @@ interpolation_strategies = (
     ('spline'       , InterpolatedSpline),
     ('linear'       , InterpolatedLinear)
 )
+
 # this is for faster lookup
 interpolation_strategies_dict = dict(interpolation_strategies)

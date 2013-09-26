@@ -10,12 +10,20 @@ except ImportError:
 from weakref import ref as weakref
 from functools import wraps
 from warnings import warn
+
 from compatibility import encode
 
+
 __all__ = ['History', 'get_setter_command', 'get_calling_command', 'historize',
-           'ModelHistoryApi']
+           'HistoryAPI']
+
 
 def get_setter_command(name, value):
+    """ Return a method that takes an object as argument and set value
+    to the attribute name: setattr(obj, name, value).
+    
+    value is stored pickled, so it won't change anymore.
+    """
     pickled_value = pickle.dumps(value, -1)
     def cmd(obj):
         value = pickle.loads(pickled_value)
@@ -26,7 +34,13 @@ def get_setter_command(name, value):
     cmd.__name__= encode('set__{0}__'.format(name))
     return cmd
 
+
 def get_calling_command(method, *args):
+    """ Return a method that takes an object as argument and calls its method
+    method and args as arguments: getattr(obj, method)(*args)
+    
+    args is stored pickled, so it won't change anymore.
+    """
     pickled_args = pickle.dumps(args, -1)
     def cmd(obj):
         args = pickle.loads(pickled_args)
@@ -39,6 +53,22 @@ def get_calling_command(method, *args):
 
 
 def historize(fn):
+    """ decorator to create history entries for setters made with @property.setters
+    
+    The decorated methods must be of an object implementing add_history
+    like in HistoryAPI:
+    >>>
+    Class Example(HistoryAPI)
+        @property
+        def name(self):
+            return self._name
+        
+        @name.setter
+        @historize
+        def name(self, value):
+            self._name = value
+    <<<
+    """
     @wraps(fn)
     def wrapper(*args, **kwds):
         name = fn.__name__
@@ -55,16 +85,22 @@ def historize(fn):
         return fn(*args, **kwds)
     return wrapper
 
-class ModelHistoryApi(object):
-    def _getstate(self, state):
+
+class HistoryAPI(object):
+    """ Collect history entries """
+    
+    @classmethod
+    def _cleanstate(Cls, state):
         if '_history_api' in state:
             del state['_history_api'] # remove the WeakRef
-    def __getstate__(self):
-        state = self.__dict__.copy() # copy the dict since we change it
-        return self._getstate(_getstate)
     
-    # no need for since this Class can handle a missing _history_api
+    def __getstate__(self):
+        """ pickle protocol: Remove the parent history_api. """
+        state = self.__dict__.copy() # copy the dict since we change it
+        return self._cleanstate(state)
+    
     # def __setstate__():
+    # no need for since this class can handle a missing _history_api
     
     @property
     def history_api(self):
@@ -92,7 +128,8 @@ class ModelHistoryApi(object):
         history_api.add_history(command, path)
     
     def register_consecutive_command(self, path=None):
-        """
+        """ Register the following command as beeing consecutive.
+        
         The view is about to execute the same command with different values
         consecutively zero or more times. To make just one history entry
         of that process, the view can use this method. Then the following
@@ -103,12 +140,14 @@ class ModelHistoryApi(object):
             path = []
         path.append(self.id)
         
-        history_api = self.history_api
+        history_api = self.history_api # cache the value of the getter
         if history_api is None:
             return
         history_api.register_consecutive_command(path)
 
+
 class History(object):
+    """ Manage history entries and execute undo/redo commands """
     def __init__(self, root_model):
         self._undo_commands = []
         self._redo_commands = []

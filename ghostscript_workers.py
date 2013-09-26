@@ -3,7 +3,6 @@
 
 from __future__ import division, print_function, unicode_literals
 
-import sys
 from multiprocessing import Pool
 import ctypes as c
 from array import array
@@ -12,7 +11,6 @@ import PIL.Image as Image
 
 from epstool import EPSTool
 from mtt2eps import open_image
-from model import ModelInk
 from ghostscript_runner import GhostScriptRunner, GhostscriptError
 from compatibility import range, encode
 
@@ -33,18 +31,14 @@ def _init_ghostscript():
     gs = GhostScriptRunner()
 
 def initializer(*args):
-    """ 
-    import and initialize ghostscript only in a worker process
-    the main process doesn't need it
-    """
+    """  Initialize the worker environment """
     _init_ghostscript()
 
 def _catch_all(func):
-    """
-    Catch all exceptions in the worker and return an answer to display to the user.
+    """ Catch all exceptions in the worker and return a message to display to the user.
     
     The Worker Pool with callback doesn't propagate Exceptions in the
-    worke, instead the callback just never gets called.
+    worker, instead the callback just never gets called.
     """
     @wraps(func)
     def wrapper(*args):
@@ -59,9 +53,11 @@ def _catch_all(func):
 
 @_catch_all
 def work(eps):
-    """
-    This runs in its own process, ideally, then there is no threading
-    problem with ghostscript
+    """ Render eps in a worker process. Return a result or an error message
+    
+    A result is ('result', int width, int height, int rowstride, bytes image data)
+    An error is ('error', string message, string or None more_info')
+
     """
     try:
         r = gs.run(eps)
@@ -76,11 +72,12 @@ def work(eps):
     return result
 
 def no_work(result):
-    """ stick to the asynchronous paradigma """
+    """ Stick to the asynchronous paradigma but do nothing. Return the argument. """
     return result
 
 # end in the process
 class PreviewWorker(object):
+    """ Worker ro render eps images asynchronously """
     def __init__(self, pool):
         self.pool = pool
         self._data = {}
@@ -90,15 +87,14 @@ class PreviewWorker(object):
         pool = Pool(initializer=initializer, processes=processes)
         return Cls(pool)
     
-    def remove_client(self, client_widget, client_id):
+    def remove_client(self, client_id):
+        """ remove the cached data for client_id """
         if client_id in self._data:
             del self._data[client_id]
         return True
     
     def _callback(self, callback, user_data, result, notice):
-        """
-        this restores the buffer data from string and runs the callback
-        """
+        """ Restore the buffer data from string and run the callback """
         type = result[0]
         if type == 'result':
             buf = c.create_string_buffer(result[-1])
@@ -126,7 +122,7 @@ class PreviewWorker(object):
         return eps_tool, notice, error
     
     def add_job(self, client_id, callback_data, image_name, *inks):
-        # notice will be used in the cb closure
+        # 'notice' will be used in the cb closure
         eps_tool, notice, error = self._get_client_data(client_id, image_name)
         
         if error is not None:
@@ -143,6 +139,7 @@ class PreviewWorker(object):
         self.pool.apply_async(worker, args=args, callback=cb)
     
 class GradientWorker(object):
+    """ Worker to render the gradient of one ore more instances of ModelCurve """
     def __init__(self, pool):
         self.pool = pool
         
@@ -158,9 +155,7 @@ class GradientWorker(object):
         return Cls(pool)
     
     def _callback(self, callback, user_data, result):
-        """
-        this restores the buffer data from string and runs the callback
-        """
+        """ Restore the buffer data from string and run the callback """
         assert result[0] == 'result', 'Gradient rendering failed {0}, {1} {2}'.format(*result)
         buf = c.create_string_buffer(result[-1])
         result_data = result[1:-1]
@@ -175,6 +170,10 @@ class GradientWorker(object):
         self.pool.apply_async(work, args=(eps, ), callback=cb)
     
 def factory():
+    """ Create a GradientWorker and a PreviewWorker both sharing the same
+    worker pool. Return (instance of GradientWorker, instance of PreviewWorker).
+    
+    """
     processes = None
     pool = Pool(initializer=initializer, processes=processes)
     gradient_worker = GradientWorker(pool)

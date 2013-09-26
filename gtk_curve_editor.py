@@ -4,14 +4,14 @@
 from __future__ import division, print_function, unicode_literals
 
 from weakref import ref as weakref
-import warnings
 from math import pi
+
 from gi.repository import Gtk, Gdk
 import cairo
 import numpy as np
-from interpolation import interpolation_strategies, interpolation_strategies_dict
+
+from interpolation import interpolation_strategies_dict
 from emitter import Emitter
-from model import ModelCurves
 
 __all__ = ['CurveEditor']
 
@@ -20,39 +20,67 @@ def _(string):
     return string
 
 class Scale(Emitter):
+    """ Scale internal values (between 0 and 1) to screen dimensions and back.
+    
+    Subscribers must implement on_scale_change which is called with a
+    single argument, the instance of scale
+    
+    """
     def __init__(self, wh = (1, 1)):
         super(Scale, self).__init__()
         self._wh = None
         self(wh)
     
     def __call__(self,wh=None):
+        """ Set wh (screen width, screen height) as the screen dimansions
+        
+        This will inform all subscribers if wh really changes the value.
+        """
         if wh is not None and self._wh != wh:
             self._wh = wh
             self.trigger_on_change()
         return self._wh
     
     def trigger_on_change(self):
+        """ Inform all subscribers when the screen dimensions changed. """
         for item in self._subscriptions:
             item.on_scale_change(self)
     
     def to_screen(self, point):
+        """ Transform point coordinates betewwen 0 and 1 to screen coordinates """
         return (point[0] * self._wh[0], point[1] * self._wh[1])
     
     def transform_cairo(self, cr):
+        """ Scale the cairo context cr to screen width and height.
+        
+        The cairo context will fit to this scale if its contents use 
+        coordinates between 0 and 1.
+        
+        """
         cr.scale(self._wh[0], self._wh[1])
     
     def transform_event(self, event_xy):
+        """ Inverted the y value of event_xy """
         return (event_xy[0], self._wh[1] - event_xy[1])
     
     def to_unit(self, xy):
         return (xy[0] / self._wh[0], xy[1] / self._wh[1])
 
+
 def in_circle(center_x, center_y, radius, x, y):
+    """ Test if (x, y) is in the circle described by (center_x, center_y, radius) """
     square_dist = (center_x - x) ** 2 + (center_y - y) ** 2
     # if <= is used instead of < the test would include the points *on* the circle
     return square_dist < radius ** 2
 
+
 class ControlPoint(Emitter):
+    """ A ControlPoint of a Curve in CurveEditor. Will Modify its according ModelControlPoint
+    
+    Subscribers must implement on_point_delete which is called with a
+    single argument, the instance of ControlPoint
+    
+    """
     display_radius = 2
     control_radius = 5
     color = (1,0,0)
@@ -125,7 +153,9 @@ class ControlPoint(Emitter):
     def on_motion_notify(self, x_in, y_in):
         self._set_coordinates(self.scale.to_unit((x_in, y_in)))
 
-class Curve(Emitter):
+
+class Curve(object):
+    """ A Curve in CurveEditor. Will Modify its according ModelCurve """
     control_radius = 5
     line_width = 1
     cursor_type = Gdk.CursorType.PLUS
@@ -146,20 +176,18 @@ class Curve(Emitter):
         self._interpolation_strategy = None
     
     def _set_points(self):
-        """ remove all control points and build them again from self.model """
+        """ Remove all control points and build them again from self.model """
         self._controls = []
         for cp_model in self.model.points:
             self._add_control_point(cp_model)
     
     @property
     def get_ys(self):
-        """
-            This returns an InterpolationStrategy which itself is a callable
-            that takes as argument either one x or an array of xs and returns
-            the according y value(s).
+        """ Returns an instance of InterpolationStrategy which itself
+        is a callable. InterpolationStrategy takes as argument either
+        one x or an array of xs and returns the according y value(s).
             
-            use like:
-                ys = curve.get_ys(xs)
+        Use it like: ys = curve.get_ys(xs)
         """
         if self._interpolation_strategy is None:
             IS = interpolation_strategies_dict[self.model.interpolation]
@@ -201,7 +229,7 @@ class Curve(Emitter):
     
     def on_model_updated(self, model, event=None, *args):
         """
-        there are several occasions for a model update:
+        There are several occasions for a model update:
             addPoint
             removePoint
             setPoints
@@ -231,7 +259,10 @@ class Curve(Emitter):
         self.model.remove_point(ctrl.model)
     
     def _get_intersection(self, x_in):
-        """ intersection y of x """
+        """ Return a tuple (x, y) where y intersects x
+        
+        x_in is in screen units. The return values are beteen 0 and 1.
+        """
         unit_x, _ = self.scale.to_unit((x_in, 0))
         unit_x = max(0, min(1, unit_x))
         unit_y = max(0, min(1, self.get_ys(unit_x)))
@@ -280,9 +311,11 @@ class Curve(Emitter):
         return in_circle(x, y, self.control_radius, x_in, y_in)
     
     def get_control(self, x, y, level=None):
-        """
-        When 'level' we can first ask for all ControlPoints and then
-        for all curves. So all ControllPoints are 'over' all Curves
+        """ Return the active control at x, y
+        
+        When 'level' is used we can first ask for all ControlPoints (level = 0)
+        and then for all curves (level = 2). So all ControllPoints are 'over'
+        all Curves
         """
         if self.model.locked:
             return None
@@ -296,7 +329,9 @@ class Curve(Emitter):
                 return self
         return None
 
+
 class CurveEditor(Gtk.DrawingArea):
+    """ Widget to display and manipulate Curves controlled by ControlPoints. """
     background_color = (1,1,1)
     def __init__(self, model):
         Gtk.DrawingArea.__init__(self)
@@ -310,9 +345,7 @@ class CurveEditor(Gtk.DrawingArea):
     
     @classmethod
     def new(Cls, model):
-        """
-        a factory to create a CurveEditor widget and connect all necessary events
-        """
+        """ Factory to create a CurveEditor widget and connect all necessary events """
         widget = Cls(model)
         widget.add_events(
               Gdk.EventMask.BUTTON_PRESS_MASK
@@ -358,7 +391,6 @@ class CurveEditor(Gtk.DrawingArea):
             self._append_curve(curve_model)
     
     def configure_handler(self, widget, event):
-        # print('on configure')
         # set the scale to show the data in visible sizes
         newscale = (event.width, event.height)
         # if scale changed it will trigger the onScaleCange callbacks
@@ -525,6 +557,9 @@ class CurveEditor(Gtk.DrawingArea):
                 self._set_cursor(ctrl, alternate=False)
 
 if __name__ == '__main__':
+    from interpolation import interpolation_strategies
+    from model import ModelCurves
+    
     w = Gtk.Window()
     w.set_default_size(640, 480)
     w.connect('destroy', Gtk.main_quit)

@@ -8,6 +8,7 @@ from gi.repository import Gtk
 __all__ = ['ActionGroup']
 
 class ActionGroup(Gtk.ActionGroup):
+    """ Extend Gtk.ActionGroup with a more powerful way of bulk adding actions """
     def __init__(self, *args):
         Gtk.ActionGroup.__init__(self, *args)
 

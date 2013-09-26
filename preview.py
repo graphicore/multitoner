@@ -3,11 +3,9 @@
 
 from __future__ import division, print_function, unicode_literals
 
-import sys
 from gi.repository import Gtk, GObject, Gdk, GLib
 from gtk_extended import ActionGroup
 import cairo
-from emitter import Emitter
 from weakref import ref as weakref
 import math
 from compatibility import repair_gsignals
@@ -59,12 +57,13 @@ UI_INFO = """
 """
 
 class Canvas(Gtk.Viewport):
+    """ Handle the display and transformation of a cairo_surface """
+    
     __gsignals__ = repair_gsignals({
         'scale-to-fit-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (
                                  # the value of scale_to_fit
                                  GObject.TYPE_BOOLEAN, ))
     })
-    
     
     def __init__(self, *args):
         Gtk.Viewport.__init__(self, *args)
@@ -387,7 +386,9 @@ class Canvas(Gtk.Viewport):
             cr.rectangle(left, top, width, height)
             cr.fill()
 
-class CanvasControls(Emitter):
+
+class CanvasControls(object):
+    """ Simplified interface for Canvas """
     def __init__(self, canvas):
         self.canvas = canvas
     
@@ -420,7 +421,11 @@ class CanvasControls(Emitter):
     def rotate_left(self):
         self.canvas.add_rotation(-0.5)
 
+
 class ScrollByHandTool(Gtk.EventBox):
+    """ Drag and drop interface to scroll the Image (2 adjustments) when
+    the mouse button is pressed and scrolling is possible
+    """
     def __init__(self, hadjustment, vadjustment):
         Gtk.EventBox.__init__(self)
         self.add_events(
@@ -487,6 +492,9 @@ class ScrollByHandTool(Gtk.EventBox):
 
 
 class PreviewWindow(Gtk.Window):
+    """ Display a preview of an image rendered as eps with inks_model as
+    source for the PostScript device deviceN.
+    """
     def __init__(self, preview_worker, inks_model, image_name=None):
         Gtk.Window.__init__(self)
         inks_model.add(self) #subscribe
@@ -494,7 +502,7 @@ class PreviewWindow(Gtk.Window):
         
         def destroy_handler(self):
             # remove the PreviewWindow from preview_worker
-            preview_worker.remove_client(self, self.id)
+            preview_worker.remove_client(self.id)
             
             # This fixes a bug where references to the PreviewWindow still
             # existed in the signal handler functions of the actions.
@@ -530,7 +538,6 @@ class PreviewWindow(Gtk.Window):
         self.canvas.set_halign(Gtk.Align.CENTER)
         self.canvas.set_valign(Gtk.Align.CENTER)
         self.canvas_ctrl = CanvasControls(self.canvas)
-        self.canvas_ctrl.add(self) # subscribe
         
         self.scrolled.add(self.canvas)
         self.scrolled.set_hexpand(True)
@@ -783,6 +790,7 @@ class PreviewWindow(Gtk.Window):
             show_message(window, *message)
 
 if __name__ == '__main__':
+    """ this can be used as stand alone preview application """
     import sys
     import json
     from model import ModelCurves, ModelInk

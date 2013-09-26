@@ -4,35 +4,52 @@
 from __future__ import division, print_function, unicode_literals
 
 from emitter import Emitter
-from history import get_calling_command, historize, ModelHistoryApi
+from history import get_calling_command, historize, HistoryAPI
+
 
 __all__ = ['ModelException', 'Model', 'ModelControlPoint', 'ModelCurve'
            'ModelCurves', 'ModelInk']
+
 
 # just a preparation for i18n
 def _(string):
     return string
 
+
 _unique_id_counter = 0
 def get_unique_id():
+    """ not public method. Create a new id for each created model. 
+    
+    The id will be unique during the whole runtime of the programm,
+    as long as this module is not forcefully reloaded.
+    """
     global _unique_id_counter
     result = _unique_id_counter
     _unique_id_counter += 1
     return result
 
+
 class ModelException(Exception):
     pass
 
-class Model(ModelHistoryApi, Emitter):
+
+class Model(HistoryAPI, Emitter):
+    """ Abstract base class for all models.
+    
+    Subscribers must implement on_model_updated which is called with the
+    emmiting instance as first argument and more arguments depending on
+    the concrete model implementation
+    """
     def __init__(self):
         super(Model, self).__init__()
         _id = get_unique_id()
         self._id = _id
     
     def __getstate__(self):
+        """ pickle protocol: clean state from Emitter subscriptions and HistoryAPI """
         state = self.__dict__.copy() # copy the dict since we change it
-        ModelHistoryApi._getstate(self, state)
-        Emitter._getstate(self, state)
+        HistoryAPI._cleanstate(state)
+        Emitter._cleanstate(state)
         return state
     
     @property
@@ -48,7 +65,9 @@ class Model(ModelHistoryApi, Emitter):
         for item in self._subscriptions:
             item.on_model_updated(self, *args)
 
+
 class ModelControlPoint(Model):
+    """ Model representing one control point """
     def __init__(self, xy):
         super(ModelControlPoint, self).__init__()
         self.xy = xy
@@ -68,7 +87,18 @@ class ModelControlPoint(Model):
             self._xy = xy
             self.trigger_on_model_updated()
 
+
 class ModelCurve(Model):
+    """ Model representing a curve: an interpolation strategy and two or
+    more control points.
+    
+    The control points are in no specific order
+    
+    Further data is:
+    display_color: the color used to draw the curve in an editor
+    locked: whether the curve can be manipulated via an editor
+    visible: whether the curve is visible in an editor or elsewhere
+    """
     def __init__(self, points=[(0,0), (1,1)], interpolation='monotoneCubic', display_color=(0,0,0), locked=False, visible=True):
         super(ModelCurve, self).__init__()
         self.interpolation = interpolation
@@ -83,6 +113,9 @@ class ModelCurve(Model):
         self._connect(*self._points)
     
     def get_args(self):
+        """ Returns a dict that can be used to make a model with the same value.
+        All values in the dict are simple python types.
+        """
         return {
             'points': [p.xy for p in self.points],
             'interpolation': self.interpolation,
@@ -118,9 +151,9 @@ class ModelCurve(Model):
         self.trigger_on_model_updated('addPoint', model)
     
     def remove_point(self, model):
-        """
-            removes the point with model id
-            the invert of this is add_point
+        """ Remove the point model.
+        
+            The invert of this is add_point.
         """
         if len(self._points) == 2:
             return
@@ -138,10 +171,12 @@ class ModelCurve(Model):
     
     @property
     def points(self):
-        # this returns an unordered tuple of the point models
-        # the _points list is not returned because changing the _points
-        # list would change the model value and that's not intended as part
-        # of the interface
+        """ Return an unordered tuple of the point models.
+        
+        The _points list is not returned because changing the _points list
+        would change the model value and that's not intended as part
+        of the interface.
+        """
         return tuple(self._points)
         
     @points.setter
@@ -195,9 +230,93 @@ class ModelCurve(Model):
     def visible(self, value):
         self._visible = bool(value)
         self.trigger_on_model_updated('visibleChanged')
+
+
+class ModelInk(ModelCurve):
+    """ Model extending ModelCurve with properties needed to use a ModelCurve
+    as Ink in an PostScript deviceN setting.
     
+    name: will be used to choose the right ink when printing the eps
+    cmyk: is used to approximate the ink color in the preview.
+    """
+    def __init__(self, name=_('(unnamed)'), cmyk=(0.0, 0.0, 0.0, 0.0), **args):
+        super(ModelInk, self).__init__(**args)
+        self.name = name
+        self.cmyk = cmyk
+    
+    def get_args(self):
+        args = super(ModelInk, self).get_args()
+        args['name'] = self.name
+        args['cmyk'] = self.cmyk
+        return args
+    
+    @property
+    def name(self):
+        return self._name
+    
+    @name.setter
+    @historize
+    def name(self, value):
+        self._name = value
+        self.trigger_on_model_updated('nameChanged')
+    
+    @property
+    def cmyk(self):
+        return tuple(self._cmyk)
+    
+    @cmyk.setter
+    @historize
+    def cmyk(self, value):
+        self._cmyk = list(value)
+        self.trigger_on_model_updated('cmykChanged')
+    
+    @property
+    def c(self):
+        return self._cmyk[0]
+    
+    @c.setter
+    @historize
+    def c(self, value):
+        self._cmyk[0] = value
+        self.trigger_on_model_updated('cmykChanged')
+    
+    @property
+    def m(self):
+        return self._cmyk[1]
+    
+    @m.setter
+    @historize
+    def m(self, value):
+        self._cmyk[1] = value
+        self.trigger_on_model_updated('cmykChanged')
+    
+    @property
+    def y(self):
+        return self._cmyk[2]
+    
+    @y.setter
+    @historize
+    def y(self, value):
+        self._cmyk[2] = value
+        self.trigger_on_model_updated('cmykChanged')
+    
+    @property
+    def k(self):
+        return self._cmyk[3]
+    
+    @k.setter
+    @historize
+    def k(self, value):
+        self._cmyk[3] = value
+        self.trigger_on_model_updated('cmykChanged')
+
+
 class ModelCurves(Model):
+    """ Model representing a ordered collection of curves """
     def __init__(self, curves=[], ChildModel=ModelCurve):
+        """ ChildModel is very often ModelInk but ModelCurve would be enough
+        for some uses, like a stand alone CurveEditor.
+        """
         super(ModelCurves, self).__init__()
         self.ChildModel = ChildModel
         self.curves = curves
@@ -314,74 +433,3 @@ class ModelCurves(Model):
         model = self.get_by_id(modelId)
         self.remove_curve(model)
 
-class ModelInk(ModelCurve):
-    def __init__(self, name=_('(unnamed)'), cmyk=(0.0, 0.0, 0.0, 0.0), **args):
-        super(ModelInk, self).__init__(**args)
-        self.name = name
-        self.cmyk = cmyk
-    
-    def get_args(self):
-        args = super(ModelInk, self).get_args()
-        args['name'] = self.name
-        args['cmyk'] = self.cmyk
-        return args
-    
-    @property
-    def name(self):
-        return self._name
-    
-    @name.setter
-    @historize
-    def name(self, value):
-        self._name = value
-        self.trigger_on_model_updated('nameChanged')
-    
-    @property
-    def cmyk(self):
-        return tuple(self._cmyk)
-    
-    @cmyk.setter
-    @historize
-    def cmyk(self, value):
-        self._cmyk = list(value)
-        self.trigger_on_model_updated('cmykChanged')
-    
-    @property
-    def c(self):
-        return self._cmyk[0]
-    
-    @c.setter
-    @historize
-    def c(self, value):
-        self._cmyk[0] = value
-        self.trigger_on_model_updated('cmykChanged')
-    
-    @property
-    def m(self):
-        return self._cmyk[1]
-    
-    @m.setter
-    @historize
-    def m(self, value):
-        self._cmyk[1] = value
-        self.trigger_on_model_updated('cmykChanged')
-    
-    @property
-    def y(self):
-        return self._cmyk[2]
-    
-    @y.setter
-    @historize
-    def y(self, value):
-        self._cmyk[2] = value
-        self.trigger_on_model_updated('cmykChanged')
-    
-    @property
-    def k(self):
-        return self._cmyk[3]
-    
-    @k.setter
-    @historize
-    def k(self, value):
-        self._cmyk[3] = value
-        self.trigger_on_model_updated('cmykChanged')

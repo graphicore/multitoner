@@ -9,14 +9,17 @@ import json
 from epstool import EPSTool
 from model import ModelCurves, ModelInk
 
+
 __all__ = ['open_image', 'model2eps', 'mtt2eps']
+
 
 # just a preparation for i18n
 def _(string):
     return string
 
+
 def open_image(filename):
-    """ returns (eps_tool, notice, error)
+    """ Return (eps_tool, notice, error)
     
     eps_tool: an instance of eps_tool loaded with the data of the image at filename
     notice: a tuple with a notice for the user or None
@@ -46,19 +49,23 @@ def open_image(filename):
         
     return eps_tool, notice, error
 
+
 def make_eps(inks, image_filename):
     eps_tool, notice, error = open_image(image_filename)
     eps_tool.set_color_data(*inks)
     return eps_tool.create(), notice, error
 
+
 def make_eps_from_model(model, image_filename):
     return make_eps(model.visible_curves, image_filename)
-    
+
+
 def open_mtt_file(mtt_filename):
     with open(mtt_filename, 'r') as f:
         data = json.load(f)
     model = ModelCurves(ChildModel=ModelInk, **data)
     return model
+
 
 def model2eps(model, image_filename, eps_filename):
     eps, notice, error = make_eps_from_model(model, image_filename)
@@ -69,9 +76,11 @@ def model2eps(model, image_filename, eps_filename):
     else:
         return False, error
 
+
 def mtt2eps(mtt_filename, image_filename, eps_filename):
     model = open_mtt_file(mtt_filename)
     return model2eps(model, image_filename, eps_filename)
+
 
 if __name__ == '__main__':
     import sys

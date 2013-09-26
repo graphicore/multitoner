@@ -4,19 +4,16 @@
 from __future__ import division, print_function, unicode_literals
 
 import os
-import sys
+from weakref import ref as weakref
+
 from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, Pango
 import cairo
-from weakref import ref as weakref
 
 from gtk_curve_editor import CurveEditor
 from interpolation import interpolation_strategies, interpolation_strategies_dict
 from emitter import Emitter
-from model import ModelCurves, ModelInk
-from ghostscript_workers import GradientWorker, PreviewWorker
-from preview import PreviewWindow
-from history import History
 from compatibility import repair_gsignals, encode, decode, range
+
 
 __all__ = ['InksEditor']
 
@@ -24,20 +21,21 @@ __all__ = ['InksEditor']
 def _(string):
     return string
 
+
 class CellRendererInk (Gtk.CellRendererText):
-    """
-    Display a preview gradient for just one color in the TreeView
+    """Display a preview gradient for just one color in the TreeView
     
-    inheriting from CellRendererText had two advantages
-    1. the other GtkTreeWidget is rendered with CellRendererTexts, that
-       this widget uses the right height automatically
-    2. I couldn't figure out how to set a custom property, so i can reuse
-       the "text" property to get the ink id
-    for anything else, this could be a Gtk.GtkCellRenderer without objections
+    Inheriting from CellRendererText has one advantage: The other GtkTreeWidget
+    (the InkControlPanel) is rendered with CellRendererText, so this widget
+    uses the right height automatically
+       
+    For anything else, this could be a Gtk.GtkCellRenderer without objections
     """
     __gsignals__ = repair_gsignals({
         'received-surface': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_INT, ))
     })
+    
+    identifier = GObject.property(type=str, default='')
     
     def __init__(self, model, gradient_worker, width=-1, height=-1):
         Gtk.CellRendererText.__init__(self)
@@ -159,8 +157,7 @@ class CellRendererInk (Gtk.CellRendererText):
         flags : flags that affect rendering
         """
         # print ('cellRendererInk', cell_area.width, cell_area.height, cell_area.x, cell_area.y)
-        iid_hash = self.get_property('text')
-        iid = int(iid_hash)
+        iid = int(self.get_property('identifier'))
         cairo_surface = None
         if iid in self.state:
             cairo_surface = self.state[iid]['surface']
@@ -181,10 +178,9 @@ class CellRendererInk (Gtk.CellRendererText):
                 cr.paint()
             cr.set_matrix(ctm)
 
+
 class ColorPreviewWidget(Gtk.DrawingArea):
-    """
-        display a preview gradient of all visible colors using ghostscript
-    """
+    """ Display a preview gradient of all visible colors in model. """
     def __init__(self, model, gradient_worker):
         Gtk.DrawingArea.__init__(self)
         model.add(self) #subscribe
@@ -283,35 +279,43 @@ class ColorPreviewWidget(Gtk.DrawingArea):
                 cr.paint()
             cr.set_matrix(ctm)
 
+
 class HScalingTreeColumnView (Gtk.TreeViewColumn):
-    """ 
-        a Gtk.TreeViewColumn that scales its width according to the scale
+    """ Gtk.TreeViewColumn that scales its width according to the scale
         object it should to be subscribed to.
         
-        hookup the renderer to the scale objects on_scale_change:
+        Hookup the renderer to the scale objects on_scale_change:
         scale.add(object of HScalingTreeColumnView)
     """
-    def __init__(self, name, renderer, text):
+    def __init__(self, name, renderer, identifier):
         self.renderer = renderer
-        Gtk.TreeViewColumn.__init__(self, name, renderer, text=text)
+        Gtk.TreeViewColumn.__init__(self, name, renderer, identifier=identifier)
     
     def on_scale_change(self, scale):
-        """ be as wide as the curve widget """
+        """ Scale this widget to the width of scale.
+        
+        Be as wide as CurveEditor. So the coherence of the curves and the
+        displayed (result) gradient is visible.
+        """
         w, _ = scale()
         if w != self.renderer.width:
             self.renderer.width = w
             self.queue_resize()
 
+
 class InkControllerException(Exception):
     pass
 
+
 class InkController(Emitter):
-    """
-    This is the interface used by the widgets.
-    I'm unsure right now if the Widgets should rather emmit events
-    that the instance of this class would subscribe to
-    The attempt to have control over ModelCurves and a here synchronized
-    Gtk.ListStore
+    """ Comunicate between model and Gtk.ListStore. The latter is important
+    to render the InkControlPanel and the gradients displaying Gtk.TreeView.
+    
+    This handles the events of the InkControlPanels initialized with init_control_panel.
+    
+    Subscribers must implement on_changed_ink_selection which is called with
+    two arguments. The instance of InkController and the currently selected
+    ink_id (or None).
     """
     def __init__(self, model):
         Emitter.__init__(self)
@@ -425,13 +429,13 @@ class InkController(Emitter):
         renderer_ink = CellRendererInk(model=self.inks, gradient_worker=gradient_worker, width=256)
         renderer_ink.connect('received-surface', self.receive_surface_handler)
         
-        column_ink = HScalingTreeColumnView(_('Single Ink Gradients'), renderer_ink, text=0)
+        column_ink = HScalingTreeColumnView(_('Single Ink Gradients'), renderer_ink, identifier=0)
         gradient_view.append_column(column_ink)
         scale.add(column_ink)
         return gradient_view
     
     def receive_surface_handler(self, widget, ink_id):
-        """ schedules a redraw """
+        """ Schedules a redraw. """
         row = self._get_row_by_id(ink_id)
         path = row.path
         itr = self.ink_list_store.get_iter(path)
@@ -492,9 +496,7 @@ class InkController(Emitter):
 
 
 class AddInkButton(Gtk.Button):
-    """
-    Button to add one more Ink to model
-    """
+    """ Button to add one more Ink to the instance of ModelCurves """
     def __init__(self, model, stock_id=None, tooltip=None):
         Gtk.Button.__init__(self)
         if stock_id is not None:
@@ -521,11 +523,11 @@ class AddInkButton(Gtk.Button):
         active = len(model) < self.max_inks
         self.set_sensitive(active)
 
+
 class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
+    """ Render a button in a cell and emit a "clicked" signal
     """
-    used to render a button in a cell using a Gtk.CellRendererPixbuf
-    and emits a "clicked" signal
-    """
+    
     __gsignals__ = repair_gsignals({
         'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
     })
@@ -539,10 +541,10 @@ class CellRendererPixbufButton(Gtk.CellRendererPixbuf):
         self.emit('clicked', path)
         return True # activate event got 'consumed'
 
+
 class CellRendererEditorColor (CellRendererPixbufButton):
-    """
-    render the color of the ink that has the id of the "identifier" property
-    and emmits a "clicked" signal
+    """ Render the display_color of the ink with the id of the "identifier"
+    property and emmit a "clicked" signal.
     """
     def __init__(self, model):
         CellRendererPixbufButton.__init__(self)
@@ -570,10 +572,10 @@ class CellRendererEditorColor (CellRendererPixbufButton):
         cr.rectangle(x, y, width, height)
         cr.fill()
 
+
 class CellRendererToggle(Gtk.CellRenderer):
-    """
-    A cell renderer that renders and can toggle a  property called "active"
-    """
+    """ Render and toggle a property called "active" switching between
+    two pixbufs for each state """
     __gsignals__ = repair_gsignals({
         'clicked': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_STRING, ))
     })
@@ -614,9 +616,9 @@ class CellRendererToggle(Gtk.CellRenderer):
         Gdk.cairo_set_source_pixbuf(cr, pixbuf, x, y)
         cr.paint()
 
+
 class InkControlPanel(Gtk.TreeView):
-    """
-    This is the 'table' with the toggles for lock and visibility, the
+    """ This is the 'table' with the toggles for lock and visibility, the
     delete button and the editor color chooser. Furthermore this can be
     used to reorder the inks with drag and drop.
     """
@@ -766,12 +768,9 @@ class InkControlPanel(Gtk.TreeView):
         column.set_property('min-width', 120)
         return column
 
+
 class InkSetup(object):
-    """
-    This is the Interface to change the setup of an ink
-    
-    todo: this should subscribe to model
-    """
+    """ Interface to change the setup of an ink (name, interplation type, cmyk)"""
     def __init__(self, model):
         self.model = model
         model.add(self)
@@ -836,6 +835,7 @@ class InkSetup(object):
             widget.handler_unblock(handler_id)
     
     def show(self, ink_id=None):
+        """ Switch the active ink. """
         if ink_id is None:
             # just disable, this prevents the size of the box from changing
             # and it tells the ui story somehow right, or?
@@ -931,25 +931,24 @@ class InkSetup(object):
         value = widget.get_adjustment().get_value()
         setattr(ink, color_attr,  value)
 
+
 class InksEditor(Gtk.Grid):
+    """ Display and manipulate a model like ModelCurves with 'ChildModel's
+    like ModelInk """
     __gsignals__ = repair_gsignals({
           'open-preview': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, 
                             # nothing
                             ())
     })
     
-    
     def __init__(self, model, gradient_worker):
-        """
-        gradient_worker: a initialized gradient_worker
-        """
         Gtk.Grid.__init__(self)
         self.set_column_spacing(5)
         self.set_row_spacing(5)
         
         self.ink_controller = InkController(model)
         
-        curve_editor = self.init_curve_editor(model)
+        curve_editor = self._init_curve_editor(model)
         
         tool_column = Gtk.Grid()
         tool_column.set_row_spacing(5)
@@ -958,7 +957,7 @@ class InksEditor(Gtk.Grid):
         # its important to keep a reference of this, otherwise its __dict__
         # gets lost and the ink_setup won't know its model anymore
         # this is a phenomen with gtk
-        self.ink_setup = ink_setup = self.init_ink_setup(model);
+        self.ink_setup = ink_setup = self._init_ink_setup(model);
         # todo: the selection could and maybe should be part of the
         # model data. Then the ink_setup could just subscribe to
         # on_model_updated
@@ -974,11 +973,11 @@ class InksEditor(Gtk.Grid):
         gradient_view = self.ink_controller.init_gradient_view(
             gradient_worker, curve_editor.scale)
         
-        color_preview_widget = self.init_color_preview_widget(model, gradient_worker)
+        color_preview_widget = self._init_color_preview_widget(model, gradient_worker)
         
-        color_preview_label = self.init_color_preview_label()
-        open_preview_button = self.init_open_preview_button()
-        add_ink_button = self.init_add_ink_button(model)
+        color_preview_label = self._init_color_preview_label()
+        open_preview_button = self._init_open_preview_button()
+        add_ink_button = self._init_add_ink_button(model)
         
         # left : the column number to attach the left side of child to
         # top : the row number to attach the top side of child to
@@ -996,7 +995,7 @@ class InksEditor(Gtk.Grid):
         tool_column.attach(open_preview_button, 0, 1, 1, 1)
         tool_column.attach(color_preview_label, 0, 1, 1, 1)
         
-    def init_curve_editor(self, model):
+    def _init_curve_editor(self, model):
         curve_editor = CurveEditor.new(model)
         # will take all the space it can get
         curve_editor.set_hexpand(True)
@@ -1010,13 +1009,13 @@ class InksEditor(Gtk.Grid):
         
         return curve_editor
     
-    def init_ink_setup(self, model):
+    def _init_ink_setup(self, model):
         ink_setup = InkSetup(model)
         ink_setup.gtk.set_valign(Gtk.Align.FILL)
         ink_setup.gtk.set_vexpand(True) # so this pushes itself to the bottom
         return ink_setup;
     
-    def init_color_preview_widget(self, model, gradient_worker):
+    def _init_color_preview_widget(self, model, gradient_worker):
         widget = ColorPreviewWidget(model, gradient_worker)
         widget.set_hexpand(True)
         widget.set_vexpand(False)
@@ -1024,17 +1023,17 @@ class InksEditor(Gtk.Grid):
         widget.set_size_request(-1, 30)
         return widget
     
-    def init_color_preview_label(self):
+    def _init_color_preview_label(self):
         label = Gtk.Label(_('Result:'))
         label.set_halign(Gtk.Align.END)
         return label
     
-    def init_add_ink_button(self, model):
+    def _init_add_ink_button(self, model):
         button = AddInkButton(model, Gtk.STOCK_ADD, _('Add a new ink'))
         button.set_halign(Gtk.Align.START)
         return button
     
-    def init_open_preview_button(self):
+    def _init_open_preview_button(self):
         # label 
         label = Gtk.Grid()
         # label icon
@@ -1056,6 +1055,12 @@ class InksEditor(Gtk.Grid):
 
 if __name__ == '__main__':
     import sys
+    
+    from model import ModelCurves, ModelInk
+    from ghostscript_workers import GradientWorker, PreviewWorker
+    from preview import PreviewWindow
+    from history import History
+    
     GObject.threads_init()
     use_gui, __ = Gtk.init_check(sys.argv)
     window = Gtk.Window()

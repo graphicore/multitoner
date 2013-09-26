@@ -19,6 +19,7 @@ __all__ = ['GhostscriptError', 'GhostScriptRunner']
 GhostscriptError = gs.GhostscriptError
 
 class GhostScriptRunner(object):
+    """ Render a string of PostScript (better EPS) to a ctypes buffer"""
     def __init__(self):
         self.args = None
         self._args = ['-dEPSCrop']
@@ -53,10 +54,14 @@ class GhostScriptRunner(object):
         gs.set_display_callback(self.instance, c.byref(self._references['display']))
     
     def cleanup(self):
+        """ Purge the ghostscript instance """
         gs.delete_instance(self.instance)
         self.instance = None
     
     def run(self, eps):
+        """ Render the string in eps to a buffer in a format suitable for
+        Cairo surfaces. Return a tuple: (width, height, rowstride, ctypes string buffer)
+        """
         CAIRO_FORMAT_RGB24 = gs.DISPLAY_COLORS_RGB | gs.DISPLAY_UNUSED_LAST | \
                              gs.DISPLAY_DEPTH_8 | gs.DISPLAY_LITTLEENDIAN
         dformat = "-dDisplayFormat=%d" % \
