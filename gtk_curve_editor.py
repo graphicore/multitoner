@@ -338,6 +338,8 @@ class CurveEditor(Gtk.DrawingArea):
     _tooltip = _('<b>Click</b> on a curve to add a control point. <b>Drag'
                  '</b> a control point to alter its position. <b>Press Ctrl'
                  ' and Click</b> on a control point to delete it.')
+    _help_pixbuf = Gtk.IconTheme.get_default().load_icon(Gtk.STOCK_HELP, 25, 0)
+    _help_pixbuf_offset = 5
     def __init__(self, model):
         Gtk.DrawingArea.__init__(self)
         
@@ -349,8 +351,10 @@ class CurveEditor(Gtk.DrawingArea):
         self._set_curves()
         
         
-        self.set_tooltip_markup(self._tooltip)
-
+        self.connect('query-tooltip', self.query_tooltip_handler)
+        self.set_property('has-tooltip', True)
+        
+        
         #connect all necessary events
         
         self.add_events(
@@ -427,6 +431,8 @@ class CurveEditor(Gtk.DrawingArea):
                         break
                 if ctrl is not None:
                     break
+        if ctrl is None:
+            self._ctrl = None
         return ctrl
     
     def _set_cursor(self, ctrl=None, alternate=False):
@@ -483,6 +489,22 @@ class CurveEditor(Gtk.DrawingArea):
         
         self.queue_draw()
     
+    @classmethod
+    def query_tooltip_handler(cls, widget, x, y, keyboard_mode, tooltip):
+        """ Draws a tooltip when the mouse is over the tooltip icon and if
+        no other control is active.
+        """
+        if widget.get_control() is not None:
+            return False # another control is active
+        pixbuf = cls._help_pixbuf
+        offset = cls._help_pixbuf_offset
+        
+        if x >= offset and x < pixbuf.get_width() + offset or \
+                y >= offset and y < pixbuf.get_height() + offset:
+            tooltip.set_markup(cls._tooltip)
+            return True
+        return False
+    
     def draw_handler(self, widget, cr):
         # y = 0 is the bottom of the widget
         width, height = self.scale()
@@ -491,13 +513,22 @@ class CurveEditor(Gtk.DrawingArea):
         cr.rectangle(0, 0, width, height)
         cr.fill()
         
+        # This indicates the region where the tooltip of the editor is shown.
+        # Showing the tooltip everywhere was very disturbing.
+        pixbuf = self._help_pixbuf
+        offset = self._help_pixbuf_offset
+        Gdk.cairo_set_source_pixbuf(cr, pixbuf, offset, offset)
+        cr.paint_with_alpha(0.5)
+        
+        
         cr.translate(0, height)
         cr.scale(1, -1)
         
         for curve in reversed(self._curves):
             curve.draw(cr)
         for curve in self._curves:
-            curve.draw_controls(cr) 
+            curve.draw_controls(cr)
+        
     
     def button_press_handler(self, widget, event):
         #https://developer.gnome.org/gdk/stable/gdk-Event-Structures.html#GdkEventButton
