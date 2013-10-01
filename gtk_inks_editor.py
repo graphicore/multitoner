@@ -1132,7 +1132,7 @@ class InksEditor(Gtk.Grid):
         tool_column.attach(color_preview_label, 0, 1, 1, 1)
         
     def _init_curve_editor(self, model):
-        curve_editor = CurveEditor.new(model)
+        curve_editor = CurveEditor(model)
         # will take all the space it can get
         curve_editor.set_hexpand(True)
         curve_editor.set_vexpand(True)

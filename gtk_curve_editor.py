@@ -350,14 +350,10 @@ class CurveEditor(Gtk.DrawingArea):
         
         
         self.set_tooltip_markup(self._tooltip)
-    
-    @classmethod
-    def new(Cls, model):
-        """ Factory to create a CurveEditor widget and connect all
-        necessary events
-        """
-        widget = Cls(model)
-        widget.add_events(
+
+        #connect all necessary events
+        
+        self.add_events(
               Gdk.EventMask.BUTTON_PRESS_MASK
             | Gdk.EventMask.BUTTON_RELEASE_MASK
             | Gdk.EventMask.BUTTON1_MOTION_MASK
@@ -369,17 +365,15 @@ class CurveEditor(Gtk.DrawingArea):
         #    | Gdk.EventMask.KEY_RELEASE_MASK
         )
         
-        widget.connect('draw'                , widget.draw_handler)
-        widget.connect('button-press-event'  , widget.button_press_handler)
-        widget.connect('button-release-event', widget.button_release_handler)
-        widget.connect('motion-notify-event' , widget.motion_notify_handler)
-        widget.connect('configure-event'     , widget.configure_handler)
+        self.connect('draw'                , self.draw_handler)
+        self.connect('button-press-event'  , self.button_press_handler)
+        self.connect('button-release-event', self.button_release_handler)
+        self.connect('motion-notify-event' , self.motion_notify_handler)
+        self.connect('configure-event'     , self.configure_handler)
         
-        # the widget needs to widget.grab_focus to receive these events
-        # widget.connect('key-press-event'     , widget.key_press_handler)
-        # widget.connect('key-release-event'   , widget.key_release_handler)
-        
-        return widget
+        # the self needs to self.grab_focus to receive these events
+        # self.connect('key-press-event'     , self.key_press_handler)
+        # self.connect('key-release-event'   , self.key_release_handler)
     
     def _insert_curve(self, position, curve_model):
         if position < 0:
@@ -580,7 +574,7 @@ if __name__ == '__main__':
     for interpolation, _ in interpolation_strategies:
         m.append_curve({'points':points, 'interpolation': interpolation})
     
-    a = CurveEditor.new(m)
+    a = CurveEditor(m)
     w.add(a)
     
     w.connect('key-press-event'     , a.key_press_handler)
