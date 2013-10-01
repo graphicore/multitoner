@@ -870,14 +870,13 @@ class InkSetup(object):
         , 'm': _cmyk_tooltip_format.format(color=_('Magenta'))
         , 'y': _cmyk_tooltip_format.format(color=_('Yellow'))
         , 'k': _cmyk_tooltip_format.format(color=_('Black'))
-        , 'name': _('The name of the color, often you would wan\'t to use '
-                    'a name of a <i>color matching system</i> such as '
-                    '<i>RAL</i> or <i>Pantone</i>. Special names are '
-                    '<b>Cyan</b>, <b>Magenta</b>, <b>Yellow</b> and '
-                    '<b>Black</b>. These are the names of the <i>CMYK '
-                    'process colors</i>. When using a process color '
-                    'setting a custom color value for preview will have '
-                    'no effect.')
+        , 'name': _('The name of the color, e.g. the color-name of a <i>' 
+                    'color matching system</i> such as <i>RAL</i> or '
+                    '<i>Pantone</i>. Special names are <b>Cyan</b>, '
+                    '<b>Magenta</b>, <b>Yellow</b> and <b>Black</b>. '
+                    'These are the names of the <i>CMYK process colors'
+                    '</i>. When using a process color setting a custom '
+                    'color value for preview will have no effect.')
     }
     
     def __init__(self, model):
