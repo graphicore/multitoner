@@ -290,6 +290,7 @@ def is_process_color(ink):
 def escape_string(string):
     name = string.replace('\\', '\\\\')
     name = name.replace(')', '\\)')
+    name = name.replace('(', '\\(')
     return name
 
 def get_init_colors(*inks):
