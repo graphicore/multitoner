@@ -499,18 +499,24 @@ if __name__ == '__main__':
     """ bootstrap the application """
     import sys
     import os
-    from gi.repository import GObject
+    from gi.repository import GObject, GdkPixbuf
     
     GObject.threads_init()
     use_gui, __ = Gtk.init_check(sys.argv)
     
     window = Gtk.Window()
     window.set_title(_('Multitoner'))
+    multitoner_icon_filename = os.path.join(DIRECTORY, 'assets', 'images',
+                                            'multitoner_icon.svg')
+    multitoner_icon = GdkPixbuf.Pixbuf.new_from_file(multitoner_icon_filename)
+    window.set_icon(multitoner_icon)
+    
     window.set_position(Gtk.WindowPosition.CENTER)
     window.set_default_size(640, 480)
     window.set_has_resize_grip(True)
     # the theme should do so
     window.set_border_width(5)
+    
     
     css_provider = Gtk.CssProvider()
     css_provider.load_from_path(CSS_FILE)

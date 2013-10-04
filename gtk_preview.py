@@ -3,7 +3,9 @@
 
 from __future__ import division, print_function, unicode_literals
 
-from gi.repository import Gtk, GObject, Gdk, GLib
+import os
+
+from gi.repository import Gtk, GObject, Gdk, GLib, GdkPixbuf
 from gtk_actiongroup import ActionGroup
 import cairo
 from weakref import ref as weakref
@@ -13,6 +15,8 @@ from gtk_dialogs import show_open_image_dialog, show_message, show_save_as_eps_d
 from mtt2eps import model2eps
 
 __all__ = ['PreviewWindow']
+
+DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
 # just a preparation for i18n
 def _(string):
@@ -496,6 +500,12 @@ class PreviewWindow(Gtk.Window):
     """
     def __init__(self, preview_worker, inks_model, image_name=None):
         Gtk.Window.__init__(self)
+        
+        multitoner_icon_filename = os.path.join(DIRECTORY, 'assets', 'images',
+                                            'multitoner_icon.svg')
+        multitoner_icon = GdkPixbuf.Pixbuf.new_from_file(multitoner_icon_filename)
+        self.set_icon(multitoner_icon)
+        
         inks_model.add(self) #subscribe
         self._preview_worker = preview_worker
         
