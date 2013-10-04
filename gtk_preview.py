@@ -563,7 +563,7 @@ class PreviewWindow(Gtk.Window):
     
     def _set_title(self):
         filename = self.image_name or _('(no image)')
-        self.set_title(_('Multitoner Tool Preview: {filename}').format(filename=filename))
+        self.set_title(_('Multitoner Preview: {filename}').format(filename=filename))
     
     @property
     def image_name(self):
