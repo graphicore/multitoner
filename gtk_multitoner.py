@@ -506,6 +506,7 @@ if __name__ == '__main__':
     
     window = Gtk.Window()
     window.set_title(_('Multitoner'))
+    window.set_position(Gtk.WindowPosition.CENTER)
     window.set_default_size(640, 480)
     window.set_has_resize_grip(True)
     # the theme should do so
