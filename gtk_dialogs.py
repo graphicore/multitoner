@@ -5,11 +5,15 @@ from __future__ import division, print_function, unicode_literals
 
 import os
 
-from gi.repository import Gtk
+from gi.repository import Gtk, GdkPixbuf
+
+from compatibility import encode
 
 __all__ = ['show_open_image_dialog', 'show_save_as_dialog',
            'show_save_as_eps_dialog', 'show_error_dialog',
-           'show_notice_dialog', 'show_message']
+           'show_notice_dialog', 'show_message', 'show_about_dialog']
+
+DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
 # just a preparation for i18n
 def _(string):
@@ -98,3 +102,40 @@ def show_message(window, type, message, more_info):
     assert type is not None, 'There is no dialog for message type {0}'.format(type)
     
     return show_dialog(window, message, more_info)
+
+def show_about_dialog(window):
+    logo_filename = os.path.join(DIRECTORY, 'icons', 'multitoner_name.svg')
+    logo = GdkPixbuf.Pixbuf.new_from_file(logo_filename)
+    logo_width = 450
+    logo_height = logo.get_height() / logo.get_width()  * logo_width
+    logo = logo.scale_simple(logo_width, logo_height, GdkPixbuf.InterpType.HYPER)
+    
+    # FIXME: include these as sponsors with logotypes
+    # <http://silber-und-blei.de>, <http://graphicore.de>
+    
+    about = Gtk.AboutDialog(parent=window
+                , program_name='Multitoner'
+                , version='v 0.5.0'
+                , copyright='Copyright © 2013 by Lasse Fister <commander@graphicore.de>'
+                , license="""
+Multitoner is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Multitoner is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>."""
+                , website='http://somwhere.in.the.web'
+                , comments=_('Create “Multitone” (Monotone, Duotone, \n'
+                            'Tritone, Quadtone, …) EPS-files for printing.')
+                , authors=map(encode, ['Lasse Fister <commander@graphicore.de>'])
+                #, documenters=map(encode, [' names here ...']),
+                , logo=logo
+                , title='About Multitoner')
+    about.connect('response', lambda widget, __:widget.destroy())
+    about.show()
