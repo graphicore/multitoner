@@ -20,6 +20,7 @@
 
 from __future__ import unicode_literals, print_function
 
+import os
 from string import Template
 import binascii
 from datetime import datetime
@@ -28,6 +29,10 @@ import numpy as np
 from interpolation import interpolation_strategies_dict
 
 __all__ = ['EPSTool', 'EPSToolException']
+
+DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+with open(os.path.join(DIRECTORY, 'VERSION')) as f:
+    VERSION = f.read()
 
 init_colors = Template("""gsave % clipping path gsave
 %note: 4.2 More Free Advice
@@ -53,7 +58,7 @@ grestore % matches clipping path gsave, so this restores the old clipping path i
 
 
 eps_template = Template("""%!PS-Adobe-3.0 EPSF-3.0
-%%Creator: Multitoner V0.0
+%%Creator: Multitoner v $Version
 %%Title: no title given
 %%CreationDate: $CreationDate
 %%BoundingBox: 0 0 $width $height
@@ -414,6 +419,9 @@ class EPSTool(object):
     """
     def __init__(self):
         self._mapping = {}
+        
+        self._mapping['Version'] = VERSION
+        
         self._has_color = False
         self._has_image = False
     

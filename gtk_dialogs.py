@@ -31,6 +31,8 @@ __all__ = ['show_open_image_dialog', 'show_save_as_dialog',
            'show_notice_dialog', 'show_message', 'show_about_dialog']
 
 DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+with open(os.path.join(DIRECTORY, 'VERSION')) as f:
+    VERSION = f.read()
 
 # just a preparation for i18n
 def _(string):
@@ -132,7 +134,7 @@ def show_about_dialog(window):
     
     about = Gtk.AboutDialog(parent=window
                 , program_name='Multitoner'
-                , version='v 0.5.0'
+                , version='v {0}'.format(VERSION)
                 , copyright='Copyright © 2013 by Lasse Fister <commander@graphicore.de>'
                 , license="""
 Multitoner is free software: you can redistribute it and/or modify
