@@ -40,7 +40,7 @@ from mtt2eps import model2eps
 __all__ = ['Multitoner']
 
 DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-CSS_FILE = os.path.join(DIRECTORY, 'style.css')
+CSS_FILE = os.path.join(DIRECTORY, 'assets','style.css')
 
 # just a preparation for i18n
 def _(string):

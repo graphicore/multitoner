@@ -14,8 +14,9 @@ from interpolation import interpolation_strategies, interpolation_strategies_dic
 from emitter import Emitter
 from compatibility import repair_gsignals, encode, decode, range
 
-
 __all__ = ['InksEditor']
+
+DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
 # just a preparation for i18n
 def _(string):
@@ -640,8 +641,6 @@ class InkControlPanel(Gtk.TreeView):
     delete button and the editor color chooser. Furthermore this can be
     used to reorder the inks with drag and drop.
     """
-    _directory = os.path.dirname(os.path.realpath(__file__))
-    
     _tooltips = {
           'editor-color': _('Change the color of the curve in the editor.')
         , 'visibility': _('Toggle visibility of the ink. A hidden ink will '
@@ -780,7 +779,7 @@ class InkControlPanel(Gtk.TreeView):
     def _init_toggle(self, icons, callback, *data):
         setup = {}
         for key, filename in icons.items():
-            icon_path = os.path.join(self._directory, encode('icons'),
+            icon_path = os.path.join(DIRECTORY, encode('assets'), encode('icons'),
                                      encode(filename))
             setup[key] = GdkPixbuf.Pixbuf.new_from_file_at_size(icon_path,
                                                                 16, 16)

@@ -104,7 +104,7 @@ def show_message(window, type, message, more_info):
     return show_dialog(window, message, more_info)
 
 def show_about_dialog(window):
-    logo_filename = os.path.join(DIRECTORY, 'icons', 'multitoner_name.svg')
+    logo_filename = os.path.join(DIRECTORY, 'assets', 'images', 'multitoner_name.svg')
     logo = GdkPixbuf.Pixbuf.new_from_file(logo_filename)
     logo_width = 450
     logo_height = logo.get_height() / logo.get_width()  * logo_width
