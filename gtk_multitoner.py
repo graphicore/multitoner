@@ -3,24 +3,25 @@
 
 from __future__ import division, print_function, unicode_literals
 
+import os
 from gi.repository import Gtk
 
 from gtk_actiongroup import ActionGroup
 from gtk_dialogs import show_open_image_dialog, show_message, show_save_as_dialog, \
-                    show_save_as_eps_dialog
+                    show_save_as_eps_dialog, show_about_dialog
 from gtk_document import Document
 
 from ghostscript_workers import factory as gs_workers_factory
 from mtt2eps import model2eps
 
-
 __all__ = ['Multitoner']
 
+DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+CSS_FILE = os.path.join(DIRECTORY, 'style.css')
 
 # just a preparation for i18n
 def _(string):
     return string
-
 
 UI_INFO = """
 <ui>
@@ -48,6 +49,9 @@ UI_INFO = """
       <menuitem action='EditRedo' />
       <separator />
       <menuitem action='EditOpenPreview' />
+    </menu>
+    <menu action='HelpMenu'>
+      <menuitem action='HelpAbout' />
     </menu>
   </menubar>
   <toolbar name="ToolBar">
@@ -197,6 +201,8 @@ class Multitoner(Gtk.Grid):
                None, None)
             , ('EditMenu', None, _('Edit'), None,
                None, None)
+            , ('HelpMenu', None, _('Help'), None,
+               None, None)
             , ('FileNew', Gtk.STOCK_NEW, _('New'), '<Ctrl>n',
                _('Start a new document.'), self.action_file_new_handler)
             , ('FileQuit', Gtk.STOCK_QUIT, _('Quit'), '<ctrl>q',
@@ -207,6 +213,8 @@ class Multitoner(Gtk.Grid):
                _('Save all documents.'), self.action_file_save_all_handler)
             , ('FileCloseAll', Gtk.STOCK_CLOSE, _('Close All'), '<Ctrl><Shift>w',
                _('Close all documents.'), self.action_file_close_all_handler)
+            , ('HelpAbout', Gtk.STOCK_ABOUT, None, None,
+               None, self.action_help_about_handler)
             ])
         # recent files chooser
         # does only .mtt files
@@ -460,6 +468,10 @@ class Multitoner(Gtk.Grid):
             window = self.get_toplevel()
             show_message(window, *message)
     
+    def action_help_about_handler(self, widget):
+        window = self.get_toplevel()
+        show_about_dialog(window)
+    
 if __name__ == '__main__':
     """ bootstrap the application """
     import sys
@@ -470,16 +482,14 @@ if __name__ == '__main__':
     use_gui, __ = Gtk.init_check(sys.argv)
     
     window = Gtk.Window()
-    window.set_title(_('Multitoner Tool'))
+    window.set_title(_('Multitoner'))
     window.set_default_size(640, 480)
     window.set_has_resize_grip(True)
     # the theme should do so
     window.set_border_width(5)
     
     css_provider = Gtk.CssProvider()
-    
-    directory = os.path.dirname(os.path.realpath(__file__))
-    css_provider.load_from_path(os.path.join(directory, 'style.css'))
+    css_provider.load_from_path(CSS_FILE)
     
     screen = window.get_screen()
     style_context = Gtk.StyleContext()
