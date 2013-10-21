@@ -24,13 +24,13 @@ import os
 
 from gi.repository import Gtk, GdkPixbuf
 
-from compatibility import encode
+from compatibility import decode
 
 __all__ = ['show_open_image_dialog', 'show_save_as_dialog',
            'show_save_as_eps_dialog', 'show_error_dialog',
            'show_notice_dialog', 'show_message', 'show_about_dialog']
 
-DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+DIRECTORY = decode(os.path.dirname(os.path.realpath(__file__)))
 with open(os.path.join(DIRECTORY, 'VERSION')) as f:
     VERSION = f.read().strip()
 

@@ -27,10 +27,10 @@ from datetime import datetime
 import numpy as np
 
 from interpolation import interpolation_strategies_dict
-
+from compatibility import decode
 __all__ = ['EPSTool', 'EPSToolException']
 
-DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+DIRECTORY = decode(os.path.dirname(os.path.realpath(__file__)))
 with open(os.path.join(DIRECTORY, 'VERSION')) as f:
     VERSION = f.read().strip()
 
