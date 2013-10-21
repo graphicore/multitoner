@@ -23,7 +23,7 @@ from __future__ import division, print_function, unicode_literals
 import os
 from weakref import ref as weakref
 
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, Pango
+from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, Pango, GLib
 import cairo
 
 from gtk_curve_editor import CurveEditor
@@ -139,11 +139,14 @@ class CellRendererInk (Gtk.CellRendererText):
             state['update_needed'] = weakref_model
             return False
         state['waiting'] = True
-        callback = (self._receive_surface, iid)
+        callback = (self._worker_callback, iid)
         self._gradient_worker.add_job(callback, ink_model)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
+    
+    def _worker_callback(self, *args):
+        GLib.idle_add(self._receive_surface, *args)
     
     def _receive_surface(self, iid, w, h, rowstride, buf):
         if iid not in self.state:
@@ -258,11 +261,14 @@ class ColorPreviewWidget(Gtk.DrawingArea):
         
         self._waiting = True
         
-        callback = (self._receive_surface, )
+        callback = (self._worker_callback, )
         self._gradient_worker.add_job(callback, *inks_model.visible_curves)
         
         # this timout shall not be executed repeatedly, thus returning false
         return False
+    
+    def _worker_callback(self, *args):
+        GLib.idle_add(self._receive_surface, *args)
     
     def _receive_surface(self, w, h, rowstride, buf):
         if self._no_inks:
