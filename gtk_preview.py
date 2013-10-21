@@ -722,13 +722,16 @@ class PreviewWindow(Gtk.Window):
         # this timout shall not be executed repeatedly, thus returning false
         return False
     
-    def _worker_callback(self, type, image_name, *args):
+    def _worker_callback(self, *args):
+        GLib.idle_add(self._receive_surface, *args)
+    
+    def _receive_surface(self, type, image_name, *args):
         self._waiting = False
         if type == 'result':
             message = args[-1]
             if message is not None:
                 GLib.idle_add(self._show_message, *message)
-            cairo_surface = self._receive_surface(image_name, *args[0:-1])
+            cairo_surface = self._make_surface(image_name, *args[0:-1])
         else:
             if type == 'error':
                 self.image_name = None
@@ -742,7 +745,7 @@ class PreviewWindow(Gtk.Window):
             self._document_actions.set_sensitive(False)
         self.canvas.receive_surface(cairo_surface)
     
-    def _receive_surface(self, image_name, w, h, rowstride, buf):
+    def _make_surface(self, image_name, w, h, rowstride, buf):
         if self._no_inks or self.image_name != image_name:
             # this may receive a surface after all inks are invisible
             # or after the image to display changed
