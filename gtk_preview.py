@@ -741,7 +741,6 @@ class PreviewWindow(Gtk.Window):
         if cairo_surface is not None:
             self._document_actions.set_sensitive(True)
         else:
-            self.image_name = None
             self._document_actions.set_sensitive(False)
         self.canvas.receive_surface(cairo_surface)
     
