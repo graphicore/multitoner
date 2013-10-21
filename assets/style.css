@@ -19,3 +19,12 @@ GtkNotebook tab .has-changes{
 GtkLabel.headline{
     font-weight: bold
 }
+
+.about-window .content GtkLabel,
+.about-window .content GtkImage{
+    padding-bottom: 5px 
+}
+
+.about-window .content .logo{
+    padding-bottom: 15px 
+}

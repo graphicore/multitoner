@@ -32,7 +32,7 @@ __all__ = ['EPSTool', 'EPSToolException']
 
 DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 with open(os.path.join(DIRECTORY, 'VERSION')) as f:
-    VERSION = f.read()
+    VERSION = f.read().strip()
 
 init_colors = Template("""gsave % clipping path gsave
 %note: 4.2 More Free Advice
