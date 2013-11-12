@@ -1,9 +1,6 @@
 multitoner
 ==========
 
-![multitoner](https://raw.github.com/graphicore/multitoner/master/assets/images/multitoner_name.svg)
-
-
 Create “Multitone” (Monotone, Duotone,  Tritone, Quadtone, …) EPS-files for printing.
 
 Another short description of what the Multitoner does can be found in
