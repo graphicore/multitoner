@@ -36,6 +36,8 @@ The directory ./example includes 4 files:
   - the source image opened in in the screenshot (source.png)
   - the resulting eps after exporting the source image (result.eps)
 
+![the screenshot](https://raw.github.com/graphicore/multitoner/master/example/screenshot.png)
+
 
 Preview Rendering
 -----------------
