@@ -6,10 +6,14 @@ Create “Multitone” (Monotone, Duotone,  Tritone, Quadtone, …) EPS-files fo
 Another short description of what the Multitoner does can be found in
 [this blogentry](http://graphicore.de/en/archive/2013-06-13_it-is-a-multitoner)
 
+Multitoner is licensed under the terms of the GPL v3. And comes WITHOUT
+ANY WARRANTY. See the file LICENSE.
+
 INSTALL
 -------
 Please see INSTALL for info on how to get this thing started. Especially
 the dependencies are listed there.
+
 
 RUN
 ---
@@ -60,7 +64,14 @@ A hint for what we want to do can be found in a document called:
  by  artifex. You can read it up at: section 8.2 "DeviceN Colors"
 
 
+CREDITS
+-------
 
+The Multitoner was initiated by [Silber & Blei](https://silber-und-blei.com)
+and its initial development was done by [graphicore](http://graphicore.de)
+
+@ 2013, Lasse Fister Lasse Fister <commander@graphicore.de>
 
 Please report what you experienced with the Multitoner. I'm very curious.
 
+ENJOY!
