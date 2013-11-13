@@ -466,21 +466,27 @@ class EPSTool(object):
 if __name__== '__main__':
     import sys
     from model import ModelCurves, ModelInk
+    import json
     import PIL.Image as Image
     
-    curvesModel = ModelCurves(ChildModel=ModelInk)
-    curvesModel.append_curve({'name':'Black', 'cmyk':(0.0, 0.0, 0.0, 1)})
+    # prepare i18n
+    def _ (string):
+        return string
     
-    curvesModel.append_curve({'name':'PANTONE Greeen', 'cmyk':(0.0800, 0.0020, 0.9, 0)
-        ,'interpolation':'linear'})
-    
-    curvesModel.append_curve({'name':'Orange', 'cmyk':(0.0, 0.1, 0.0002, 0.0040)
-        ,'interpolation':'linear'})
-    
-    filename = sys.argv[1]
-    im = Image.open(filename)
-    
-    epsTool = EPSTool();
-    epsTool.set_color_data(*curvesModel.curves)
-    epsTool.set_image_data(im.tostring(), im.size)
-    print (epsTool.create())
+    if len(sys.argv) > 2:
+        mtt_file = sys.argv[1]
+        image_name = None
+        if len(sys.argv) > 2:
+            image_name = sys.argv[-1]
+        with open(mtt_file) as f:
+            data = json.load(f)
+        model = ModelCurves(ChildModel=ModelInk, **data)
+        
+        im = Image.open(image_name)
+        
+        epsTool = EPSTool();
+        epsTool.set_color_data(*model.curves)
+        epsTool.set_image_data(im.tostring(), im.size)
+        print (epsTool.create())
+    else:
+        raise Exception(_('Need a .mtt file as first argument and an image file as last argument.'))
