@@ -70,7 +70,7 @@ CREDITS
 The Multitoner was initiated by [Silber & Blei](https://silber-und-blei.com)
 and its initial development was done by [graphicore](http://graphicore.de)
 
-@ 2013, Lasse Fister Lasse Fister <commander@graphicore.de>
+@ 2013, Lasse Fister <commander@graphicore.de>
 
 Please report what you experienced with the Multitoner. I'm very curious.
 
