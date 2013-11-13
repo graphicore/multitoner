@@ -1,0 +1,32 @@
+
+On a brand new installation of Ubuntu 13.10 Saucy Salamander it took 2 packages
+to get the multitoner working:
+
+python-numpy
+python-scipy
+
+$ sudo apt-get install python-numpy python-scipy
+$ ./gtk_multitoner.py
+
+However, multitoner has many dependencies. This is a try to get them all together.
+If you managed to get multitoner in a working mood on your system it would be great
+if you'd share your knowledge here.
+
+
+DEPENDENCIES:
+============
+
+Python 2.7.x
+
+libgtk-3-0: GTK+ graphical user interface library. I have: 3.6.4
+libcairo2: The Cairo 2D vector graphics library. Here: 1.12.14
+libgs9: GPL Ghostscript 9.07 (2013-02-14) NOTE: the python-ghostscript
+    bindings are included in the source. The public package is not as up-to-date.
+
+python-imaging: The Python Imaging Library, here the Pillow fork 1.1.7
+python-gi: Python 2.x bindings for gobject-introspection libraries
+python-cairo: NOTE: python-gi-cairo won't do it. get: http://cairographics.org/pycairo/
+python-numpy: Numerical Python, here: 1.1.7.1
+python-scipy: scientific tools for Python, here 0.11.0
+
+(if anything is missing please report)
