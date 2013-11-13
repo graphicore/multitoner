@@ -135,7 +135,7 @@ def _get_scaled_pixbuf(filename, width=None, height=None):
     return pb
 
 def show_about_dialog(window):
-    link_format = '<a href="http://{1}">{0}</a>'
+    link_format = '<a href="{1}">{0}</a>'
     email_format = '{0} &lt;<a href="mailto:{0} &lt;{1}&gt;">{1}</a>&gt;'
     ### information
     logo_filename = os.path.join(DIRECTORY, 'assets', 'images',
@@ -143,7 +143,7 @@ def show_about_dialog(window):
     program_name='Multitoner'
     short_info = _('Create “Multitone” (Monotone, Duotone, \n'
                    'Tritone, Quadtone, …) EPS-files for printing.')
-    website = 'http://somwhere.in.the.web'
+    website = 'https://github.com/graphicore/multitoner'
     authors = [('Lasse Fister', 'commander@graphicore.de')]
     
     # copyright might change when it goes to FSF or similar, so I don't
@@ -168,10 +168,10 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see &lt;<a href="{0}">{0}</a>&gt;.
     """.format('http://www.gnu.org/licenses/').strip()
     
-    silber_und_blei_website = 'silber-und-blei.com'
+    silber_und_blei_website = 'https://silber-und-blei.com'
     silber_und_blei_logo_filename = os.path.join(DIRECTORY, 'assets', 'images',
                                                 'silber-und-blei.svg')
-    graphicore_website = 'graphicore.de'
+    graphicore_website = 'http://graphicore.de'
     graphicore_logo_filename = os.path.join(DIRECTORY, 'assets', 'images',
                                            'graphicore.svg')
     license_logo_filename = os.path.join(DIRECTORY, 'assets', 'images',
