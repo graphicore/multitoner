@@ -56,7 +56,7 @@ we start using the advanced color management features of Ghostscript.
 I'd love to see some help coming from the ghostscript ninjas out there.
 A hint for what we want to do can be found in a document called:
 "Ghostscript 9.07 Color Management" 
-[GS9_Color_Management.pdf](www.ghostscript.com/doc/current/GS9_Color_Management.pdf_
+[GS9_Color_Management.pdf](www.ghostscript.com/doc/current/GS9_Color_Management.pdf)
  by  artifex. You can read it up at: section 8.2 "DeviceN Colors"
 
 
