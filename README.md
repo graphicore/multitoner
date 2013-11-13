@@ -39,7 +39,7 @@ Preview Rendering
 The Multitoner needs some cpu power to render previews. Especially
 big images can be challenging. That is because of the rather complex
 process of rendering that is used: A complete EPS file is generated internally
-and then passed to the ghostscript engine which renders the previews. To
+and then passed to the ghostscript engine which renders the previews to
 its display callback interface. With a multicore processor you should get
 around well. Another option would be to create an mtt file using a shrinked
 version of the desired image and then use mtt2eps.py from the commandline
