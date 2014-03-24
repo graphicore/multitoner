@@ -283,8 +283,9 @@ class Multitoner(Gtk.Grid):
         doc.add(self)
         page = self._notebook.append_page(doc.widget, doc.label)
         self._notebook.set_tab_reorderable(doc.widget, True)
-        doc.widget.show_all()
+        
         self._notebook.set_current_page(page)
+        doc.widget.show_all()
         return doc.id
     
     def _unregister_document(self, doc):
