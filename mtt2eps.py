@@ -21,6 +21,8 @@
 from __future__ import division, print_function, unicode_literals
 
 import PIL.Image as Image
+from PIL import ExifTags
+
 import json
 
 from epstool import EPSTool
@@ -34,6 +36,45 @@ __all__ = ['open_image', 'model2eps', 'mtt2eps']
 def _(string):
     return string
 
+class ImageManipulation(object):
+    # see rectify_rotation
+    for _exif_orientation_tag, search in ExifTags.TAGS.iteritems(): 
+        if search == 'Orientation':
+            del search
+            break
+    # see rectify_rotation
+    _orientation_transpose_methods = {
+          3: Image.ROTATE_180
+        , 6: Image.ROTATE_270
+        , 8: Image.ROTATE_90
+        }
+    
+    @classmethod
+    def rectify_rotation(cls, image):
+        """
+        Rotate the image physically to the orientation the exif tag for
+        orientation suggest. Return the original image if no rotation was
+        performed, otherwise return a rotated copy of image.
+        
+        A JPEG image might have an exif tag that tells the viewer how it
+        should be rotatet. Usually the camera writes that tag depending
+        on how it was held when taking the photo.
+        
+        from http://stackoverflow.com/a/11543365/1315369
+        """
+        # only present in JPEGs
+        if not hasattr(image, '_getexif'):
+            return image
+        
+        exif = image._getexif()
+        # has no exif tags
+        if exif is None:
+            return image
+        orientation = exif.get(cls._exif_orientation_tag, None) # 1, 3, 6, 8
+        if orientation in cls._orientation_transpose_methods:
+            transpose_method = cls._orientation_transpose_methods[orientation]
+            return image.transpose(transpose_method)
+        return image
 
 def open_image(filename):
     """ Return (eps_tool, notice, error)
@@ -53,7 +94,7 @@ def open_image(filename):
                 )
     else:
         if im.mode != 'L':
-            # Display a message in the ui process. Earn that reproducing
+            # Display a message in the ui process. Reproducing
             # the result relies on the method used to convert here. It's
             # better to have a grayscale image as input.
             notice = ('notice'
@@ -61,6 +102,7 @@ def open_image(filename):
                      , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
                      )
             im = im.convert('L')
+        im = ImageManipulation.rectify_rotation(im)
         eps_tool = EPSTool()
         eps_tool.set_image_data(im.tostring(), im.size)
         
