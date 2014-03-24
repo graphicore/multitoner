@@ -93,6 +93,7 @@ def open_image(filename):
                 , _('Message: {0} {1}').format(e, type(e))
                 )
     else:
+        im = ImageManipulation.rectify_rotation(im)
         if im.mode != 'L':
             # Display a message in the ui process. Reproducing
             # the result relies on the method used to convert here. It's
@@ -102,7 +103,6 @@ def open_image(filename):
                      , _('From Python Imaging Library (PIL) mode "{0}".').format(im.mode)
                      )
             im = im.convert('L')
-        im = ImageManipulation.rectify_rotation(im)
         eps_tool = EPSTool()
         eps_tool.set_image_data(im.tostring(), im.size)
         
