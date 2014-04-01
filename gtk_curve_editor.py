@@ -323,7 +323,7 @@ class Curve(object):
             ctrl.draw(cr)
     
     def is_control(self, x_in, y_in):
-        if self.model.locked:
+        if self.model.locked or not self.model.visible:
             return False
         intersection = self._get_intersection(x_in)
         x, y = self.scale.to_screen(intersection)
